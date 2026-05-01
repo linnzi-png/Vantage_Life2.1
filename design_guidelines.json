@@ -1,0 +1,82 @@
+{
+  "theme": "dark",
+  "archetype": "Archetype 2: The Performance Pro",
+  "colors": {
+    "background": "#0D0D0D",
+    "surface": "#141414",
+    "surface_glass": "rgba(20, 20, 20, 0.7)",
+    "primary": "#319842",
+    "secondary": "#00558C",
+    "accent_gold": "#FFD700",
+    "accent_orange": "#FF8C00",
+    "accent_red": "#FF3B30",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#A1A1AA",
+    "border": "rgba(255, 255, 255, 0.08)",
+    "success": "#319842",
+    "warning": "#EAB308",
+    "danger": "#FF3B30"
+  },
+  "typography": {
+    "headings": {
+      "family": "'Barlow Condensed', 'Chivo', 'Outfit', sans-serif",
+      "weight": "800",
+      "styling": "uppercase, tracking-tight, leading-none"
+    },
+    "body": {
+      "family": "'Inter', sans-serif",
+      "weight": "400",
+      "styling": "tracking-normal, leading-relaxed"
+    },
+    "monospace": {
+      "family": "'JetBrains Mono', 'Roboto Mono', monospace",
+      "styling": "tabular-nums, tracking-tight"
+    }
+  },
+  "layout": {
+    "spacing_scale": "dense (p-2, p-4, p-6) to maximize data visibility on mobile.",
+    "grid": "Control Room Grid (grid-cols-1 md:grid-cols-3) with tight gaps (gap-2 to gap-4).",
+    "borders": "1px solid rgba(255,255,255,0.08) on all cards, zero border-radius or max rounded-md (6px)."
+  },
+  "components": {
+    "buttons": "Square or slight rounded corners. Primary actions in #319842 with high-contrast black text.",
+    "cards": "Flat solid #141414 backgrounds. No drop shadows. Use 1px inner border. For Platinum Wall, apply subtle top-border highlight.",
+    "inputs": "Shadcn UI customized. Deep dark backgrounds (#000000) with #319842 focus rings.",
+    "ticker": "react-fast-marquee at the bottom. Font: monospace, Color: #319842 on #0D0D0D background.",
+    "tabs": "Full-width flex containers. Active tab gets a 2px bottom border of #319842 or #00558C.",
+    "badges": "SVG icons (Lucide Crown/Flame) with text-shadow glow, rendered in #FFD700 or #FF8C00.",
+    "deltas": "Use lucide-react ArrowUpRight (green #319842) and ArrowDownRight (red #FF3B30) for positive/negative changes."
+  },
+  "animations": {
+    "marquee": "Continuous smooth scroll for the ticker.",
+    "badges": "Pulse or scale-up on entrance.",
+    "transitions": "Fast, crisp (0.15s ease-out) to feel like a responsive trading terminal."
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1763805508094-901f2a79ff77?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHwxfHxkYXJrJTIwY2FyYm9uJTIwZmliZXIlMjB0ZXh0dXJlfGVufDB8fHx8MTc3NzYwMzE5OHww&ixlib=rb-4.1.0&q=85",
+        "description": "Abstract dark metallic curves with textured surfaces",
+        "category": "background",
+        "instructions": "Use with low opacity (10-15%) overlay in the Hero or Dashboard header to break up the flat black without reducing data clarity."
+      }
+    ],
+    "icons": [
+      {
+        "library": "lucide-react",
+        "icons": ["Crown", "Flame", "TrendingUp", "TrendingDown", "AlertTriangle"]
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Implement a mobile-first 'Sports scoreboard meets trading floor' UI. Apply Archetype 2 (Performance Pro) with a dark theme (#0D0D0D background).",
+    "Use 'Barlow Condensed', 'Chivo', or a similar condensed heavy sans for all headings to establish the scoreboard feel. Use Inter for body text as requested, but keep headings distinct to adhere to anti-default typography rules.",
+    "Install and use 'react-fast-marquee' for the real-time agent sales ticker pinned to the bottom of the screen. Display format: '[Agent Name] - $[ALP] - [Market] - [Reps Collected]'.",
+    "For the Nightly Pulse Entry, build a dense mobile-first stepper form using Shadcn UI Form, Input, and Button components.",
+    "The Platinum Wall (Vets vs Rookies) should use a side-by-side split layout displaying Top 3 in each category.",
+    "Use Lucide icons (Crown, Flame) in gold and orange for badges instead of image files, scaling them with Framer Motion for celebratory effects.",
+    "Build the UI with Tailwind CSS utilizing 'tabular-nums' for all metrics/numbers to prevent layout shifting during real-time updates.",
+    "Add 'data-testid' attributes to all interactive elements (buttons, inputs, tabs, alerts).",
+    "Create strict red (#FF3B30) and yellow (#EAB308) top banner alert states for the 6:01 AM 'Missed' and 9:01 PM 'Warning' rules."
+  ]
+}
