@@ -7,26 +7,34 @@ import { api, COLORS, useAuth } from '../../src/lib/auth';
 import GateBanner from '../../src/components/GateBanner';
 
 const STEPS: { key: keyof PulseForm; label: string; hint: string; type?: 'int' | 'money' }[] = [
-  { key: 'sets', label: 'Sets booked', hint: 'How many appointments did you set?', type: 'int' },
-  { key: 'sits', label: 'Sits run', hint: 'Total appointments you actually ran.', type: 'int' },
-  { key: 'sales', label: 'Sales', hint: 'Closed deals.', type: 'int' },
-  { key: 'ots_sits', label: 'OTS Sits', hint: 'On-the-spot sits.', type: 'int' },
-  { key: 'ots_sales', label: 'OTS Sales', hint: 'On-the-spot sales.', type: 'int' },
-  { key: 'n1', label: 'N1 / Uninsurables', hint: 'N1 / declined / uninsurable.', type: 'int' },
-  { key: 'refs_obtained', label: 'Refs obtained', hint: 'Referrals collected today.', type: 'int' },
-  { key: 'ref_sits', label: 'Ref Sits', hint: 'Referral sits run.', type: 'int' },
-  { key: 'ref_sales', label: 'Ref Sales', hint: 'Referral sales closed.', type: 'int' },
-  { key: 'gross_alp', label: 'Gross ALP', hint: 'Annual Life Premium for the day.', type: 'money' },
+  { key: 'sets', label: 'Total Appointments (Sets)', hint: 'Total appointments booked.', type: 'int' },
+  { key: 'sits', label: 'Total Sits', hint: 'Total appointments you actually ran (excludes N1).', type: 'int' },
+  { key: 'sales', label: 'Total Sales', hint: 'Total closed deals today.', type: 'int' },
+  { key: 'ots_sits', label: 'On Spot Sits', hint: 'Sits run on the spot (walk-ins / same-day).', type: 'int' },
+  { key: 'ots_sales', label: 'On Spot Sales', hint: 'Sales closed on the spot.', type: 'int' },
+  { key: 'n1', label: 'Uninsurables (N1)', hint: 'Tracked but excluded from Sits totals.', type: 'int' },
+  { key: 'refs_obtained', label: 'Referrals Collected', hint: 'Referrals you collected today.', type: 'int' },
+  { key: 'ref_sits', label: 'Referral Sits', hint: 'Sits run from referrals.', type: 'int' },
+  { key: 'ref_sales', label: 'Referral Sales', hint: 'Sales closed from referrals.', type: 'int' },
+  { key: 'pos_sits', label: 'POS Sits', hint: 'Point-of-Sale sits.', type: 'int' },
+  { key: 'pos_sales', label: 'POS Sales', hint: 'Point-of-Sale sales.', type: 'int' },
+  { key: 'vet_sits', label: 'Response Card / Veteran Sits', hint: 'Sits from response cards or Veteran leads.', type: 'int' },
+  { key: 'vet_sales', label: 'Response Card / Veteran Sales', hint: 'Sales from response cards or Veteran leads.', type: 'int' },
+  { key: 'gross_alp', label: 'Total ALP for the Day (Gross ALP)', hint: 'Annual Life Premium for the day.', type: 'money' },
 ];
 
 interface PulseForm {
   sets: string; sits: string; sales: string; ots_sits: string; ots_sales: string;
-  n1: string; refs_obtained: string; ref_sits: string; ref_sales: string; gross_alp: string;
+  n1: string; refs_obtained: string; ref_sits: string; ref_sales: string;
+  pos_sits: string; pos_sales: string; vet_sits: string; vet_sales: string;
+  gross_alp: string;
 }
 
 const empty: PulseForm = {
   sets: '0', sits: '0', sales: '0', ots_sits: '0', ots_sales: '0',
-  n1: '0', refs_obtained: '0', ref_sits: '0', ref_sales: '0', gross_alp: '0',
+  n1: '0', refs_obtained: '0', ref_sits: '0', ref_sales: '0',
+  pos_sits: '0', pos_sales: '0', vet_sits: '0', vet_sales: '0',
+  gross_alp: '0',
 };
 
 export default function PulseScreen() {

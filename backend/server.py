@@ -97,6 +97,10 @@ class PulseIn(BaseModel):
     refs_obtained: int = 0
     ref_sits: int = 0
     ref_sales: int = 0
+    pos_sits: int = 0
+    pos_sales: int = 0
+    vet_sits: int = 0
+    vet_sales: int = 0
     gross_alp: float = 0.0
     market: Optional[str] = None  # selectable office override
 
@@ -492,6 +496,10 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(get_curr
         "refs_obtained": payload.refs_obtained,
         "ref_sits": payload.ref_sits,
         "ref_sales": payload.ref_sales,
+        "pos_sits": payload.pos_sits,
+        "pos_sales": payload.pos_sales,
+        "vet_sits": payload.vet_sits,
+        "vet_sales": payload.vet_sales,
         "gross_alp": payload.gross_alp,
         "net_alp": payload.gross_alp,  # net == gross until eraser modifies
         "submitted_at": now_utc(),
@@ -735,6 +743,8 @@ async def manager_erase(payload: EraseIn, user: Dict[str, Any] = Depends(require
         "sets": 0, "sits": 0, "sales": 0,
         "ots_sits": 0, "ots_sales": 0, "n1": 0,
         "refs_obtained": 0, "ref_sits": 0, "ref_sales": 0,
+        "pos_sits": 0, "pos_sales": 0,
+        "vet_sits": 0, "vet_sales": 0,
         "gross_alp": 0,                  # gross UNCHANGED on Platinum Wall
         "net_alp": delta,                # net adjusted
         "submitted_at": now_utc(),
@@ -973,6 +983,10 @@ async def seed_data(request: Request, payload: Optional[Dict[str, Any]] = Body(d
             refs = random.randint(0, sales_ * 2) if sales_ else 0
             ref_sits = random.randint(0, refs)
             ref_sales = random.randint(0, ref_sits)
+            pos_sits = random.randint(0, max(0, sits_ // 2))
+            pos_sales = random.randint(0, pos_sits)
+            vet_sits = random.randint(0, max(0, sits_ // 3))
+            vet_sales = random.randint(0, vet_sits)
             avg_alp = random.choice([800, 1100, 1300, 1600, 2200, 3000, 4500])
             gross = sales_ * avg_alp + (random.randint(-200, 500) if sales_ else 0)
             gross = max(0, gross)
@@ -994,6 +1008,8 @@ async def seed_data(request: Request, payload: Optional[Dict[str, Any]] = Body(d
                 "ots_sits": ots_sits, "ots_sales": ots_sales,
                 "n1": n1,
                 "refs_obtained": refs, "ref_sits": ref_sits, "ref_sales": ref_sales,
+                "pos_sits": pos_sits, "pos_sales": pos_sales,
+                "vet_sits": vet_sits, "vet_sales": vet_sales,
                 "gross_alp": gross, "net_alp": gross,
                 "submitted_at": submitted,
                 "submitted_on_time": on_time,
