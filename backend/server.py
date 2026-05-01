@@ -859,10 +859,21 @@ async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
 # =========================================================
 
 @api_router.post("/seed")
-async def seed_data(payload: Optional[Dict[str, Any]] = Body(default=None)):
-    """Seed 174 agents across 5 offices with hierarchy + recent production for ticker."""
+async def seed_data(request: Request, payload: Optional[Dict[str, Any]] = Body(default=None)):
+    """Seed 174 agents across 5 offices with hierarchy + recent production for ticker.
+    Anonymous calls are allowed only when DB is empty (first-time bootstrap).
+    Forced re-seed requires level_4 authentication.
+    """
     force = bool(payload and payload.get("force"))
     existing = await db.agent_profiles.count_documents({})
+    if force:
+        # Require RGA auth for destructive force-reseed
+        try:
+            user = await get_current_user(request)
+        except HTTPException:
+            raise HTTPException(status_code=401, detail="Authenticated RGA required for force-reseed")
+        if user.get("role") != "level_4":
+            raise HTTPException(status_code=403, detail="Only RGA can force-reseed")
     if existing > 0 and not force:
         return {"ok": True, "seeded": False, "message": f"Already seeded ({existing} agents)"}
     if force:
@@ -1064,10 +1075,19 @@ async def on_startup():
     count = await db.agent_profiles.count_documents({})
     if count == 0:
         try:
-            await seed_data(payload=None)
+            await _bootstrap_seed()
             logger.info("Auto-seeded mock data on first run.")
         except Exception as e:
             logger.error(f"Auto-seed failed: {e}")
+
+
+async def _bootstrap_seed():
+    """Internal seed used at startup (no auth)."""
+    # delegates to seed_data without request context; mimics empty-db path
+    class _DummyReq:
+        cookies = {}
+        headers = {}
+    await seed_data(_DummyReq(), payload=None)  # type: ignore
 
 
 @app.on_event("shutdown")
