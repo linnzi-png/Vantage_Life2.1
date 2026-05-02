@@ -100,7 +100,7 @@ export default function LoginScreen() {
           ))}
         </View>
 
-        <Text style={styles.footer}>By continuing you agree to AO Premiere's standards of accountability.</Text>
+        <Text style={styles.footer}>{"By continuing you agree to AO Premiere's standards of accountability."}</Text>
       </ScrollView>
     </SafeAreaView>
   );
