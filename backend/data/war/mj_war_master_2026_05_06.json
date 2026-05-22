@@ -1,0 +1,199 @@
+{
+  "report_metadata": {
+    "source_file": "1779412850_MJ_war.pdf",
+    "spreadsheet_title": "Copy of MJ Week Start 5/6/2026",
+    "rga_office": "Mohamed Aljahmi RGA",
+    "weekly_total_alp": 44698,
+    "tab_sync_complete": true
+  },
+  "weekly_tabs": [
+    {
+      "tab_name": "Wed",
+      "date": "2026-05-06",
+      "daily_alp": 6153,
+      "performance": [
+        {
+          "agent": "Tyren Cosare",
+          "sets": 0,
+          "sits": 1,
+          "sales": 1,
+          "alp": 1360
+        },
+        {
+          "agent": "Awni Shuaib",
+          "sets": 5,
+          "sits": 1,
+          "sales": 1,
+          "alp": 3360
+        },
+        {
+          "agent": "Angel Ruiz",
+          "sets": 0,
+          "sits": 0,
+          "sales": 0,
+          "alp": 1433
+        }
+      ]
+    },
+    {
+      "tab_name": "Thurs",
+      "date": "2026-05-07",
+      "daily_alp": 2381,
+      "performance": [
+        {
+          "agent": "Awni Shuaib",
+          "sets": 8,
+          "sits": 1,
+          "sales": 1,
+          "alp": 2381
+        }
+      ]
+    },
+    {
+      "tab_name": "Fri",
+      "date": "2026-05-08",
+      "daily_alp": 6410,
+      "performance": [
+        {
+          "agent": "Awni Shuaib",
+          "sets": 5,
+          "sits": 3,
+          "sales": 3,
+          "alp": 3650
+        },
+        {
+          "agent": "Bruce Curry",
+          "sets": 3,
+          "sits": 1,
+          "sales": 1,
+          "alp": 1800
+        },
+        {
+          "agent": "Ashley Beraty",
+          "sets": 1,
+          "sits": 1,
+          "sales": 1,
+          "alp": 960
+        }
+      ]
+    },
+    {
+      "tab_name": "Sat",
+      "date": "2026-05-09",
+      "daily_alp": 4215,
+      "performance": [
+        {
+          "agent": "Maher Altairi",
+          "sets": 2,
+          "sits": 2,
+          "sales": 2,
+          "alp": 3360
+        },
+        {
+          "agent": "Ashley Beraty",
+          "sets": 1,
+          "sits": 1,
+          "sales": 1,
+          "alp": 855
+        }
+      ]
+    },
+    {
+      "tab_name": "Sun",
+      "date": "2026-05-10",
+      "daily_alp": 132,
+      "performance": [
+        {
+          "agent": "Ashley Beraty",
+          "sets": 1,
+          "sits": 1,
+          "sales": 1,
+          "alp": 132
+        }
+      ]
+    },
+    {
+      "tab_name": "Mon",
+      "date": "2026-05-11",
+      "daily_alp": 15028,
+      "performance": [
+        {
+          "agent": "Tyren Cosare",
+          "sets": 2,
+          "sits": 2,
+          "sales": 2,
+          "alp": 3617
+        },
+        {
+          "agent": "Awni Shuaib",
+          "sets": 6,
+          "sits": 3,
+          "sales": 1,
+          "alp": 1955
+        },
+        {
+          "agent": "Maher Altairi",
+          "sets": 2,
+          "sits": 2,
+          "sales": 2,
+          "alp": 7488
+        },
+        {
+          "agent": "Basel Musaed",
+          "sets": 4,
+          "sits": 1,
+          "sales": 1,
+          "alp": 1968
+        }
+      ]
+    },
+    {
+      "tab_name": "Tues",
+      "date": "2026-05-12",
+      "daily_alp": 10379,
+      "performance": [
+        {
+          "agent": "Awni Shuaib",
+          "sets": 8,
+          "sits": 4,
+          "sales": 3,
+          "alp": 5289
+        },
+        {
+          "agent": "Maher Altairi",
+          "sets": 2,
+          "sits": 2,
+          "sales": 2,
+          "alp": 5090
+        }
+      ]
+    },
+    {
+      "tab_name": "Wed (2)",
+      "date": "2026-05-13",
+      "daily_alp": 0
+    },
+    {
+      "tab_name": "Thurs (2)",
+      "date": "2026-05-14",
+      "daily_alp": 0
+    },
+    {
+      "tab_name": "LOST BI",
+      "records": [
+        {
+          "agent": "Awni Shuaib",
+          "date": "2026-05-11",
+          "alp": 2380.2,
+          "notes": "CANCEL PER AGENT NOTE"
+        },
+        {
+          "agent": "Awni Shuaib",
+          "date": "2026-05-08",
+          "alp": 1507.32,
+          "notes": "REWRITING TO DRAFT IN JUNE"
+        }
+      ]
+    }
+  ]
+}
