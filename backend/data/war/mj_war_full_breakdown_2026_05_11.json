@@ -1,0 +1,203 @@
+{
+  "report_metadata": {
+    "source_file": "1779412850_MJ_war.pdf",
+    "rga_office": "Mohamed Aljahmi RGA",
+    "weekly_total_alp": 44698,
+    "week_ending": "2026-05-11"
+  },
+  "daily_breakdown": [
+    {
+      "day": "Tuesday",
+      "date": "2026-05-05",
+      "page_ref": 8,
+      "daily_alp": 6153,
+      "agents": [
+        {
+          "name": "Tyren Cosare",
+          "alp": 1360,
+          "sits": 1,
+          "sales": 1
+        },
+        {
+          "name": "Awni Shuaib",
+          "alp": 3360,
+          "sets": 5,
+          "sits": 1,
+          "sales": 1
+        },
+        {
+          "name": "Angel Ruiz",
+          "alp": 1433,
+          "sales": 0
+        }
+      ]
+    },
+    {
+      "day": "Wednesday",
+      "date": "2026-05-06",
+      "page_ref": 16,
+      "daily_alp": 2381,
+      "agents": [
+        {
+          "name": "Awni Shuaib",
+          "alp": 2381,
+          "sets": 8,
+          "sits": 1,
+          "sales": 1
+        }
+      ]
+    },
+    {
+      "day": "Thursday",
+      "date": "2026-05-07",
+      "page_ref": 24,
+      "daily_alp": 6410,
+      "agents": [
+        {
+          "name": "Awni Shuaib",
+          "alp": 3650,
+          "sets": 5,
+          "sits": 3,
+          "sales": 3
+        },
+        {
+          "name": "Bruce Curry",
+          "alp": 1800,
+          "sets": 3,
+          "sits": 1,
+          "sales": 1
+        },
+        {
+          "name": "Ashley Beraty",
+          "alp": 960,
+          "sets": 1,
+          "sits": 1,
+          "sales": 1
+        }
+      ]
+    },
+    {
+      "day": "Friday",
+      "date": "2026-05-08",
+      "page_ref": 32,
+      "daily_alp": 4215,
+      "agents": [
+        {
+          "name": "Maher Altairi",
+          "alp": 3360,
+          "sets": 1,
+          "sits": 1,
+          "sales": 1
+        },
+        {
+          "name": "Ashley Beraty",
+          "alp": 855,
+          "sets": 1,
+          "sits": 1,
+          "sales": 1
+        }
+      ]
+    },
+    {
+      "day": "Saturday",
+      "date": "2026-05-09",
+      "page_ref": 40,
+      "daily_alp": 132,
+      "agents": [
+        {
+          "name": "Ashley Beraty",
+          "alp": 132,
+          "sets": 1,
+          "sits": 1,
+          "sales": 1
+        }
+      ]
+    },
+    {
+      "day": "Sunday",
+      "date": "2026-05-10",
+      "page_ref": 48,
+      "daily_alp": 15028,
+      "agents": [
+        {
+          "name": "Tyren Cosare",
+          "alp": 3617,
+          "sets": 2,
+          "sits": 2,
+          "sales": 2
+        },
+        {
+          "name": "Awni Shuaib",
+          "alp": 1955,
+          "sets": 6,
+          "sits": 3,
+          "sales": 1
+        },
+        {
+          "name": "Maher Altairi",
+          "alp": 7488,
+          "sets": 2,
+          "sits": 2,
+          "sales": 2
+        },
+        {
+          "name": "Basel Musaed",
+          "alp": 1968,
+          "sets": 4,
+          "sits": 1,
+          "sales": 1
+        }
+      ]
+    },
+    {
+      "day": "Monday",
+      "date": "2026-05-11",
+      "page_ref": 56,
+      "daily_alp": 10379,
+      "agents": [
+        {
+          "name": "Awni Shuaib",
+          "alp": 5289,
+          "sets": 8,
+          "sits": 4,
+          "sales": 3
+        },
+        {
+          "name": "Maher Altairi",
+          "alp": 5090,
+          "sets": 2,
+          "sits": 2,
+          "sales": 2
+        }
+      ]
+    },
+    {
+      "day": "Wednesday 2",
+      "date": "2026-05-13",
+      "page_ref": 64,
+      "daily_alp": 0
+    },
+    {
+      "day": "Thursday 2",
+      "date": "2026-05-14",
+      "page_ref": 72,
+      "daily_alp": 0
+    }
+  ],
+  "lost_business": [
+    {
+      "agent": "Awni Shuaib",
+      "date": "2026-05-11",
+      "alp": 2380.2,
+      "status": "Canceled",
+      "notes": "Cancel per agent note"
+    },
+    {
+      "agent": "Awni Shuaib",
+      "date": "2026-05-08",
+      "alp": 1507.32,
+      "status": "Rewritten",
+      "notes": "Rewriting to draft in June"
+    }
+  ]
+}
