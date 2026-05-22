@@ -1,0 +1,238 @@
+{
+  "report_metadata": {
+    "source_file": "1779424564_Rust_war.pdf",
+    "spreadsheet_title": "Ashley Rust Week Start 5/6/2026",
+    "rga_office": "Rust RGA",
+    "office_branding": "AO Premier Heritage",
+    "weekly_total_alp": 13996,
+    "tab_sync_complete": true
+  },
+  "weekly_tabs": [
+    {
+      "tab_name": "Wed",
+      "date": "2026-05-06",
+      "daily_alp": 1014,
+      "performance": [
+        {
+          "agent": "Andrea Mulder",
+          "sets": 1,
+          "sits": 1,
+          "sales": 1,
+          "n1_count": 0,
+          "referrals": 5,
+          "ref_sits": 0,
+          "ref_sales": 0,
+          "pos_sits": 0,
+          "pos_sales": 0,
+          "vet_sits": 1,
+          "vet_sales": 1,
+          "alp": 1014
+        }
+      ]
+    },
+    {
+      "tab_name": "Thurs",
+      "date": "2026-05-07",
+      "daily_alp": 349,
+      "performance": [
+        {
+          "agent": "Shayla Williamson",
+          "sets": 5,
+          "sits": 4,
+          "sales": 1,
+          "n1_count": 4,
+          "referrals": 3,
+          "ref_sits": 1,
+          "ref_sales": 0,
+          "pos_sits": 0,
+          "pos_sales": 1,
+          "vet_sits": 0,
+          "vet_sales": 0,
+          "alp": 349
+        }
+      ]
+    },
+    {
+      "tab_name": "Fri",
+      "date": "2026-05-08",
+      "daily_alp": 1841,
+      "performance": [
+        {
+          "agent": "Andrea Mulder",
+          "sets": 1,
+          "sits": 1,
+          "sales": 1,
+          "n1_count": 0,
+          "referrals": 0,
+          "ref_sits": 1,
+          "ref_sales": 1,
+          "pos_sits": 0,
+          "pos_sales": 0,
+          "vet_sits": 0,
+          "vet_sales": 0,
+          "alp": 739
+        },
+        {
+          "agent": "Shayla Williamson",
+          "sets": 1,
+          "sits": 1,
+          "sales": 1,
+          "os_sits": 1,
+          "os_sales": 1,
+          "n1_count": 0,
+          "referrals": 1,
+          "ref_sits": 0,
+          "ref_sales": 0,
+          "pos_sits": 0,
+          "pos_sales": 0,
+          "vet_sits": 1,
+          "vet_sales": 1,
+          "alp": 1102
+        }
+      ]
+    },
+    {
+      "tab_name": "Sat",
+      "date": "2026-05-09",
+      "daily_alp": 1401,
+      "performance": [
+        {
+          "agent": "Andrea Mulder",
+          "sets": 0,
+          "sits": 3,
+          "sales": 1,
+          "os_sits": 1,
+          "os_sales": 1,
+          "n1_count": 1,
+          "referrals": 0,
+          "ref_sits": 0,
+          "ref_sales": 0,
+          "pos_sits": 0,
+          "pos_sales": 0,
+          "vet_sits": 3,
+          "vet_sales": 1,
+          "alp": 1401
+        }
+      ]
+    },
+    {
+      "tab_name": "Sun",
+      "date": "2026-05-10",
+      "daily_alp": 0
+    },
+    {
+      "tab_name": "Mon",
+      "date": "2026-05-11",
+      "daily_alp": 8271,
+      "performance": [
+        {
+          "agent": "Jasmine Marquez",
+          "sets": 2,
+          "sits": 1,
+          "sales": 1,
+          "n1_count": 0,
+          "referrals": 2,
+          "ref_sits": 1,
+          "ref_sales": 1,
+          "pos_sits": 0,
+          "pos_sales": 0,
+          "vet_sits": 0,
+          "vet_sales": 0,
+          "alp": 1635
+        },
+        {
+          "agent": "Torian Fields",
+          "sets": 2,
+          "sits": 2,
+          "sales": 2,
+          "os_sits": 2,
+          "os_sales": 2,
+          "n1_count": 2,
+          "referrals": 2,
+          "ref_sits": 1,
+          "ref_sales": 1,
+          "pos_sits": 0,
+          "pos_sales": 0,
+          "vet_sits": 1,
+          "vet_sales": 1,
+          "alp": 4200
+        },
+        {
+          "agent": "Devin Gould",
+          "sets": 3,
+          "sits": 2,
+          "sales": 2,
+          "os_sits": 1,
+          "os_sales": 0,
+          "n1_count": 1,
+          "referrals": 6,
+          "ref_sits": 1,
+          "ref_sales": 1,
+          "pos_sits": 0,
+          "pos_sales": 0,
+          "vet_sits": 2,
+          "vet_sales": 1,
+          "alp": 2436
+        }
+      ]
+    },
+    {
+      "tab_name": "Tues",
+      "date": "2026-05-12",
+      "daily_alp": 1120,
+      "performance": [
+        {
+          "agent": "Devin Gould",
+          "sets": 1,
+          "sits": 1,
+          "sales": 1,
+          "n1_count": 0,
+          "referrals": 0,
+          "ref_sits": 1,
+          "ref_sales": 1,
+          "pos_sits": 0,
+          "pos_sales": 0,
+          "vet_sits": 0,
+          "vet_sales": 0,
+          "alp": 1120
+        }
+      ]
+    },
+    {
+      "tab_name": "Wed (2)",
+      "date": "2026-05-13",
+      "daily_alp": 0
+    },
+    {
+      "tab_name": "Thurs (2)",
+      "date": "2026-05-14",
+      "daily_alp": 0
+    },
+    {
+      "tab_name": "LOST BI",
+      "records": [
+        {
+          "agent": "William Green",
+          "client": "James Cecil",
+          "date": "2026-05-06",
+          "alp": 2893.44,
+          "notes": "CANCEL PER AGENT"
+        },
+        {
+          "agent": "William Green",
+          "client": "Linda Cecil",
+          "date": "2026-05-06",
+          "alp": 2262.12,
+          "notes": "CANCEL PER AGENT"
+        },
+        {
+          "agent": "William Green",
+          "client": "Robert Hosch Jr",
+          "date": "2026-04-29",
+          "alp": 1549.32,
+          "notes": "CANCEL PER AGENT"
+        }
+      ]
+    }
+  ]
+}
