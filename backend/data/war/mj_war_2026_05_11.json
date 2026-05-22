@@ -1,0 +1,152 @@
+{
+  "report_metadata": {
+    "source_file": "1779412850_MJ_war.pdf",
+    "week_ending": "2026-05-11",
+    "rga_office": "Mohamed Aljahmi RGA",
+    "total_alp": 44698,
+    "processed_at": "2026-05-21T21:24:00Z"
+  },
+  "summary_metrics": {
+    "sets": 115,
+    "sits": 50,
+    "sales": 22,
+    "pos_sits": 2,
+    "pos_sales": 0,
+    "vet_sits": 21,
+    "vet_sales": 8,
+    "refs_obtained": 160,
+    "ref_sits": 26,
+    "ref_sales": 14,
+    "ots_sits": 24,
+    "ots_sales": 15,
+    "n1": 9
+  },
+  "agent_performance": [
+    {
+      "name": "Tyren Cosare",
+      "sets": 2,
+      "sits": 3,
+      "sales": 3,
+      "alp": 4977,
+      "n1": 0,
+      "refs_obtained": 15
+    },
+    {
+      "name": "Awni Shuaib",
+      "sets": 41,
+      "sits": 12,
+      "sales": 9,
+      "alp": 16635,
+      "n1": 2,
+      "refs_obtained": 37
+    },
+    {
+      "name": "Maher Altairi",
+      "sets": 5,
+      "sits": 5,
+      "sales": 5,
+      "alp": 15938,
+      "n1": 0,
+      "refs_obtained": 19
+    },
+    {
+      "name": "Ashley Beraty",
+      "sets": 7,
+      "sits": 3,
+      "sales": 3,
+      "alp": 1947,
+      "n1": 0,
+      "refs_obtained": 7
+    },
+    {
+      "name": "Bruce Curry",
+      "sets": 9,
+      "sits": 4,
+      "sales": 1,
+      "alp": 1800,
+      "n1": 0,
+      "refs_obtained": 6
+    },
+    {
+      "name": "Basel Musaed",
+      "sets": 14,
+      "sits": 3,
+      "sales": 1,
+      "alp": 1968,
+      "n1": 0,
+      "refs_obtained": 9
+    },
+    {
+      "name": "Ali Eltanoukhi",
+      "sets": 4,
+      "sits": 0,
+      "sales": 0,
+      "alp": 0,
+      "n1": 0,
+      "refs_obtained": 0
+    },
+    {
+      "name": "Sajad Aljanaby",
+      "sets": 15,
+      "sits": 12,
+      "sales": 0,
+      "alp": 0,
+      "n1": 0,
+      "refs_obtained": 28
+    },
+    {
+      "name": "Christine Demaras",
+      "sets": 4,
+      "sits": 1,
+      "sales": 0,
+      "alp": 0,
+      "n1": 2,
+      "refs_obtained": 4
+    },
+    {
+      "name": "Lamese Bader",
+      "sets": 2,
+      "sits": 2,
+      "sales": 0,
+      "alp": 0,
+      "n1": 1,
+      "refs_obtained": 26
+    },
+    {
+      "name": "Husein Ghasham",
+      "sets": 4,
+      "sits": 1,
+      "sales": 0,
+      "alp": 0,
+      "n1": 0,
+      "refs_obtained": 4
+    },
+    {
+      "name": "Snoor Qaradaghi",
+      "sets": 3,
+      "sits": 1,
+      "sales": 0,
+      "alp": 0,
+      "n1": 0,
+      "refs_obtained": 0
+    },
+    {
+      "name": "Kimberly Villacampa",
+      "sets": 2,
+      "sits": 2,
+      "sales": 0,
+      "alp": 0,
+      "n1": 2,
+      "refs_obtained": 0
+    },
+    {
+      "name": "Shiko Qaradaghi",
+      "sets": 1,
+      "sits": 1,
+      "sales": 0,
+      "alp": 0,
+      "n1": 2,
+      "refs_obtained": 5
+    }
+  ]
+}
