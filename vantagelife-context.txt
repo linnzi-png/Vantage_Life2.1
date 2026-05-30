@@ -1,0 +1,1915 @@
+=== CLAUDE.md ===
+# CLAUDE.md - VantageLife 2.1 (AO Premiere)
+
+## Project Overview
+Real-time sales tracking and victory culture platform for AO Globe Life - Vantage.
+Mobile-first TypeScript/Node app deployed on Vercel. GitHub MCP: https://github-mcp-server-blond.vercel.app/api/mcp
+
+## Tech Stack
+- Language: TypeScript (strict mode)
+- Runtime: Node.js
+- Database: Supabase (PostgreSQL)
+- Auth: Supabase Auth with 4-tier RBAC
+- Deploy: Vercel (auto-deploy from main)
+- Package manager: npm
+
+## Architecture
+- src/components/pages/ — Page components (NumbersEntry.jsx = primary entry point)
+- src/components/ — Shared UI components
+- src/lib/ — Utilities, Supabase client, metric helpers
+- src/types/ — TypeScript type definitions
+- src/hooks/ — Custom React hooks
+
+## RBAC Hierarchy (4-tier - NEVER flatten or bypass)
+1. Agent — enters their own metrics only
+2. GA (General Agent) — sees their team rollup
+3. MGA (Master General Agent) — sees GA-level rollups
+4. RGA (Regional General Agent) — sees all MGA rollups
+
+## The 14 Nightly Metrics (exact order - do not reorder)
+1. Sets
+2. Sits
+3. Sales
+4. OS Sits
+5. OS Sales
+6. N1  ← EXCLUDED FROM ALL CLOSE RATE MATH
+7. Referrals
+8. Ref Sits
+9. Ref Sales
+10. POS Sits
+11. POS Sales
+12. Vet Sits
+13. Vet Sales
+14. Gross ALP
+
+## Business Logic (sacred - do not change without explicit instruction)
+- Reporting cycle: 6:00 AM to 5:59 AM (not midnight-to-midnight)
+- Wednesday 2:00 PM = weekly submission cutoff
+- 9PM gates = nightly data lock
+- "Midnight Miracle" = last-minute entry window before midnight gate
+- Close Rate formula: Sales / (Sits - N1)  // N1 always excluded
+- All metric calculations go in a dedicated utility file, never inline
+
+## Current Focus
+VantageLife 2.1 "Nightly Numbers" 14-metric mobile stepper. Wiring backend services.
+Stale View bug previously resolved via hard-replace in src/components/pages/NumbersEntry.jsx.
+PULSEFORMV2_ACTIVE label confirms correct version is live.
+
+## Commands
+- Dev: npm run dev
+- Build: npm run build
+- Type check: npm run typecheck (must pass before every commit)
+- Deploy: Vercel auto-deploys from main
+
+## Coding Conventions
+- TypeScript strict mode. No any types. No type assertions.
+- Named exports only. No default exports.
+- Kebab-case files. PascalCase components.
+- Every Close Rate calculation must include comment: // N1 excluded per business rule
+- Never hardcode metric names - always reference the METRICS constant
+
+## Forbidden Patterns
+- NEVER include N1 in Close Rate or any aggregate calculation
+- NEVER allow an Agent to see data above their RBAC tier
+- NEVER change the 6AM cycle boundary without explicit instruction
+- NEVER bypass the Wednesday 2PM cutoff gate
+- NEVER commit directly to main - feature branches always
+- NEVER hardcode metric names or tier labels
+
+## Known Gotchas
+- Stale View: NumbersEntry.jsx can cache stale version. Hard-replace if metrics appear wrong.
+  Verify with PULSEFORMV2_ACTIVE label.
+- N1 looks like a sales metric but is a write-off category. Audit every aggregation.
+- Reporting cycle starts 6AM - all date range queries must account for this offset.
+- Supabase real-time subscriptions can fire duplicate events - always debounce.
+
+## AI Agent Notes
+- Ask before modifying any business logic or calculation
+- Run npm run typecheck after every non-trivial change; stop if it fails
+- Read existing patterns in src/lib/ before proposing new architecture
+- Create feature branches for all work; never commit directly to main
+- When uncertain about tier permissions, enforce more restrictive access
+=== APP SCREENS ===
+
+--- frontend/app/(tabs)/_layout.tsx ---
+import React from 'react';
+import { Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS, useAuth, levelNum } from '../../src/lib/auth';
+
+export default function TabsLayout() {
+  const { user } = useAuth();
+  const lvl = levelNum(user?.role);
+
+  return (
+    <Tabs
+      screenOptions={{
+        headerStyle: { backgroundColor: COLORS.bg },
+        headerTitleStyle: { color: '#fff', fontWeight: '900', letterSpacing: 1.2 },
+        headerShadowVisible: false,
+        tabBarStyle: { backgroundColor: '#000', borderTopColor: COLORS.border, height: 60, paddingBottom: 8, paddingTop: 6 },
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.textDim,
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+      }}
+    >
+      <Tabs.Screen
+        name="index"
+        options={{ title: 'DASHBOARD', tabBarIcon: ({ color, size }) => <Ionicons name="speedometer" size={size} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="pulse"
+        options={{ title: 'PULSE', tabBarIcon: ({ color, size }) => <Ionicons name="pulse" size={size} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="shoutouts"
+        options={{ title: 'SHOUTOUTS', tabBarIcon: ({ color, size }) => <Ionicons name="megaphone" size={size} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="team"
+        options={{
+          title: 'TEAM',
+          tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
+          href: lvl >= 2 ? undefined : null,
+        }}
+      />
+      <Tabs.Screen
+        name="more"
+        options={{ title: 'MORE', tabBarIcon: ({ color, size }) => <Ionicons name="grid" size={size} color={color} /> }}
+      />
+    </Tabs>
+  );
+}
+
+--- frontend/app/(tabs)/index.tsx ---
+// Executive Dashboard — default screen
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { api, COLORS, useAuth } from '../../src/lib/auth';
+import StatCard from '../../src/components/StatCard';
+import PlatinumWall from '../../src/components/PlatinumWall';
+import OfficeTabs, { OfficeRow } from '../../src/components/OfficeTabs';
+import GateBanner from '../../src/components/GateBanner';
+import Ticker, { TickerItem } from '../../src/components/Ticker';
+
+interface Summary {
+  total_alp: number; total_net_alp: number; total_sits: number; total_sales: number;
+  delta_pct_vs_yesterday: number; sales_day: string; gate: any; is_full_agency: boolean;
+}
+
+export default function DashboardScreen() {
+  const { user, roleLabel } = useAuth();
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [ticker, setTicker] = useState<TickerItem[]>([]);
+  const [vets, setVets] = useState<any[]>([]);
+  const [rookies, setRookies] = useState<any[]>([]);
+  const [offices, setOffices] = useState<OfficeRow[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchAll = useCallback(async () => {
+    try {
+      const [s, t, p, o] = await Promise.all([
+        api<Summary>('/api/dashboard/summary'),
+        api<{ items: TickerItem[] }>('/api/dashboard/ticker'),
+        api<{ vets: any[]; rookies: any[] }>('/api/dashboard/platinum-wall'),
+        api<{ offices: OfficeRow[] }>('/api/dashboard/offices'),
+      ]);
+      setSummary(s); setTicker(t.items); setVets(p.vets); setRookies(p.rookies); setOffices(o.offices);
+    } catch (e) {
+      console.warn('Dashboard fetch error:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAll();
+    const interval = setInterval(fetchAll, 30000); // 30s polling for live ticker
+    return () => clearInterval(interval);
+  }, [fetchAll]);
+
+  const onRefresh = async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); };
+
+  const fmtMoney = (n: number) => `$${Math.round(n).toLocaleString()}`;
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.header} testID="dashboard-header">
+        <View>
+          <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text></Text>
+          <Text style={styles.sub}>{user?.name} · <Text style={{ color: COLORS.primary }}>{roleLabel}</Text></Text>
+        </View>
+        <View style={styles.dayPill}>
+          <Ionicons name="calendar-outline" size={12} color={COLORS.primary} />
+          <Text style={styles.dayPillTxt}>{summary?.sales_day || '—'}</Text>
+        </View>
+      </View>
+
+      {summary?.gate ? <GateBanner gate={summary.gate} /> : null}
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+      >
+        {!summary ? (
+          <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
+        ) : (
+          <>
+            <Text style={styles.sectionTitle}>{summary.is_full_agency ? "TODAY'S GLOBAL PRODUCTION" : "TODAY'S TEAM PRODUCTION"}</Text>
+            <View style={styles.cardsRow}>
+              <StatCard
+                label="Total Team ALP"
+                value={fmtMoney(summary.total_alp)}
+                deltaPct={summary.delta_pct_vs_yesterday}
+                accent={COLORS.primary}
+                testID="stat-total-alp"
+              />
+              <View style={{ width: 8 }} />
+              <StatCard
+                label="Agency Sits"
+                value={summary.total_sits.toLocaleString()}
+                accent={COLORS.secondary}
+                testID="stat-total-sits"
+              />
+              <View style={{ width: 8 }} />
+              <StatCard
+                label="Total Sales"
+                value={summary.total_sales.toLocaleString()}
+                accent={COLORS.gold}
+                testID="stat-total-sales"
+              />
+            </View>
+
+            <PlatinumWall vets={vets} rookies={rookies} />
+
+            <OfficeTabs offices={offices} />
+
+            <View style={{ height: 40 }} />
+          </>
+        )}
+      </ScrollView>
+
+      <Ticker items={ticker} />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  brand: { color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: 1.5 },
+  sub: { color: COLORS.textDim, fontSize: 11, marginTop: 2, letterSpacing: 0.5 },
+  dayPill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 4 },
+  dayPillTxt: { color: COLORS.text, fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums' as any] },
+  scroll: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 30 },
+  sectionTitle: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 10, marginTop: 6 },
+  cardsRow: { flexDirection: 'row' },
+});
+
+--- frontend/app/(tabs)/more.tsx ---
+// More tab: profile, manager, audit, vault, logout
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useAuth, COLORS, levelNum } from '../../src/lib/auth';
+
+export default function MoreScreen() {
+  const router = useRouter();
+  const { user, agent, roleLabel, signOut } = useAuth();
+  const lvl = levelNum(user?.role);
+
+  const items: { id: string; icon: any; label: string; onPress: () => void; show: boolean }[] = [
+    { id: 'manager', icon: 'construct', label: 'Manager Command Panel', onPress: () => router.push('/manager'), show: lvl >= 4 },
+    { id: 'audit', icon: 'list', label: 'Audit Log', onPress: () => router.push('/audit'), show: lvl >= 4 },
+    { id: 'vault', icon: 'archive', label: 'Historical Vault', onPress: () => router.push('/vault'), show: lvl >= 4 },
+  ];
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <View style={styles.profile} testID="profile-card">
+          <View style={styles.avatar}><Text style={styles.avatarTxt}>{(user?.name || '?').slice(0, 1)}</Text></View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.name}>{user?.name}</Text>
+            <Text style={styles.email}>{user?.email}</Text>
+            <View style={styles.roleRow}>
+              <Text style={styles.role}>{roleLabel}</Text>
+              {agent ? <Text style={styles.dot}> · </Text> : null}
+              {agent ? <Text style={styles.office}>{agent.office}</Text> : null}
+            </View>
+          </View>
+        </View>
+
+        {items.filter((i) => i.show).length > 0 ? (
+          <>
+            <Text style={styles.kicker}>EXECUTIVE TOOLS</Text>
+            <View style={styles.list}>
+              {items.filter((i) => i.show).map((it) => (
+                <TouchableOpacity key={it.id} style={styles.item} onPress={it.onPress} testID={`more-${it.id}`}>
+                  <Ionicons name={it.icon} size={18} color={COLORS.primary} />
+                  <Text style={styles.itemTxt}>{it.label}</Text>
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        ) : null}
+
+        <Text style={[styles.kicker, { marginTop: 16 }]}>ACCOUNT</Text>
+        <TouchableOpacity style={styles.logout} onPress={async () => { await signOut(); router.replace('/login'); }} testID="logout-btn">
+          <Ionicons name="log-out" size={16} color={COLORS.red} />
+          <Text style={styles.logoutTxt}>Sign Out</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.footer}>VantageLife 2.0 · AO Premiere · America/Detroit</Text>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+  profile: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderTopColor: COLORS.primary, borderTopWidth: 2, padding: 14, borderRadius: 6 },
+  avatar: { width: 48, height: 48, borderRadius: 4, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  avatarTxt: { color: '#000', fontWeight: '900', fontSize: 22 },
+  name: { color: '#fff', fontWeight: '900', fontSize: 16 },
+  email: { color: COLORS.textDim, fontSize: 12, marginTop: 2 },
+  roleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  role: { color: COLORS.primary, fontWeight: '900', fontSize: 11, letterSpacing: 1.4 },
+  office: { color: COLORS.textDim, fontSize: 11 },
+  dot: { color: COLORS.textDim },
+  kicker: { color: COLORS.textDim, fontWeight: '900', fontSize: 11, letterSpacing: 2, marginVertical: 12 },
+  list: { gap: 1, backgroundColor: COLORS.border, borderRadius: 6, overflow: 'hidden' },
+  item: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, padding: 14, gap: 12 },
+  itemTxt: { color: '#fff', fontWeight: '700', fontSize: 14, flex: 1 },
+  logout: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6 },
+  logoutTxt: { color: COLORS.red, fontWeight: '800' },
+  footer: { color: COLORS.textMuted, fontSize: 10, textAlign: 'center', marginTop: 24 },
+});
+
+--- frontend/app/(tabs)/pulse.tsx ---
+// Nightly Pulse Entry — mobile-first stepper
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { api, COLORS, useAuth } from '../../src/lib/auth';
+import GateBanner from '../../src/components/GateBanner';
+
+const STEPS: { key: keyof PulseForm; label: string; hint: string; type?: 'int' | 'money' }[] = [
+  { key: 'sets', label: 'Total Appointments (Sets)', hint: 'Total appointments booked.', type: 'int' },
+  { key: 'sits', label: 'Total Sits', hint: 'Total appointments you actually ran (excludes N1).', type: 'int' },
+  { key: 'sales', label: 'Total Sales', hint: 'Total closed deals today.', type: 'int' },
+  { key: 'ots_sits', label: 'On Spot Sits', hint: 'Sits run on the spot (walk-ins / same-day).', type: 'int' },
+  { key: 'ots_sales', label: 'On Spot Sales', hint: 'Sales closed on the spot.', type: 'int' },
+  { key: 'n1', label: 'Uninsurables (N1)', hint: 'Tracked but excluded from Sits totals.', type: 'int' },
+  { key: 'refs_obtained', label: 'Referrals Collected', hint: 'Referrals you collected today.', type: 'int' },
+  { key: 'ref_sits', label: 'Referral Sits', hint: 'Sits run from referrals.', type: 'int' },
+  { key: 'ref_sales', label: 'Referral Sales', hint: 'Sales closed from referrals.', type: 'int' },
+  { key: 'pos_sits', label: 'POS Sits', hint: 'Point-of-Sale sits.', type: 'int' },
+  { key: 'pos_sales', label: 'POS Sales', hint: 'Point-of-Sale sales.', type: 'int' },
+  { key: 'vet_sits', label: 'Response Card / Veteran Sits', hint: 'Sits from response cards or Veteran leads.', type: 'int' },
+  { key: 'vet_sales', label: 'Response Card / Veteran Sales', hint: 'Sales from response cards or Veteran leads.', type: 'int' },
+  { key: 'gross_alp', label: 'Total ALP for the Day (Gross ALP)', hint: 'Annual Life Premium for the day.', type: 'money' },
+];
+
+interface PulseForm {
+  sets: string; sits: string; sales: string; ots_sits: string; ots_sales: string;
+  n1: string; refs_obtained: string; ref_sits: string; ref_sales: string;
+  pos_sits: string; pos_sales: string; vet_sits: string; vet_sales: string;
+  gross_alp: string;
+}
+
+const empty: PulseForm = {
+  sets: '0', sits: '0', sales: '0', ots_sits: '0', ots_sales: '0',
+  n1: '0', refs_obtained: '0', ref_sits: '0', ref_sales: '0',
+  pos_sits: '0', pos_sales: '0', vet_sits: '0', vet_sales: '0',
+  gross_alp: '0',
+};
+
+export default function PulseScreen() {
+  const { user } = useAuth();
+  const [step, setStep] = useState(0);
+  const [form, setForm] = useState<PulseForm>(empty);
+  const [today, setToday] = useState<any>(null);
+  const [streak, setStreak] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+
+  const refresh = async () => {
+    try {
+      const t = await api<{ entries: any[]; totals: any; gate: any; sales_day: string }>('/api/pulse/me/today');
+      setToday(t);
+      const s = await api<{ streak: number }>('/api/pulse/me/streak');
+      setStreak(s.streak);
+    } catch (e) { /* not linked */ }
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const cur = STEPS[step];
+  const done = step >= STEPS.length;
+
+  const onSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const payload: any = {};
+      STEPS.forEach((s) => {
+        const v = parseFloat(form[s.key] || '0') || 0;
+        payload[s.key] = s.type === 'money' ? v : Math.floor(v);
+      });
+      await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
+      Alert.alert('Pulse logged', `${form.sales} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
+      setForm(empty); setStep(0);
+      await refresh();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to submit');
+    } finally { setSubmitting(false); }
+  };
+
+  const totalAlp = today?.totals?.gross_alp || 0;
+  const isPlayersClub = totalAlp >= 10000;
+
+  if (!user?.agent_id) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.center}>
+          <Ionicons name="alert-circle" size={36} color={COLORS.orange} />
+          <Text style={styles.notLinked}>This account isn't linked to an agent profile yet.</Text>
+          <Text style={styles.notLinkedSub}>Try the Demo Login screen and pick "AGENT" to test the Pulse flow.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      {today?.gate ? <GateBanner gate={today.gate} /> : null}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <View style={styles.headRow}>
+            <View>
+              <Text style={styles.kicker}>NIGHTLY PULSE</Text>
+              <Text style={styles.h1}>Log your sales day</Text>
+            </View>
+            <View style={styles.streakPill}>
+              <Text style={styles.streakEmoji}>{streak >= 5 ? '🔥' : '⚡'}</Text>
+              <Text style={styles.streakTxt}>{streak}d streak</Text>
+            </View>
+          </View>
+
+          <View style={styles.todayCard}>
+            <Text style={styles.todayLabel}>TODAY'S RUNNING TOTAL</Text>
+            <Text style={[styles.todayAlp, isPlayersClub && { color: COLORS.gold }]}>${Math.round(totalAlp).toLocaleString()}</Text>
+            <Text style={styles.todayMeta}>{today?.totals?.sales || 0} sales · {today?.totals?.sits || 0} sits</Text>
+            {isPlayersClub ? (
+              <View style={styles.club}><Ionicons name="trophy" size={14} color={COLORS.gold} /><Text style={styles.clubTxt}>PLAYER'S CLUB · $10K HIT</Text></View>
+            ) : null}
+          </View>
+
+          {!done ? (
+            <View style={styles.stepCard} testID="pulse-step-card">
+              <View style={styles.progRow}>
+                {STEPS.map((_, i) => (
+                  <View key={i} style={[styles.progDot, i <= step && { backgroundColor: COLORS.primary }]} />
+                ))}
+              </View>
+              <Text style={styles.stepNum}>STEP {step + 1} OF {STEPS.length}</Text>
+              <Text style={styles.stepLabel}>{cur.label}</Text>
+              <Text style={styles.stepHint}>{cur.hint}</Text>
+              <TextInput
+                testID={`pulse-input-${cur.key}`}
+                style={styles.input}
+                value={form[cur.key]}
+                onChangeText={(v) => setForm((p) => ({ ...p, [cur.key]: v.replace(/[^0-9.]/g, '') }))}
+                keyboardType="numeric"
+                placeholder="0"
+                placeholderTextColor={COLORS.textMuted}
+                selectTextOnFocus
+                autoFocus
+              />
+              <View style={styles.btnRow}>
+                {step > 0 ? (
+                  <TouchableOpacity style={[styles.btn, styles.btnGhost]} onPress={() => setStep(step - 1)} testID="pulse-back">
+                    <Text style={styles.btnGhostTxt}>BACK</Text>
+                  </TouchableOpacity>
+                ) : <View style={{ flex: 1 }} />}
+                <TouchableOpacity
+                  style={[styles.btn, styles.btnPrimary]}
+                  testID="pulse-next"
+                  onPress={() => setStep(step + 1)}
+                >
+                  <Text style={styles.btnPrimaryTxt}>{step === STEPS.length - 1 ? 'REVIEW' : 'NEXT'}</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#000" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.stepCard} testID="pulse-review-card">
+              <Text style={styles.kicker}>REVIEW & SUBMIT</Text>
+              {STEPS.map((s) => (
+                <View key={s.key} style={styles.reviewRow}>
+                  <Text style={styles.reviewLabel}>{s.label}</Text>
+                  <Text style={styles.reviewValue}>
+                    {s.type === 'money' ? `$${Math.round(parseFloat(form[s.key] || '0')).toLocaleString()}` : (form[s.key] || '0')}
+                  </Text>
+                </View>
+              ))}
+              <View style={styles.btnRow}>
+                <TouchableOpacity style={[styles.btn, styles.btnGhost]} onPress={() => setStep(STEPS.length - 1)} testID="pulse-edit">
+                  <Text style={styles.btnGhostTxt}>EDIT</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btn, styles.btnPrimary]}
+                  testID="pulse-submit"
+                  disabled={submitting}
+                  onPress={onSubmit}
+                >
+                  <Text style={styles.btnPrimaryTxt}>{submitting ? 'SUBMITTING…' : 'SUBMIT PULSE'}</Text>
+                  <Ionicons name="checkmark-circle" size={14} color="#000" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          <Text style={[styles.kicker, { marginTop: 18 }]}>TODAY'S ENTRIES</Text>
+          {(today?.entries || []).filter((e: any) => !e.is_adjustment).length === 0 ? (
+            <Text style={styles.empty}>No pulses logged for today yet.</Text>
+          ) : (
+            (today?.entries || []).filter((e: any) => !e.is_adjustment).map((e: any) => (
+              <View key={e.entry_id} style={styles.entry}>
+                <Text style={styles.entryAlp}>${Math.round(e.gross_alp || 0).toLocaleString()}</Text>
+                <Text style={styles.entryMeta}>{e.sales} sales · {e.sits} sits · {e.refs_obtained} refs</Text>
+                <Text style={styles.entryTs}>{(new Date(e.submitted_at)).toLocaleTimeString()}</Text>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+  scroll: { padding: 16, paddingBottom: 60 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 },
+  notLinked: { color: '#fff', fontWeight: '800', fontSize: 16, marginTop: 12, textAlign: 'center' },
+  notLinkedSub: { color: COLORS.textDim, marginTop: 6, textAlign: 'center' },
+  headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  kicker: { color: COLORS.primary, fontWeight: '900', fontSize: 11, letterSpacing: 2 },
+  h1: { color: '#fff', fontSize: 22, fontWeight: '900', marginTop: 2 },
+  streakPill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 4 },
+  streakEmoji: { fontSize: 14 },
+  streakTxt: { color: COLORS.text, fontWeight: '800', fontSize: 11 },
+  todayCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderTopColor: COLORS.primary, borderTopWidth: 2, padding: 14, borderRadius: 6, marginVertical: 12 },
+  todayLabel: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 1.6 },
+  todayAlp: { color: '#fff', fontSize: 36, fontWeight: '900', marginTop: 4, letterSpacing: -1 },
+  todayMeta: { color: COLORS.textDim, fontSize: 12, marginTop: 4 },
+  club: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, alignSelf: 'flex-start', backgroundColor: 'rgba(255,215,0,0.1)', paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: COLORS.gold, borderRadius: 4 },
+  clubTxt: { color: COLORS.gold, fontWeight: '900', fontSize: 10, letterSpacing: 1 },
+  stepCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, padding: 16, borderRadius: 6, marginTop: 8 },
+  progRow: { flexDirection: 'row', gap: 4, marginBottom: 12 },
+  progDot: { flex: 1, height: 3, backgroundColor: COLORS.border, borderRadius: 1 },
+  stepNum: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
+  stepLabel: { color: '#fff', fontSize: 22, fontWeight: '900', marginTop: 4 },
+  stepHint: { color: COLORS.textDim, fontSize: 12, marginTop: 4 },
+  input: {
+    backgroundColor: '#000', color: '#fff', fontSize: 36, fontWeight: '900',
+    borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 14,
+    marginTop: 14, borderRadius: 4,
+  },
+  btnRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  btn: { flex: 1, paddingVertical: 13, borderRadius: 4, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  btnPrimary: { backgroundColor: COLORS.primary },
+  btnPrimaryTxt: { color: '#000', fontWeight: '900', letterSpacing: 1 },
+  btnGhost: { borderWidth: 1, borderColor: COLORS.border, backgroundColor: 'transparent' },
+  btnGhostTxt: { color: COLORS.textDim, fontWeight: '900', letterSpacing: 1 },
+  reviewRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderTopWidth: 1, borderTopColor: COLORS.border },
+  reviewLabel: { color: COLORS.textDim, fontSize: 12 },
+  reviewValue: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  empty: { color: COLORS.textMuted, fontSize: 12, marginTop: 8, textAlign: 'center' },
+  entry: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, padding: 12, borderRadius: 6, marginTop: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  entryAlp: { color: COLORS.primary, fontWeight: '900', fontSize: 14, fontVariant: ['tabular-nums' as any] },
+  entryMeta: { color: COLORS.textDim, fontSize: 11, flex: 1, marginLeft: 8 },
+  entryTs: { color: COLORS.textMuted, fontSize: 10 },
+});
+
+--- frontend/app/(tabs)/shoutouts.tsx ---
+// Premiere Shoutouts Feed
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { api, COLORS } from '../../src/lib/auth';
+
+interface Shoutout {
+  shoutout_id: string;
+  type: 'players_club' | 'first_deal' | 'streak' | string;
+  scope: string;
+  agent_name: string;
+  office: string;
+  sales_day?: string;
+  amount?: number;
+  streak?: number;
+  ts: string;
+}
+
+const cfg: Record<string, { icon: any; color: string; title: string; bg: string }> = {
+  players_club: { icon: 'trophy', color: COLORS.gold, title: "PLAYER'S CLUB", bg: 'rgba(255,215,0,0.08)' },
+  first_deal: { icon: 'sparkles', color: COLORS.primary, title: 'WELCOME TO THE BOARD', bg: 'rgba(49,152,66,0.08)' },
+  streak: { icon: 'flame', color: COLORS.orange, title: 'PERFORMANCE STREAK', bg: 'rgba(255,140,0,0.08)' },
+};
+
+export default function ShoutoutsScreen() {
+  const [items, setItems] = useState<Shoutout[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const fetchAll = async () => {
+    try { const r = await api<{ shoutouts: Shoutout[] }>('/api/shoutouts'); setItems(r.shoutouts); }
+    catch {}
+  };
+  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, []);
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.head}>
+        <Text style={styles.kicker}>VICTORY CULTURE</Text>
+        <Text style={styles.title}>PREMIERE SHOUTOUTS</Text>
+      </View>
+      <ScrollView
+        contentContainerStyle={{ padding: 16, paddingBottom: 30 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
+      >
+        {items.length === 0 ? (
+          <Text style={styles.empty}>No shoutouts yet — go close one.</Text>
+        ) : items.map((s) => {
+          const c = cfg[s.type] || { icon: 'megaphone', color: COLORS.text, title: s.type.toUpperCase(), bg: 'transparent' };
+          return (
+            <View key={s.shoutout_id} style={[styles.card, { borderTopColor: c.color, backgroundColor: c.bg }]} testID={`shoutout-${s.shoutout_id}`}>
+              <View style={styles.iconWrap}>
+                <Ionicons name={c.icon} size={20} color={c.color} />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.cardTitle, { color: c.color }]}>{c.title}</Text>
+                <Text style={styles.agent}>{s.agent_name}<Text style={styles.dim}> · {s.office}</Text></Text>
+                {s.type === 'players_club' && s.amount ? (
+                  <Text style={styles.detail}>${Math.round(s.amount).toLocaleString()} Gross ALP — {s.sales_day}</Text>
+                ) : null}
+                {s.type === 'streak' && s.streak ? (
+                  <Text style={styles.detail}>{s.streak} consecutive on-time pulses 🔥</Text>
+                ) : null}
+                {s.type === 'first_deal' ? (
+                  <Text style={styles.detail}>Closed their first deal — visible to GA Team only.</Text>
+                ) : null}
+                <Text style={styles.ts}>{new Date(s.ts).toLocaleString()}</Text>
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+  head: { paddingHorizontal: 16, paddingVertical: 12 },
+  kicker: { color: COLORS.primary, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
+  title: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: 0.5 },
+  empty: { color: COLORS.textMuted, fontSize: 12, textAlign: 'center', marginTop: 24 },
+  card: { flexDirection: 'row', borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 3, borderRadius: 6, padding: 14, marginBottom: 10 },
+  iconWrap: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontWeight: '900', fontSize: 11, letterSpacing: 1.5 },
+  agent: { color: '#fff', fontWeight: '800', fontSize: 14, marginTop: 2 },
+  dim: { color: COLORS.textDim, fontWeight: '500' },
+  detail: { color: COLORS.textDim, fontSize: 12, marginTop: 4 },
+  ts: { color: COLORS.textMuted, fontSize: 10, marginTop: 6 },
+});
+
+--- frontend/app/(tabs)/team.tsx ---
+// Team View — Level 2+
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { api, COLORS, useAuth, levelNum } from '../../src/lib/auth';
+
+interface TeamRow {
+  agent_id: string; name: string; office: string; role: string; is_rookie: boolean;
+  gross_alp: number; net_alp: number; sits: number; sales: number; close_ratio: number; avg_deal: number; alerts: string[];
+}
+
+const ALERT_LABELS: Record<string, { label: string; color: string }> = {
+  low_close_ratio: { label: 'Low Close', color: COLORS.red },
+  low_avg_deal: { label: 'Low Avg', color: COLORS.orange },
+  no_pulse: { label: 'No Pulse', color: COLORS.yellow },
+};
+
+export default function TeamScreen() {
+  const { user } = useAuth();
+  const [rows, setRows] = useState<TeamRow[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [sortKey, setSortKey] = useState<keyof TeamRow>('gross_alp');
+
+  const fetchAll = async () => {
+    try { const r = await api<{ team: TeamRow[] }>('/api/team'); setRows(r.team); } catch {}
+  };
+  useEffect(() => { fetchAll(); }, []);
+
+  const sorted = [...rows].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
+
+  if (levelNum(user?.role) < 2) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.empty}>
+          <Ionicons name="lock-closed" size={32} color={COLORS.textDim} />
+          <Text style={styles.emptyTxt}>Team View is for GA, MGA, and RGA roles.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const sortBtn = (key: keyof TeamRow, label: string) => (
+    <TouchableOpacity
+      onPress={() => setSortKey(key)}
+      style={[styles.sortBtn, sortKey === key && styles.sortBtnActive]}
+      testID={`team-sort-${key}`}
+    >
+      <Text style={[styles.sortTxt, sortKey === key && styles.sortTxtActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.head}>
+        <Text style={styles.kicker}>HIERARCHY VIEW · LIVE</Text>
+        <Text style={styles.title}>TEAM PRODUCTION</Text>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortBar}>
+        {sortBtn('gross_alp', 'Gross ALP')}
+        {sortBtn('net_alp', 'Net ALP')}
+        {sortBtn('sales', 'Sales')}
+        {sortBtn('close_ratio', 'Close %')}
+        {sortBtn('avg_deal', 'Avg Deal')}
+      </ScrollView>
+      <ScrollView
+        contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 40 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
+      >
+        {sorted.length === 0 ? (
+          <Text style={styles.emptyTxt}>No team data yet.</Text>
+        ) : sorted.map((r) => (
+          <View key={r.agent_id} style={styles.row} testID={`team-row-${r.agent_id}`}>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.name} numberOfLines={1}>{r.name}</Text>
+                {r.is_rookie ? <View style={styles.rookie}><Text style={styles.rookieTxt}>R</Text></View> : null}
+              </View>
+              <Text style={styles.meta}>{r.office} · {r.role.replace('level_', 'L')}</Text>
+              {r.alerts?.length ? (
+                <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                  {r.alerts.map((a) => (
+                    <View key={a} style={[styles.alert, { borderColor: ALERT_LABELS[a]?.color || COLORS.textDim }]}>
+                      <Text style={[styles.alertTxt, { color: ALERT_LABELS[a]?.color || COLORS.textDim }]}>{ALERT_LABELS[a]?.label || a}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.alp}>${Math.round(r.gross_alp).toLocaleString()}</Text>
+              <Text style={styles.metric}>{r.sales} sales · {r.close_ratio}%</Text>
+              {Math.abs(r.gross_alp - r.net_alp) > 0.01 ? (
+                <Text style={styles.netAlp}>NET ${Math.round(r.net_alp).toLocaleString()}</Text>
+              ) : null}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+  head: { paddingHorizontal: 16, paddingVertical: 12 },
+  kicker: { color: COLORS.primary, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
+  title: { color: '#fff', fontSize: 22, fontWeight: '900' },
+  sortBar: { gap: 6, paddingHorizontal: 16, paddingBottom: 8 },
+  sortBtn: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border, borderRadius: 4, backgroundColor: COLORS.surface },
+  sortBtnActive: { borderColor: COLORS.primary, backgroundColor: 'rgba(49,152,66,0.12)' },
+  sortTxt: { color: COLORS.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
+  sortTxtActive: { color: COLORS.primary },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 },
+  emptyTxt: { color: COLORS.textDim, marginTop: 12, textAlign: 'center' },
+  row: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, padding: 12, borderRadius: 6, marginBottom: 6 },
+  name: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  meta: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
+  alp: { color: COLORS.primary, fontWeight: '900', fontSize: 16, fontVariant: ['tabular-nums' as any] },
+  metric: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
+  netAlp: { color: COLORS.orange, fontSize: 10, fontWeight: '800', marginTop: 2, letterSpacing: 0.5 },
+  alert: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3 },
+  alertTxt: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  rookie: { backgroundColor: COLORS.orange, paddingHorizontal: 4, borderRadius: 2 },
+  rookieTxt: { color: '#000', fontWeight: '900', fontSize: 9 },
+});
+
+--- frontend/app/+html.tsx ---
+// @ts-nocheck
+import { ScrollViewStyleReset } from "expo-router/html";
+import type { PropsWithChildren } from "react";
+
+export default function Root({ children }: PropsWithChildren) {
+  return (
+    <html lang="en" style={{ height: "100%" }}>
+      <head>
+        <meta charSet="utf-8" />
+        <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, shrink-to-fit=no"
+        />
+        {/*
+          Disable body scrolling on web to make ScrollView components work correctly.
+          If you want to enable scrolling, remove `ScrollViewStyleReset` and
+          set `overflow: auto` on the body style below.
+        */}
+        <ScrollViewStyleReset />
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              body > div:first-child { position: fixed !important; top: 0; left: 0; right: 0; bottom: 0; }
+              [role="tablist"] [role="tab"] * { overflow: visible !important; }
+              [role="heading"], [role="heading"] * { overflow: visible !important; }
+            `,
+          }}
+        />
+      </head>
+      <body
+        style={{
+          margin: 0,
+          height: "100%",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}
+
+--- frontend/app/_layout.tsx ---
+import React from 'react';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { AuthProvider } from '../src/lib/auth';
+
+export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0D0D0D' }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <StatusBar style="light" />
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: '#0D0D0D' },
+              headerTintColor: '#FFFFFF',
+              contentStyle: { backgroundColor: '#0D0D0D' },
+              headerShadowVisible: false,
+            }}
+          >
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="login" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="manager" options={{ title: 'Manager Command' }} />
+            <Stack.Screen name="audit" options={{ title: 'Audit Log' }} />
+            <Stack.Screen name="vault" options={{ title: 'Historical Vault' }} />
+          </Stack>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+--- frontend/app/audit.tsx ---
+// Audit Log — Level 4 only
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Stack } from 'expo-router';
+import { api, COLORS } from '../src/lib/auth';
+
+interface Audit {
+  audit_id: string; ts: string; action: string;
+  agent_name: string; changed_by_name?: string;
+  original_value: number; new_value: number; delta: number;
+  sales_day: string; reason: string;
+}
+
+export default function AuditScreen() {
+  const [items, setItems] = useState<Audit[]>([]);
+  useEffect(() => { (async () => { try { const r = await api<{ items: Audit[] }>('/api/manager/audit'); setItems(r.items); } catch {} })(); }, []);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      <Stack.Screen options={{ title: 'AUDIT LOG', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
+        <Text style={styles.kicker}>IMMUTABLE LEDGER</Text>
+        <Text style={styles.intro}>Every Net ALP adjustment is recorded with a timestamp and a 10+ character reason.</Text>
+        {items.length === 0 ? (
+          <Text style={styles.empty}>No adjustments yet.</Text>
+        ) : items.map((a) => (
+          <View key={a.audit_id} style={styles.row} testID={`audit-${a.audit_id}`}>
+            <View style={styles.rowHead}>
+              <Ionicons name={a.delta < 0 ? 'remove-circle' : 'add-circle'} size={16} color={a.delta < 0 ? COLORS.red : COLORS.primary} />
+              <Text style={styles.action}>{a.action.replace('_', ' ').toUpperCase()}</Text>
+              <Text style={styles.ts}>{new Date(a.ts).toLocaleString()}</Text>
+            </View>
+            <Text style={styles.agent}>{a.agent_name} <Text style={styles.dim}>· {a.sales_day}</Text></Text>
+            <View style={styles.values}>
+              <View style={{ flex: 1 }}><Text style={styles.lab}>ORIGINAL</Text><Text style={styles.val}>${Math.round(a.original_value).toLocaleString()}</Text></View>
+              <Ionicons name="arrow-forward" size={14} color={COLORS.textDim} />
+              <View style={{ flex: 1, alignItems: 'flex-end' }}><Text style={styles.lab}>NEW</Text><Text style={styles.val}>${Math.round(a.new_value).toLocaleString()}</Text></View>
+            </View>
+            <Text style={styles.lab}>REASON</Text>
+            <Text style={styles.reason}>"{a.reason}"</Text>
+            <Text style={styles.by}>By {a.changed_by_name || a.action}</Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  kicker: { color: COLORS.orange, fontWeight: '900', fontSize: 11, letterSpacing: 2 },
+  intro: { color: COLORS.textDim, fontSize: 12, marginVertical: 8 },
+  empty: { color: COLORS.textMuted, marginTop: 20, textAlign: 'center' },
+  row: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3, borderLeftColor: COLORS.orange, padding: 14, borderRadius: 6, marginTop: 8 },
+  rowHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  action: { color: '#fff', fontWeight: '900', fontSize: 12, letterSpacing: 1, flex: 1 },
+  ts: { color: COLORS.textMuted, fontSize: 10 },
+  agent: { color: '#fff', fontWeight: '700', marginTop: 6 },
+  dim: { color: COLORS.textDim, fontWeight: '500' },
+  values: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+  lab: { color: COLORS.textMuted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2, marginTop: 6 },
+  val: { color: '#fff', fontWeight: '900', fontSize: 14 },
+  reason: { color: COLORS.text, fontStyle: 'italic', fontSize: 12, marginTop: 4 },
+  by: { color: COLORS.textMuted, fontSize: 10, marginTop: 6 },
+});
+
+--- frontend/app/index.tsx ---
+// Auth gate: redirects to login or tabs based on session
+import React, { useEffect } from 'react';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useAuth, COLORS } from '../src/lib/auth';
+
+export default function Index() {
+  const router = useRouter();
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (loading) return;
+    if (user) router.replace('/(tabs)');
+    else router.replace('/login');
+  }, [user, loading]);
+
+  // Handle Emergent OAuth fragment if present (web)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash || '';
+    if (hash.includes('session_id=')) {
+      const sid = hash.split('session_id=')[1].split('&')[0];
+      const url = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api/auth/session`;
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ session_id: sid }),
+      }).then(async (r) => {
+        if (r.ok) {
+          const j = await r.json();
+          // Persist token in AsyncStorage for native fallback
+          const AS = (await import('@react-native-async-storage/async-storage')).default;
+          await AS.setItem('vl_session_token', j.session_token);
+          window.location.hash = '';
+          window.location.href = '/';
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
+  return (
+    <View style={styles.center}>
+      <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text></Text>
+      <ActivityIndicator color={COLORS.primary} style={{ marginTop: 12 }} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bg },
+  brand: { color: '#fff', fontSize: 28, fontWeight: '900', letterSpacing: 2 },
+});
+
+--- frontend/app/login.tsx ---
+// Login screen with Google sign-in + 4 demo level buttons (no Google needed)
+// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth, COLORS, Role } from '../src/lib/auth';
+
+const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] = [
+  { level: 'level_1', title: 'AGENT', subtitle: 'Personal stats + Pulse entry', tint: COLORS.primary },
+  { level: 'level_2', title: 'GA', subtitle: 'Co-Executive Producer · Team view', tint: COLORS.secondary },
+  { level: 'level_3', title: 'MGA', subtitle: 'Executive Producer · Full agency hierarchy', tint: COLORS.gold },
+  { level: 'level_4', title: 'RGA', subtitle: 'Executive · Global view + Eraser + Vault', tint: COLORS.orange },
+];
+
+export default function LoginScreen() {
+  const { signInDemo } = useAuth();
+  const router = useRouter();
+  const [busy, setBusy] = useState<Role | 'google' | null>(null);
+
+  const onDemo = async (level: Role) => {
+    setBusy(level);
+    try {
+      await signInDemo(level);
+      router.replace('/(tabs)');
+    } catch (e: any) {
+      alert(`Login failed: ${e.message || e}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onGoogle = () => {
+    setBusy('google');
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+      const redirectUrl = window.location.origin + '/';
+      window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    } else {
+      alert('Google Sign-in is available in the web preview. Use Demo Login on native.');
+      setBusy(null);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.brandRow}>
+          <View style={styles.brandMark}><Text style={styles.markTxt}>V</Text></View>
+          <View>
+            <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text> 2.0</Text>
+            <Text style={styles.tagline}>Real-Time Impact Culture · AO Premiere</Text>
+          </View>
+        </View>
+
+        <View style={styles.hero}>
+          <Text style={styles.heroLabel}>EXECUTIVE MASTER BUILD</Text>
+          <Text style={styles.heroH1}>Sign in to your scoreboard.</Text>
+          <Text style={styles.heroSub}>The 174-person sales force lives here. Pulse, Platinum Wall, and the Eraser tool — all in one.</Text>
+        </View>
+
+        <TouchableOpacity testID="google-signin-btn" style={styles.googleBtn} onPress={onGoogle} disabled={!!busy}>
+          {busy === 'google' ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <>
+              <Ionicons name="logo-google" size={18} color="#000" />
+              <Text style={styles.googleTxt}>Sign in with Google</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.divider}>
+          <View style={styles.divLine} />
+          <Text style={styles.divTxt}>OR DEMO BY LEVEL</Text>
+          <View style={styles.divLine} />
+        </View>
+
+        <View style={{ gap: 8 }}>
+          {LEVELS.map((l) => (
+            <TouchableOpacity
+              key={l.level}
+              testID={`demo-login-${l.level}`}
+              style={[styles.lvlBtn, { borderLeftColor: l.tint }]}
+              onPress={() => onDemo(l.level)}
+              disabled={!!busy}
+            >
+              <View style={styles.lvlLeft}>
+                <View style={[styles.badge, { backgroundColor: l.tint + '22', borderColor: l.tint }]}>
+                  <Text style={[styles.badgeTxt, { color: l.tint }]}>{l.level.replace('level_', 'L')}</Text>
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={styles.lvlTitle}>{l.title}</Text>
+                  <Text style={styles.lvlSub}>{l.subtitle}</Text>
+                </View>
+              </View>
+              {busy === l.level ? <ActivityIndicator color={l.tint} /> : <Ionicons name="chevron-forward" size={18} color={COLORS.textDim} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.footer}>By continuing you agree to AO Premiere's standards of accountability.</Text>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: COLORS.bg },
+  container: { padding: 22, gap: 18, paddingBottom: 60 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 18 },
+  brandMark: { width: 38, height: 38, borderRadius: 4, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  markTxt: { color: '#000', fontWeight: '900', fontSize: 22 },
+  brand: { color: '#fff', fontSize: 18, fontWeight: '900', letterSpacing: 1.5 },
+  tagline: { color: COLORS.textDim, fontSize: 11, marginTop: 2, letterSpacing: 0.6 },
+  hero: { marginTop: 8 },
+  heroLabel: { color: COLORS.primary, fontWeight: '900', fontSize: 11, letterSpacing: 2.5 },
+  heroH1: { color: '#fff', fontSize: 30, fontWeight: '900', marginTop: 4, letterSpacing: -0.5 },
+  heroSub: { color: COLORS.textDim, fontSize: 13, marginTop: 6, lineHeight: 19 },
+  googleBtn: {
+    backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 14, borderRadius: 4, gap: 10, marginTop: 4,
+  },
+  googleTxt: { color: '#000', fontWeight: '800', fontSize: 14, letterSpacing: 0.4 },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 4 },
+  divLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
+  divTxt: { color: COLORS.textMuted, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' },
+  lvlBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: COLORS.surface, padding: 14, borderRadius: 6,
+    borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3,
+  },
+  lvlLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  badge: { width: 36, height: 36, borderRadius: 4, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  badgeTxt: { fontWeight: '900', fontSize: 13 },
+  lvlTitle: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 0.6 },
+  lvlSub: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
+  footer: { color: COLORS.textMuted, fontSize: 10, textAlign: 'center', marginTop: 18 },
+});
+
+--- frontend/app/manager.tsx ---
+// Manager Command Panel — Net ALP Eraser (Level 4 only)
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Stack, useRouter } from 'expo-router';
+import { api, COLORS, useAuth, levelNum } from '../src/lib/auth';
+
+interface AgentRow { agent_id: string; name: string; office: string; gross_alp: number; net_alp: number; sales: number; }
+
+export default function ManagerScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [list, setList] = useState<AgentRow[]>([]);
+  const [selected, setSelected] = useState<AgentRow | null>(null);
+  const [newAlp, setNewAlp] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [salesDay, setSalesDay] = useState<string>('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await api<{ team: AgentRow[]; sales_day: string }>('/api/team');
+        setList(r.team.filter((x) => x.sales > 0).slice(0, 100));
+        setSalesDay(r.sales_day);
+      } catch (e: any) { Alert.alert('Error', e.message); }
+    })();
+  }, []);
+
+  if (levelNum(user?.role) < 4) {
+    return (
+      <View style={styles.lock}><Ionicons name="lock-closed" size={32} color={COLORS.textDim} /><Text style={styles.lockTxt}>RGA-only command panel.</Text></View>
+    );
+  }
+
+  const onSubmit = async () => {
+    if (!selected) return Alert.alert('Pick an agent first.');
+    const v = parseFloat(newAlp);
+    if (isNaN(v)) return Alert.alert('Enter a valid Net ALP value.');
+    if (reason.trim().length < 10) return Alert.alert('Reason must be at least 10 characters.');
+    setBusy(true);
+    try {
+      const r = await api<{ ok: boolean; delta: number; audit: any }>('/api/manager/erase', {
+        method: 'POST',
+        body: JSON.stringify({ agent_id: selected.agent_id, sales_day: salesDay, new_alp: v, reason }),
+      });
+      Alert.alert('Adjusted', `Net ALP delta: ${r.delta >= 0 ? '+' : ''}$${Math.round(r.delta).toLocaleString()}\nGross unchanged on Platinum Wall.`);
+      setSelected(null); setNewAlp(''); setReason('');
+      // refresh list
+      const fresh = await api<{ team: AgentRow[] }>('/api/team');
+      setList(fresh.team.filter((x) => x.sales > 0).slice(0, 100));
+    } catch (e: any) { Alert.alert('Error', e.message || 'Failed'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: COLORS.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <Stack.Screen options={{ title: 'COMMAND PANEL', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
+        <Text style={styles.kicker}>NET ALP ERASER · LEVEL 4</Text>
+        <Text style={styles.intro}>Adjustments update Net ALP for internal reporting; Gross ALP on the Platinum Wall stays unchanged.</Text>
+
+        {selected ? (
+          <View style={styles.formCard} testID="erase-form">
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.formAgent}>{selected.name}</Text>
+                <Text style={styles.formMeta}>{selected.office} · {salesDay}</Text>
+                <Text style={styles.formMeta}>Current Net ALP: <Text style={styles.dollar}>${Math.round(selected.net_alp).toLocaleString()}</Text></Text>
+                <Text style={styles.formMeta}>Gross ALP (locked): <Text style={styles.dollarLocked}>${Math.round(selected.gross_alp).toLocaleString()}</Text></Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelected(null)} testID="erase-cancel"><Ionicons name="close" size={22} color={COLORS.textDim} /></TouchableOpacity>
+            </View>
+            <Text style={styles.label}>NEW NET ALP</Text>
+            <TextInput
+              testID="erase-alp-input"
+              style={styles.input}
+              value={newAlp}
+              onChangeText={(v) => setNewAlp(v.replace(/[^0-9.]/g, ''))}
+              placeholder="e.g. 4500"
+              keyboardType="numeric"
+              placeholderTextColor={COLORS.textMuted}
+            />
+            <Text style={styles.label}>REASON FOR ADJUSTMENT (≥10 chars)</Text>
+            <TextInput
+              testID="erase-reason-input"
+              style={[styles.input, { height: 88, textAlignVertical: 'top' }]}
+              value={reason}
+              onChangeText={setReason}
+              placeholder="Charge-back, NSF, replaced policy…"
+              placeholderTextColor={COLORS.textMuted}
+              multiline
+            />
+            <Text style={[styles.charCount, reason.trim().length < 10 && { color: COLORS.red }]}>
+              {reason.trim().length}/10 minimum
+            </Text>
+            <TouchableOpacity
+              testID="erase-submit"
+              style={[styles.submit, (busy || reason.trim().length < 10 || !newAlp) && { opacity: 0.5 }]}
+              disabled={busy || reason.trim().length < 10 || !newAlp}
+              onPress={onSubmit}
+            >
+              <Ionicons name="warning" size={14} color="#000" />
+              <Text style={styles.submitTxt}>{busy ? 'APPLYING…' : 'APPLY ADJUSTMENT'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Text style={styles.kicker2}>SELECT AN AGENT</Text>
+        )}
+
+        <TouchableOpacity onPress={() => router.push('/audit')} style={styles.auditLink} testID="goto-audit">
+          <Ionicons name="list" size={14} color={COLORS.primary} />
+          <Text style={styles.auditTxt}>View Audit Log</Text>
+        </TouchableOpacity>
+
+        {list.map((a) => (
+          <TouchableOpacity
+            key={a.agent_id}
+            onPress={() => setSelected(a)}
+            style={[styles.agentRow, selected?.agent_id === a.agent_id && { borderColor: COLORS.primary }]}
+            testID={`erase-pick-${a.agent_id}`}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.agentName}>{a.name}</Text>
+              <Text style={styles.agentMeta}>{a.office} · {a.sales} sales</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.gross}>${Math.round(a.gross_alp).toLocaleString()}</Text>
+              {Math.abs(a.gross_alp - a.net_alp) > 0.01 ? (
+                <Text style={styles.netAlp}>NET ${Math.round(a.net_alp).toLocaleString()}</Text>
+              ) : null}
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  lock: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bg, padding: 30 },
+  lockTxt: { color: COLORS.textDim, marginTop: 12 },
+  kicker: { color: COLORS.orange, fontWeight: '900', fontSize: 11, letterSpacing: 2 },
+  kicker2: { color: COLORS.textDim, fontWeight: '900', fontSize: 11, letterSpacing: 2, marginTop: 12 },
+  intro: { color: COLORS.textDim, fontSize: 12, marginTop: 6, marginBottom: 14 },
+  formCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.orange, borderRadius: 6, padding: 14, marginBottom: 16 },
+  row: { flexDirection: 'row', alignItems: 'flex-start' },
+  formAgent: { color: '#fff', fontWeight: '900', fontSize: 16 },
+  formMeta: { color: COLORS.textDim, fontSize: 12, marginTop: 2 },
+  dollar: { color: COLORS.primary, fontWeight: '800' },
+  dollarLocked: { color: COLORS.gold, fontWeight: '800' },
+  label: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 1.4, marginTop: 12 },
+  input: { backgroundColor: '#000', color: '#fff', fontWeight: '700', borderWidth: 1, borderColor: COLORS.border, padding: 10, borderRadius: 4, marginTop: 4 },
+  charCount: { color: COLORS.textMuted, fontSize: 10, marginTop: 4 },
+  submit: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORS.orange, paddingVertical: 13, borderRadius: 4, marginTop: 14 },
+  submitTxt: { color: '#000', fontWeight: '900', letterSpacing: 1 },
+  agentRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, padding: 12, borderRadius: 6, marginTop: 6 },
+  agentName: { color: '#fff', fontWeight: '700' },
+  agentMeta: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
+  gross: { color: COLORS.primary, fontWeight: '900', fontVariant: ['tabular-nums' as any] },
+  netAlp: { color: COLORS.orange, fontSize: 10, fontWeight: '800', marginTop: 2 },
+  auditLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 8 },
+  auditTxt: { color: COLORS.primary, fontWeight: '800', fontSize: 12 },
+});
+
+--- frontend/app/vault.tsx ---
+// Historical Vault — Week comparison (Level 4 only)
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Stack } from 'expo-router';
+import { api, COLORS } from '../src/lib/auth';
+
+interface Week { week_id: string; week_start: string; archived_at: string; totals: any; agent_count: number; }
+
+export default function VaultScreen() {
+  const [weeks, setWeeks] = useState<Week[]>([]);
+  const [a, setA] = useState<string | null>(null);
+  const [b, setB] = useState<string | null>(null);
+  const [cmp, setCmp] = useState<any>(null);
+
+  useEffect(() => { (async () => { try { const r = await api<{ weeks: Week[] }>('/api/vault/weeks'); setWeeks(r.weeks); } catch {} })(); }, []);
+
+  useEffect(() => {
+    if (a && b && a !== b) {
+      api<any>(`/api/vault/compare?week_a=${a}&week_b=${b}`).then(setCmp).catch(() => setCmp(null));
+    } else { setCmp(null); }
+  }, [a, b]);
+
+  const fmt = (n: number) => `$${Math.round(n).toLocaleString()}`;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      <Stack.Screen options={{ title: 'HISTORICAL VAULT', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
+        <Text style={styles.kicker}>LAST 8 ARCHIVED WEEKS</Text>
+        <Text style={styles.intro}>Pick two weeks to compare side-by-side with delta percentages.</Text>
+
+        <View style={styles.weekGrid}>
+          {weeks.map((w) => {
+            const isA = a === w.week_start; const isB = b === w.week_start;
+            return (
+              <TouchableOpacity
+                key={w.week_id}
+                onPress={() => {
+                  if (isA) setA(null);
+                  else if (isB) setB(null);
+                  else if (!a) setA(w.week_start);
+                  else if (!b) setB(w.week_start);
+                  else setA(w.week_start); // replace A
+                }}
+                style={[styles.weekCard, (isA || isB) && { borderColor: isA ? COLORS.primary : COLORS.gold, borderWidth: 2 }]}
+                testID={`vault-week-${w.week_start}`}
+              >
+                {isA ? <View style={[styles.tag, { backgroundColor: COLORS.primary }]}><Text style={styles.tagTxt}>A</Text></View> : null}
+                {isB ? <View style={[styles.tag, { backgroundColor: COLORS.gold }]}><Text style={styles.tagTxt}>B</Text></View> : null}
+                <Text style={styles.weekDate}>{w.week_start}</Text>
+                <Text style={styles.weekAlp}>{fmt(w.totals?.gross_alp || 0)}</Text>
+                <Text style={styles.weekMeta}>{w.totals?.sales || 0} sales · {w.agent_count} agents</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {cmp ? (
+          <View style={styles.compareCard} testID="vault-compare">
+            <Text style={styles.kicker}>WEEK COMPARISON</Text>
+            <View style={styles.cmpHeader}>
+              <Text style={[styles.cmpCol, { color: COLORS.primary }]}>A · {cmp.a.week_start}</Text>
+              <Text style={[styles.cmpCol, { color: COLORS.gold, textAlign: 'right' }]}>B · {cmp.b.week_start}</Text>
+            </View>
+            {(['gross_alp', 'net_alp', 'sales', 'sits'] as const).map((m) => {
+              const d = cmp.delta[m];
+              const pos = d.delta >= 0;
+              const isMoney = m === 'gross_alp' || m === 'net_alp';
+              return (
+                <View key={m} style={styles.cmpRow}>
+                  <Text style={styles.cmpLab}>{m.replace('_', ' ').toUpperCase()}</Text>
+                  <View style={styles.cmpValues}>
+                    <Text style={styles.cmpAVal}>{isMoney ? fmt(d.a) : Math.round(d.a).toLocaleString()}</Text>
+                    <View style={[styles.deltaPill, { backgroundColor: pos ? 'rgba(49,152,66,0.15)' : 'rgba(255,59,48,0.15)' }]}>
+                      <Ionicons name={pos ? 'arrow-up' : 'arrow-down'} size={11} color={pos ? COLORS.primary : COLORS.red} />
+                      <Text style={[styles.deltaPillTxt, { color: pos ? COLORS.primary : COLORS.red }]}>{pos ? '+' : ''}{d.pct.toFixed(1)}%</Text>
+                    </View>
+                    <Text style={styles.cmpBVal}>{isMoney ? fmt(d.b) : Math.round(d.b).toLocaleString()}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  kicker: { color: COLORS.primary, fontWeight: '900', fontSize: 11, letterSpacing: 2 },
+  intro: { color: COLORS.textDim, fontSize: 12, marginVertical: 8 },
+  weekGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  weekCard: { width: '48%', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, padding: 12 },
+  weekDate: { color: COLORS.textDim, fontSize: 11, fontWeight: '700' },
+  weekAlp: { color: '#fff', fontSize: 18, fontWeight: '900', marginTop: 4 },
+  weekMeta: { color: COLORS.textMuted, fontSize: 10, marginTop: 2 },
+  tag: { position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  tagTxt: { color: '#000', fontWeight: '900', fontSize: 11 },
+  compareCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 2, borderTopColor: COLORS.primary, borderRadius: 6, padding: 14, marginTop: 16 },
+  cmpHeader: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 8 },
+  cmpCol: { fontWeight: '900', fontSize: 11, letterSpacing: 1, flex: 1 },
+  cmpRow: { paddingVertical: 8, borderTopWidth: 1, borderTopColor: COLORS.border },
+  cmpLab: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
+  cmpValues: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 6 },
+  cmpAVal: { color: '#fff', fontWeight: '900', fontSize: 13, flex: 1 },
+  cmpBVal: { color: '#fff', fontWeight: '900', fontSize: 13, flex: 1, textAlign: 'right' },
+  deltaPill: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  deltaPillTxt: { fontWeight: '900', fontSize: 11 },
+});
+
+=== SRC COMPONENTS ===
+
+--- frontend/src/components/GateBanner.tsx ---
+// 9 PM Yellow Warning + 6 AM Red Lock banners
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS } from '../lib/auth';
+
+export default function GateBanner({ gate }: { gate: { state: string; message: string; color: string } | null }) {
+  if (!gate) return null;
+  if (gate.state === 'open') return null;
+  const isWarning = gate.color === 'yellow';
+  const bg = isWarning ? '#3A2D00' : '#3A0000';
+  const fg = isWarning ? COLORS.yellow : COLORS.red;
+  const border = isWarning ? COLORS.yellow : COLORS.red;
+  const icon = isWarning ? 'warning' : 'lock-closed';
+  return (
+    <View style={[styles.bar, { backgroundColor: bg, borderColor: border }]} testID="gate-banner">
+      <Ionicons name={icon as any} size={16} color={fg} />
+      <Text style={[styles.text, { color: fg }]} numberOfLines={2}>{gate.message}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderLeftWidth: 3,
+    gap: 10,
+  },
+  text: { fontWeight: '700', fontSize: 12, flex: 1, letterSpacing: 0.3 },
+});
+
+--- frontend/src/components/OfficeTabs.tsx ---
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { COLORS } from '../lib/auth';
+
+export interface OfficeRow { office: string; alp: number; sales: number; avg_deal: number; }
+
+export default function OfficeTabs({ offices }: { offices: OfficeRow[] }) {
+  const [active, setActive] = useState(offices[0]?.office || 'MCM');
+  const cur = offices.find((o) => o.office === active) || offices[0];
+
+  return (
+    <View style={styles.wrap}>
+      <Text style={styles.title}>OFFICE MARKET SHARE</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+        {offices.map((o) => {
+          const sel = o.office === active;
+          return (
+            <TouchableOpacity
+              key={o.office}
+              testID={`office-tab-${o.office}`}
+              onPress={() => setActive(o.office)}
+              style={[styles.tab, sel && styles.tabActive]}
+            >
+              <Text style={[styles.tabText, sel && styles.tabTextActive]}>{o.office.toUpperCase()}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+      {cur ? (
+        <View style={styles.body}>
+          <View style={styles.metricRow}>
+            <Metric label="Office ALP" value={`$${Math.round(cur.alp).toLocaleString()}`} />
+            <Metric label="Total Sales" value={`${cur.sales}`} />
+            <Metric label="Avg Deal" value={`$${Math.round(cur.avg_deal).toLocaleString()}`} />
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.metric}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { marginTop: 16 },
+  title: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 8 },
+  tabs: { gap: 6, paddingBottom: 8 },
+  tab: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 4,
+    backgroundColor: COLORS.surface,
+  },
+  tabActive: { borderColor: COLORS.primary, backgroundColor: 'rgba(49,152,66,0.12)' },
+  tabText: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  tabTextActive: { color: COLORS.primary },
+  body: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderTopColor: COLORS.primary,
+    borderTopWidth: 2,
+    borderRadius: 6,
+    padding: 12,
+  },
+  metricRow: { flexDirection: 'row', gap: 8 },
+  metric: { flex: 1 },
+  metricLabel: { color: COLORS.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
+  metricValue: { color: COLORS.text, fontSize: 16, fontWeight: '900', marginTop: 4, letterSpacing: -0.3 },
+});
+
+--- frontend/src/components/PlatinumWall.tsx ---
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS } from '../lib/auth';
+
+interface Item { agent_id: string; name: string; office: string; gross_alp: number; sales: number; is_rookie?: boolean; }
+
+export default function PlatinumWall({ vets, rookies }: { vets: Item[]; rookies: Item[] }) {
+  return (
+    <View style={styles.wrap}>
+      <Text style={styles.title}>PLATINUM WALL</Text>
+      <View style={styles.row}>
+        <Panel title="TOP 3 VETS" color={COLORS.gold} icon="ribbon" items={vets} testID="platinum-vets" />
+        <View style={{ width: 8 }} />
+        <Panel title="TOP 3 ROOKIES" color={COLORS.orange} icon="rocket" items={rookies} testID="platinum-rookies" />
+      </View>
+    </View>
+  );
+}
+
+function Panel({ title, color, icon, items, testID }: any) {
+  return (
+    <View style={[styles.panel, { borderTopColor: color }]} testID={testID}>
+      <View style={styles.panelHeader}>
+        <Ionicons name={icon} size={14} color={color} />
+        <Text style={[styles.panelTitle, { color }]}>{title}</Text>
+      </View>
+      {items?.length ? items.map((it: Item, i: number) => (
+        <View key={it.agent_id} style={styles.item}>
+          <Text style={[styles.rank, { color }]}>{i + 1}</Text>
+          <View style={{ flex: 1, marginLeft: 8 }}>
+            <Text style={styles.name} numberOfLines={1}>{it.name}</Text>
+            <Text style={styles.meta}>{it.office} · {it.sales} sales</Text>
+          </View>
+          <Text style={styles.alp}>${Math.round(it.gross_alp).toLocaleString()}</Text>
+        </View>
+      )) : (
+        <Text style={styles.empty}>No data yet today.</Text>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { marginTop: 16 },
+  title: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 8 },
+  row: { flexDirection: 'row' },
+  panel: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 6,
+    borderTopWidth: 2,
+    padding: 10,
+  },
+  panelHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  panelTitle: { fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
+  item: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderTopWidth: 1, borderTopColor: COLORS.border },
+  rank: { fontSize: 18, fontWeight: '900', width: 16, textAlign: 'center' },
+  name: { color: COLORS.text, fontSize: 12, fontWeight: '700' },
+  meta: { color: COLORS.textMuted, fontSize: 10 },
+  alp: { color: COLORS.primary, fontSize: 13, fontWeight: '900', fontVariant: ['tabular-nums' as any] },
+  empty: { color: COLORS.textMuted, fontSize: 11, paddingVertical: 8, textAlign: 'center' },
+});
+
+--- frontend/src/components/StatCard.tsx ---
+// Reusable summary card with delta indicator
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS } from '../lib/auth';
+
+export default function StatCard({
+  label, value, sub, deltaPct, accent, testID,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  deltaPct?: number;
+  accent?: string;
+  testID?: string;
+}) {
+  const pos = (deltaPct ?? 0) >= 0;
+  return (
+    <View style={[styles.card, accent ? { borderTopColor: accent, borderTopWidth: 2 } : null]} testID={testID}>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+      {sub ? <Text style={styles.sub}>{sub}</Text> : null}
+      {typeof deltaPct === 'number' ? (
+        <View style={styles.deltaRow}>
+          <Ionicons
+            name={pos ? 'arrow-up' : 'arrow-down'}
+            size={12}
+            color={pos ? COLORS.primary : COLORS.red}
+          />
+          <Text style={[styles.delta, { color: pos ? COLORS.primary : COLORS.red }]}>
+            {pos ? '+' : ''}{deltaPct.toFixed(1)}% vs yest.
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 6,
+    padding: 12,
+    minHeight: 92,
+    justifyContent: 'space-between',
+  },
+  label: { color: COLORS.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase' },
+  value: { color: COLORS.text, fontSize: 22, fontWeight: '900', marginTop: 6, letterSpacing: -0.5 },
+  sub: { color: COLORS.textMuted, fontSize: 11, marginTop: 2 },
+  deltaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 4 },
+  delta: { fontSize: 11, fontWeight: '700' },
+});
+
+--- frontend/src/components/Ticker.tsx ---
+// Scrolling marquee ticker — sports scoreboard meets trading floor
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Animated, Easing, useWindowDimensions } from 'react-native';
+import { COLORS } from '../lib/auth';
+
+export interface TickerItem {
+  agent_name: string;
+  alp: number;
+  market: string;
+  reps: number;
+  ts: string;
+}
+
+export default function Ticker({ items }: { items: TickerItem[] }) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const { width: screenW } = useWindowDimensions();
+
+  const display = items.length
+    ? items
+    : [{ agent_name: 'Awaiting Live Activity', alp: 0, market: '—', reps: 0, ts: '' } as TickerItem];
+
+  useEffect(() => {
+    translateX.setValue(0);
+    const totalWidth = Math.max(2000, display.length * 320);
+    Animated.loop(
+      Animated.timing(translateX, {
+        toValue: -totalWidth,
+        duration: Math.max(20000, totalWidth * 14),
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    ).start();
+    return () => translateX.stopAnimation();
+  }, [items.length, screenW]);
+
+  // Duplicate items so the loop is seamless
+  const seq = [...display, ...display, ...display];
+
+  return (
+    <View style={styles.bar} testID="dashboard-ticker">
+      <View style={styles.label}><Text style={styles.labelText}>LIVE</Text></View>
+      <View style={styles.scrollArea}>
+        <Animated.View style={[styles.row, { transform: [{ translateX }] }]}>
+          {seq.map((it, i) => (
+            <View key={i} style={styles.cell}>
+              <Text style={styles.dot}>●</Text>
+              <Text style={styles.agent} numberOfLines={1}>{it.agent_name}</Text>
+              <Text style={styles.alp}>${Math.round(it.alp).toLocaleString()}</Text>
+              <Text style={styles.market}>{it.market}</Text>
+              <Text style={styles.reps}>· {it.reps} REPS</Text>
+            </View>
+          ))}
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 36,
+    backgroundColor: '#000',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  label: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: COLORS.primary,
+    height: '100%',
+    justifyContent: 'center',
+  },
+  labelText: { color: '#000', fontWeight: '900', fontSize: 11, letterSpacing: 1.5 },
+  scrollArea: { flex: 1, overflow: 'hidden' },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  cell: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, height: 36 },
+  dot: { color: COLORS.primary, marginRight: 8, fontSize: 8 },
+  agent: { color: COLORS.text, fontWeight: '700', fontSize: 12, marginRight: 8, maxWidth: 140 },
+  alp: { color: COLORS.primary, fontWeight: '900', fontSize: 13, marginRight: 8, fontVariant: ['tabular-nums' as any] },
+  market: { color: COLORS.textDim, fontSize: 11, marginRight: 6 },
+  reps: { color: COLORS.gold, fontSize: 11, fontWeight: '700' },
+});
+
+--- frontend/src/lib/auth.tsx ---
+// Shared API helper + auth context for VantageLife 2.0
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+const SESSION_KEY = 'vl_session_token';
+
+export type Role = 'level_1' | 'level_2' | 'level_3' | 'level_4';
+
+export interface AppUser {
+  user_id: string;
+  email: string;
+  name: string;
+  picture?: string;
+  role: Role;
+  agent_id?: string | null;
+}
+
+export interface AppAgent {
+  agent_id: string;
+  name: string;
+  office: string;
+  role: Role;
+  is_rookie?: boolean;
+  ga_id?: string | null;
+}
+
+export async function getToken(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export async function setToken(t: string | null) {
+  if (t) await AsyncStorage.setItem(SESSION_KEY, t);
+  else await AsyncStorage.removeItem(SESSION_KEY);
+}
+
+export async function api<T = any>(path: string, opts: RequestInit = {}): Promise<T> {
+  const token = await getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(opts.headers as Record<string, string> | undefined),
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${BACKEND}${path}`, {
+    ...opts,
+    headers,
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try { const j = await res.json(); msg = j.detail || msg; } catch {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+interface AuthCtx {
+  user: AppUser | null;
+  agent: AppAgent | null;
+  roleLabel: string;
+  loading: boolean;
+  reload: () => Promise<void>;
+  signInDemo: (level: Role) => Promise<void>;
+  signOut: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthCtx | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [agent, setAgent] = useState<AppAgent | null>(null);
+  const [roleLabel, setRoleLabel] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+
+  const reload = async () => {
+    try {
+      const tok = await getToken();
+      if (!tok) { setUser(null); setAgent(null); setLoading(false); return; }
+      const r = await api<{ user: AppUser; agent: AppAgent | null; role_label: string }>('/api/auth/me');
+      setUser(r.user); setAgent(r.agent); setRoleLabel(r.role_label);
+    } catch {
+      setUser(null); setAgent(null);
+      await setToken(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { reload(); }, []);
+
+  const signInDemo = async (level: Role) => {
+    setLoading(true);
+    const r = await api<{ user: AppUser; session_token: string; role_label: string }>('/api/auth/demo-login', {
+      method: 'POST', body: JSON.stringify({ level }),
+    });
+    await setToken(r.session_token);
+    setUser(r.user); setRoleLabel(r.role_label);
+    await reload();
+  };
+
+  const signOut = async () => {
+    try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
+    await setToken(null);
+    setUser(null); setAgent(null); setRoleLabel('');
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth(): AuthCtx {
+  const v = useContext(AuthContext);
+  if (!v) throw new Error('useAuth must be inside AuthProvider');
+  return v;
+}
+
+export function levelNum(role?: Role | null): number {
+  if (!role) return 0;
+  return parseInt(role.split('_')[1] || '1', 10);
+}
+
+export const COLORS = {
+  bg: '#0D0D0D',
+  surface: '#141414',
+  surface2: '#1B1B1B',
+  border: 'rgba(255,255,255,0.08)',
+  primary: '#319842',
+  secondary: '#00558C',
+  gold: '#FFD700',
+  orange: '#FF8C00',
+  red: '#FF3B30',
+  yellow: '#EAB308',
+  text: '#FFFFFF',
+  textDim: '#A1A1AA',
+  textMuted: '#6B7280',
+};
