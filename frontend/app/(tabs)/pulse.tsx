@@ -1,9 +1,11 @@
 // Nightly Pulse Entry — mobile-first stepper
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, COLORS, useAuth } from '../../src/lib/auth';
+import { BufferedPulse, PulsePayload, getUpcomingSalesDay, isBufferEntryEligible, isLateNightBuffer } from '../../src/lib/cycle';
 import GateBanner from '../../src/components/GateBanner';
 
 const STEPS: { key: keyof PulseForm; label: string; hint: string; type?: 'int' | 'money' }[] = [
@@ -37,24 +39,95 @@ const empty: PulseForm = {
   gross_alp: '0',
 };
 
+const BUFFER_KEY = 'vl_pulse_buffer';
+
+async function readBuffer(): Promise<BufferedPulse[]> {
+  try {
+    const raw = await AsyncStorage.getItem(BUFFER_KEY);
+    return raw ? (JSON.parse(raw) as BufferedPulse[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function appendToBuffer(entry: BufferedPulse): Promise<void> {
+  const buf = await readBuffer();
+  buf.push(entry);
+  await AsyncStorage.setItem(BUFFER_KEY, JSON.stringify(buf));
+}
+
+async function flushEligibleEntries(): Promise<number> {
+  const buf = await readBuffer();
+  const now = new Date();
+  const remaining: BufferedPulse[] = [];
+  let submitted = 0;
+  for (const entry of buf) {
+    if (isBufferEntryEligible(entry.sales_day, now)) {
+      try {
+        await api('/api/pulse', { method: 'POST', body: JSON.stringify(entry.payload) });
+        submitted++;
+      } catch {
+        remaining.push(entry); // re-queue on failure, retry next open
+      }
+    } else {
+      remaining.push(entry);
+    }
+  }
+  await AsyncStorage.setItem(BUFFER_KEY, JSON.stringify(remaining));
+  return submitted;
+}
+
+function buildPayload(form: PulseForm): PulsePayload {
+  return {
+    sets: Math.floor(parseFloat(form.sets || '0') || 0),
+    sits: Math.floor(parseFloat(form.sits || '0') || 0),
+    sales: Math.floor(parseFloat(form.sales || '0') || 0),
+    ots_sits: Math.floor(parseFloat(form.ots_sits || '0') || 0),
+    ots_sales: Math.floor(parseFloat(form.ots_sales || '0') || 0),
+    n1: Math.floor(parseFloat(form.n1 || '0') || 0),
+    refs_obtained: Math.floor(parseFloat(form.refs_obtained || '0') || 0),
+    ref_sits: Math.floor(parseFloat(form.ref_sits || '0') || 0),
+    ref_sales: Math.floor(parseFloat(form.ref_sales || '0') || 0),
+    pos_sits: Math.floor(parseFloat(form.pos_sits || '0') || 0),
+    pos_sales: Math.floor(parseFloat(form.pos_sales || '0') || 0),
+    vet_sits: Math.floor(parseFloat(form.vet_sits || '0') || 0),
+    vet_sales: Math.floor(parseFloat(form.vet_sales || '0') || 0),
+    gross_alp: parseFloat(form.gross_alp || '0') || 0,
+  };
+}
+
 export default function PulseScreen() {
   const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<PulseForm>(empty);
-  const [today, setToday] = useState<any>(null);
+  const [today, setToday] = useState<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string } | null>(null);
   const [streak, setStreak] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [inBuffer, setInBuffer] = useState(false);
+  const [queued, setQueued] = useState(false);
+  const [queuedDay, setQueuedDay] = useState('');
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
-      const t = await api<{ entries: any[]; totals: any; gate: any; sales_day: string }>('/api/pulse/me/today');
+      const t = await api<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string }>('/api/pulse/me/today');
       setToday(t);
       const s = await api<{ streak: number }>('/api/pulse/me/streak');
       setStreak(s.streak);
-    } catch (e) { /* not linked */ }
-  };
+    } catch { /* not linked */ }
+  }, []);
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    setInBuffer(isLateNightBuffer());
+    flushEligibleEntries().then(async (count) => {
+      await refresh();
+      if (count > 0) {
+        Alert.alert(
+          'Buffered pulse posted',
+          `${count} queued pulse${count > 1 ? 's' : ''} posted to today's sales day.`,
+        );
+      }
+    });
+  }, [refresh]);
 
   const cur = STEPS[step];
   const done = step >= STEPS.length;
@@ -62,22 +135,35 @@ export default function PulseScreen() {
   const onSubmit = async () => {
     setSubmitting(true);
     try {
-      const payload: any = {};
-      STEPS.forEach((s) => {
-        const v = parseFloat(form[s.key] || '0') || 0;
-        payload[s.key] = s.type === 'money' ? v : Math.floor(v);
-      });
-      await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
-      Alert.alert('Pulse logged', `${form.sales} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
-      setForm(empty); setStep(0);
-      await refresh();
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to submit');
-    } finally { setSubmitting(false); }
+      const payload = buildPayload(form);
+
+      if (inBuffer) {
+        const salesDay = getUpcomingSalesDay();
+        await appendToBuffer({ payload, sales_day: salesDay, queued_at: new Date().toISOString() });
+        setQueuedDay(salesDay);
+        setQueued(true);
+        setForm(empty);
+        setStep(0);
+      } else {
+        await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
+        Alert.alert('Pulse logged', `${form.sales} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
+        setForm(empty);
+        setStep(0);
+        await refresh();
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to submit';
+      Alert.alert('Error', msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const totalAlp = today?.totals?.gross_alp || 0;
+  const totalAlp = today?.totals?.gross_alp ?? 0;
   const isPlayersClub = totalAlp >= 10000;
+
+  // Memoised so the value is stable across renders within the same mount
+  const entries = useMemo(() => (today?.entries ?? []) as Array<{ entry_id: string; is_adjustment: boolean; gross_alp: number; sales: number; sits: number; refs_obtained: number; submitted_at: string }>, [today]);
 
   if (!user?.agent_id) {
     return (
@@ -93,7 +179,18 @@ export default function PulseScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {today?.gate ? <GateBanner gate={today.gate} /> : null}
+      {/* Show buffer banner during the dead zone; suppress the API gate banner */}
+      {inBuffer ? (
+        <View style={styles.bufferBanner} testID="buffer-banner">
+          <Ionicons name="time-outline" size={16} color="#60A5FA" />
+          <Text style={styles.bufferBannerText}>
+            Late night buffer active · Your submission will post to today's sales day at 6:00 AM
+          </Text>
+        </View>
+      ) : today?.gate ? (
+        <GateBanner gate={today.gate} />
+      ) : null}
+
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.headRow}>
@@ -110,13 +207,25 @@ export default function PulseScreen() {
           <View style={styles.todayCard}>
             <Text style={styles.todayLabel}>TODAY'S RUNNING TOTAL</Text>
             <Text style={[styles.todayAlp, isPlayersClub && { color: COLORS.gold }]}>${Math.round(totalAlp).toLocaleString()}</Text>
-            <Text style={styles.todayMeta}>{today?.totals?.sales || 0} sales · {today?.totals?.sits || 0} sits</Text>
+            <Text style={styles.todayMeta}>{today?.totals?.sales ?? 0} sales · {today?.totals?.sits ?? 0} sits</Text>
             {isPlayersClub ? (
               <View style={styles.club}><Ionicons name="trophy" size={14} color={COLORS.gold} /><Text style={styles.clubTxt}>PLAYER'S CLUB · $10K HIT</Text></View>
             ) : null}
           </View>
 
-          {!done ? (
+          {/* Post-queue confirmation card — shown after buffering an entry */}
+          {queued ? (
+            <View style={styles.queuedCard} testID="queued-confirmation">
+              <Ionicons name="checkmark-circle" size={28} color="#60A5FA" />
+              <Text style={styles.queuedTitle}>Numbers safe — queued for 6:00 AM</Text>
+              <Text style={styles.queuedSub}>
+                Your Pulse for the {queuedDay} sales day has been received. It will be posted automatically the moment the sales day opens at 6:00 AM. No action needed.
+              </Text>
+              <TouchableOpacity style={styles.queuedBtn} onPress={() => setQueued(false)}>
+                <Text style={styles.queuedBtnTxt}>LOG ANOTHER PULSE</Text>
+              </TouchableOpacity>
+            </View>
+          ) : !done ? (
             <View style={styles.stepCard} testID="pulse-step-card">
               <View style={styles.progRow}>
                 {STEPS.map((_, i) => (
@@ -156,6 +265,14 @@ export default function PulseScreen() {
           ) : (
             <View style={styles.stepCard} testID="pulse-review-card">
               <Text style={styles.kicker}>REVIEW & SUBMIT</Text>
+              {inBuffer ? (
+                <View style={styles.bufferReviewNote}>
+                  <Ionicons name="time-outline" size={13} color="#60A5FA" />
+                  <Text style={styles.bufferReviewNoteText}>
+                    Will post to {getUpcomingSalesDay()} sales day at 6:00 AM
+                  </Text>
+                </View>
+              ) : null}
               {STEPS.map((s) => (
                 <View key={s.key} style={styles.reviewRow}>
                   <Text style={styles.reviewLabel}>{s.label}</Text>
@@ -174,18 +291,22 @@ export default function PulseScreen() {
                   disabled={submitting}
                   onPress={onSubmit}
                 >
-                  <Text style={styles.btnPrimaryTxt}>{submitting ? 'SUBMITTING…' : 'SUBMIT PULSE'}</Text>
-                  <Ionicons name="checkmark-circle" size={14} color="#000" />
+                  <Text style={styles.btnPrimaryTxt}>
+                    {submitting
+                      ? (inBuffer ? 'QUEUING…' : 'SUBMITTING…')
+                      : (inBuffer ? 'QUEUE FOR 6 AM' : 'SUBMIT PULSE')}
+                  </Text>
+                  <Ionicons name={inBuffer ? 'time-outline' : 'checkmark-circle'} size={14} color="#000" />
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
           <Text style={[styles.kicker, { marginTop: 18 }]}>TODAY'S ENTRIES</Text>
-          {(today?.entries || []).filter((e: any) => !e.is_adjustment).length === 0 ? (
+          {entries.filter((e) => !e.is_adjustment).length === 0 ? (
             <Text style={styles.empty}>No pulses logged for today yet.</Text>
           ) : (
-            (today?.entries || []).filter((e: any) => !e.is_adjustment).map((e: any) => (
+            entries.filter((e) => !e.is_adjustment).map((e) => (
               <View key={e.entry_id} style={styles.entry}>
                 <Text style={styles.entryAlp}>${Math.round(e.gross_alp || 0).toLocaleString()}</Text>
                 <Text style={styles.entryMeta}>{e.sales} sales · {e.sits} sits · {e.refs_obtained} refs</Text>
@@ -239,7 +360,31 @@ const styles = StyleSheet.create({
   reviewValue: { color: '#fff', fontWeight: '800', fontSize: 14 },
   empty: { color: COLORS.textMuted, fontSize: 12, marginTop: 8, textAlign: 'center' },
   entry: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, padding: 12, borderRadius: 6, marginTop: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  entryAlp: { color: COLORS.primary, fontWeight: '900', fontSize: 14, fontVariant: ['tabular-nums' as any] },
+  entryAlp: { color: COLORS.primary, fontWeight: '900', fontSize: 14, fontVariant: ['tabular-nums' as never] },
   entryMeta: { color: COLORS.textDim, fontSize: 11, flex: 1, marginLeft: 8 },
   entryTs: { color: COLORS.textMuted, fontSize: 10 },
+  // Late night buffer styles
+  bufferBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 10,
+    backgroundColor: '#0A1929', borderLeftWidth: 3, borderLeftColor: '#3B82F6',
+  },
+  bufferBannerText: { color: '#93C5FD', fontWeight: '700', fontSize: 12, flex: 1, letterSpacing: 0.3 },
+  bufferReviewNote: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#0A1929', borderRadius: 4, paddingHorizontal: 10, paddingVertical: 7,
+    marginBottom: 10, borderWidth: 1, borderColor: '#1E3A5F',
+  },
+  bufferReviewNoteText: { color: '#93C5FD', fontSize: 11, fontWeight: '700' },
+  queuedCard: {
+    backgroundColor: '#0A1929', borderWidth: 1, borderColor: '#1E3A5F',
+    borderRadius: 6, padding: 20, marginTop: 8, alignItems: 'center', gap: 10,
+  },
+  queuedTitle: { color: '#fff', fontWeight: '900', fontSize: 16, textAlign: 'center' },
+  queuedSub: { color: '#93C5FD', fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  queuedBtn: {
+    marginTop: 6, borderWidth: 1, borderColor: '#3B82F6',
+    paddingHorizontal: 18, paddingVertical: 10, borderRadius: 4,
+  },
+  queuedBtnTxt: { color: '#60A5FA', fontWeight: '900', fontSize: 11, letterSpacing: 1 },
 });
