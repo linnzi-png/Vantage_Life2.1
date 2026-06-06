@@ -9,6 +9,7 @@ Run locally (not from the cloud container — MongoDB requires local network):
 Or drop xlsx files in backend/data/xlsx_war/ and run without args:
     python import_xlsx_war.py
 """
+import re
 import sys
 import os
 import uuid
@@ -17,8 +18,8 @@ from datetime import datetime, timezone, timedelta, date
 import openpyxl
 from pymongo import MongoClient
 
-MONGO_URL = "mongodb+srv://linnzi_db_user:Wy7fahxb9Gfp9xh2@vantagelife.r5atbyt.mongodb.net/"
-DB_NAME = "vantagelife"
+MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017/")
+DB_NAME = os.environ.get("MONGO_DB", "vantagelife")
 
 DETROIT_OFFSET = timedelta(hours=-4)  # EDT
 
@@ -35,8 +36,11 @@ TAB_DAY_OFFSET = {
     "Thurs (2)": 8,
 }
 
-# Week start date for the 5/6/2026 batch (Wednesday)
-WEEK_START = date(2026, 5, 6)
+# Week start date — override via WEEK_START env var (YYYY-MM-DD) or defaults to 2026-05-06
+try:
+    WEEK_START = date.fromisoformat(os.environ["WEEK_START"])
+except (KeyError, ValueError):
+    WEEK_START = date(2026, 5, 6)
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +83,7 @@ def has_activity(row: dict) -> bool:
 
 def get_or_create_agent(db, name: str, office: str) -> str:
     existing = db.agent_profiles.find_one(
-        {"name": {"$regex": f"^{name.strip()}$", "$options": "i"}}
+        {"name": {"$regex": f"^{re.escape(name.strip())}$", "$options": "i"}}
     )
     if existing:
         return existing["agent_id"]
@@ -135,7 +139,7 @@ _KEEP_UPPER = {"RGA", "MGA", "GA"}
 def extract_office_name(ws) -> str:
     """Read the RGA office name from the summary header (row index 1, col index 1)."""
     rows = list(ws.iter_rows(min_row=2, max_row=2, values_only=True))
-    if not rows:
+    if not rows or len(rows[0]) < 2:
         return "Unknown"
     raw = str(rows[0][1] or "Unknown")
     # Normalise ALL-CAPS strings ("RUST RGA" → "Rust RGA"), preserve mixed-case as-is
@@ -160,16 +164,15 @@ def parse_daily_tab(ws) -> list[dict]:
     in_data = False
 
     for row in ws.iter_rows(values_only=True):
+        if not row:
+            continue
         # Detect the data section header row
-        if (
-            row[0] == "MGA"
-            and row[5] == "Agent"
-            and row[6] == "SETS"
-        ):
-            in_data = True
+        if not in_data:
+            if len(row) >= 7 and row[0] == "MGA" and row[5] == "Agent" and row[6] == "SETS":
+                in_data = True
             continue
 
-        if not in_data:
+        if len(row) < 20:
             continue
 
         agent_name = row[5]

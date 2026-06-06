@@ -7,11 +7,12 @@ Run from the backend/ directory:
 """
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone, timedelta
 from pymongo import MongoClient
 
-MONGO_URL = "mongodb+srv://linnzi_db_user:Wy7fahxb9Gfp9xh2@vantagelife.r5atbyt.mongodb.net/"
+MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017/")
 DB_NAME = "vantagelife"
 WAR_DIR = os.path.join(os.path.dirname(__file__), "data", "war")
 
@@ -26,7 +27,7 @@ def detroit_submit_time(date_str: str) -> datetime:
 
 def get_or_create_agent(db, name: str, office: str) -> str:
     """Return existing agent_id or create a new agent profile."""
-    existing = db.agent_profiles.find_one({"name": {"$regex": f"^{name}$", "$options": "i"}})
+    existing = db.agent_profiles.find_one({"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}})
     if existing:
         return existing["agent_id"]
     agent_id = f"agent_{uuid.uuid4().hex[:10]}"
@@ -86,11 +87,6 @@ def import_daily_format(db, data: dict) -> int:
             if not name:
                 continue
             # Skip if entry already exists for this agent+date
-            existing = db.production_entries.find_one({
-                "sales_day": date_str,
-                "source": "war_import",
-            })
-            # More specific check by agent name lookup
             agent_id = get_or_create_agent(db, name, office)
             if db.production_entries.find_one({"agent_id": agent_id, "sales_day": date_str}):
                 print(f"  Skipping duplicate: {name} on {date_str}")
