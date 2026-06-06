@@ -64,7 +64,7 @@ async function flushEligibleEntries(): Promise<number> {
   for (const entry of buf) {
     if (isBufferEntryEligible(entry.sales_day, now)) {
       try {
-        await api('/api/pulse', { method: 'POST', body: JSON.stringify(entry.payload) });
+        await api('/api/pulse', { method: 'POST', body: JSON.stringify({ ...entry.payload, sales_day: entry.sales_day }) });
         submitted++;
       } catch {
         remaining.push(entry); // re-queue on failure, retry next open

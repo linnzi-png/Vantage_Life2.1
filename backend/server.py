@@ -103,6 +103,7 @@ class PulseIn(BaseModel):
     vet_sales: int = 0
     gross_alp: float = 0.0
     market: Optional[str] = None  # selectable office override
+    sales_day: Optional[str] = None  # buffered flush only — YYYY-MM-DD; must be within last 7 days
 
 
 class EraseIn(BaseModel):
@@ -475,12 +476,22 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(get_curr
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    sd = current_sales_day_str()
-    # Hard lock: cannot edit if sales_day is older than today and current time >= 6:00 AM
     now_local = now_detroit()
-    if now_local.hour >= 6 and now_local.minute >= 0 and now_local.hour != 6 - 1:
-        # Always allow editing TODAY's pulse during open hours.
-        pass
+    if payload.sales_day:
+        # Buffered flush: validate the client-supplied sales_day
+        try:
+            requested = datetime.strptime(payload.sales_day, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid sales_day format — use YYYY-MM-DD")
+        today_date = now_local.date()
+        delta = (today_date - requested).days
+        if delta < 0:
+            raise HTTPException(status_code=400, detail="sales_day cannot be in the future")
+        if delta > 7:
+            raise HTTPException(status_code=400, detail="Buffered pulse expired — sales_day is more than 7 days old")
+        sd = payload.sales_day
+    else:
+        sd = current_sales_day_str()
 
     entry = {
         "entry_id": f"pe_{uuid.uuid4().hex[:12]}",
