@@ -16,7 +16,7 @@ export default function Index() {
 
   // Handle Emergent OAuth fragment if present (web)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !window.location) return;
     const hash = window.location.hash || '';
     if (hash.includes('session_id=')) {
       const sid = hash.split('session_id=')[1].split('&')[0];
