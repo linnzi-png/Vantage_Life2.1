@@ -49,7 +49,7 @@ export default function LoginScreen() {
         <View style={styles.brandRow}>
           <View style={styles.brandMark}><Text style={styles.markTxt}>V</Text></View>
           <View>
-            <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text> 2.0</Text>
+            <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text> 2.1</Text>
             <Text style={styles.tagline}>Real-Time Impact Culture · AO Premiere</Text>
           </View>
         </View>
