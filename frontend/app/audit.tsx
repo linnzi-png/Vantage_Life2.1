@@ -38,7 +38,7 @@ export default function AuditScreen() {
               <View style={{ flex: 1, alignItems: 'flex-end' }}><Text style={styles.lab}>NEW</Text><Text style={styles.val}>${Math.round(a.new_value).toLocaleString()}</Text></View>
             </View>
             <Text style={styles.lab}>REASON</Text>
-            <Text style={styles.reason}>"{a.reason}"</Text>
+            <Text style={styles.reason}>{`"${a.reason}"`}</Text>
             <Text style={styles.by}>By {a.changed_by_name || a.action}</Text>
           </View>
         ))}
