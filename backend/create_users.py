@@ -1,6 +1,7 @@
 """
 Create / Update Authorized Users Script
 Upserts user records so specific email addresses can log in with a given role.
+Also creates and links an agent_profile for each user so they can enter Pulse numbers.
 
 Roles:  level_1 = Agent   level_2 = GA   level_3 = MGA   level_4 = RGA
 
@@ -20,16 +21,40 @@ MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017/")
 DB_NAME = os.environ.get("MONGO_DB", "vantagelife")
 
 # ── ADD YOUR USERS HERE ────────────────────────────────────────────
-# (email, display_name, role)
+# (email, display_name, role, office, phone)
 # role choices: "level_1" (Agent), "level_2" (GA), "level_3" (MGA), "level_4" (RGA)
+# office: the RGA office name this person belongs to (e.g. "Gojcaj RGA", "MJ RGA")
+# phone: cell number as a string, e.g. "3135550100" (used for notifications)
 USERS = [
-    ("alice@example.com", "Alice Smith",  "level_1"),
-    ("bob@example.com",   "Bob Johnson",  "level_2"),
+    ("mj@aopremier.com",  "MJ Aljahmi", "level_4", "MJ RGA",  "3135550101"),
+    ("alice@example.com", "Alice Smith", "level_1", "MJ RGA",  "3135550102"),
 ]
 # ───────────────────────────────────────────────────────────────────────────
 
 
 VALID_ROLES = {"level_1", "level_2", "level_3", "level_4"}
+
+
+def get_or_create_agent(db, name: str, role: str, office: str, phone: str) -> str:
+    """Return existing agent_id or create a new agent_profile."""
+    existing = db.agent_profiles.find_one({"name": name}, {"_id": 0})
+    if existing:
+        db.agent_profiles.update_one(
+            {"name": name},
+            {"$set": {"office": office, "role": role, "phone": phone}},
+        )
+        return existing["agent_id"]
+    agent_id = f"agent_{uuid.uuid4().hex[:10]}"
+    db.agent_profiles.insert_one({
+        "agent_id": agent_id,
+        "name": name,
+        "office": office,
+        "role": role,
+        "phone": phone,
+        "upline_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return agent_id
 
 
 def main():
@@ -44,33 +69,38 @@ def main():
     db = client[DB_NAME]
     print(f"Connected to '{DB_NAME}'\n")
 
-    for email, name, role in USERS:
+    for email, name, role, office, phone in USERS:
         email = email.lower().strip()
         if role not in VALID_ROLES:
             print(f"  [SKIP] {email} — invalid role '{role}' (must be one of {sorted(VALID_ROLES)})")
             continue
+
+        # Ensure agent profile exists and get its ID
+        agent_id = get_or_create_agent(db, name, role, office, phone)
+
         existing = db.users.find_one({"email": email}, {"_id": 0})
         if existing:
             db.users.update_one(
                 {"email": email},
-                {"$set": {"role": role, "name": name}},
+                {"$set": {"role": role, "name": name, "phone": phone, "agent_id": agent_id}},
             )
-            print(f"  [UPDATED] {email} → {role} ({name})")
+            print(f"  [UPDATED] {email} → {role} | office: {office} | phone: {phone}")
         else:
             user_id = f"user_{uuid.uuid4().hex[:12]}"
             db.users.insert_one({
                 "user_id": user_id,
                 "email": email,
                 "name": name,
+                "phone": phone,
                 "picture": "",
                 "role": role,
-                "agent_id": None,
+                "agent_id": agent_id,
                 "created_at": datetime.now(timezone.utc),
             })
-            print(f"  [CREATED] {email} → {role} ({name})")
+            print(f"  [CREATED] {email} → {role} | office: {office} | phone: {phone}")
 
     print(f"\nDone. {len(USERS)} user(s) processed.")
-    print("They can now log in with Google using those email addresses.")
+    print("They can now log in with Google and enter Pulse numbers.")
     client.close()
 
 
