@@ -76,11 +76,20 @@ def main():
             skipped += 1
             continue
 
+<<<<<<< HEAD
         # Count distinct agents active that week
         active_agents = db.production_entries.distinct(
             "agent_id",
             {"source": {"$in": ["war_xlsx_import", "war_import"]},
              "sales_day": {"$gte": ws}}
+=======
+        # Count distinct agents active within this specific week only
+        week_end = (date.fromisoformat(ws) + timedelta(days=6)).isoformat()
+        active_agents = db.production_entries.distinct(
+            "agent_id",
+            {"source": {"$in": ["war_xlsx_import", "war_import"]},
+             "sales_day": {"$gte": ws, "$lte": week_end}}
+>>>>>>> 0d4fdc7ecc548cafa0e5057bf25d0119cf6420f5
         )
 
         totals = {k: (int(v) if k in ("sits", "sales") else round(v, 2))

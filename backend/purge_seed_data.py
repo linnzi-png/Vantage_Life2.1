@@ -8,11 +8,19 @@ What it removes:
   - ALL historical_vault documents (all fake)
   - ALL shoutouts (all seeded)
   - ALL audit_log documents (all seeded)
+<<<<<<< HEAD
   - production_entries with no 'source' field (seeded) or source not in real set
+=======
+  - production_entries where source is explicitly set but not in real set
+>>>>>>> 0d4fdc7ecc548cafa0e5057bf25d0119cf6420f5
   - agent_profiles not referenced by any remaining production_entries
 
 What it keeps:
   - production_entries with source = "war_xlsx_import" or "war_import"
+<<<<<<< HEAD
+=======
+  - production_entries with no source field (live app submissions)
+>>>>>>> 0d4fdc7ecc548cafa0e5057bf25d0119cf6420f5
   - agent_profiles that own those entries
   - users and user_sessions (untouched)
 
@@ -36,6 +44,19 @@ def main():
     db = client[DB_NAME]
     print(f"Connected to '{DB_NAME}'\n")
 
+<<<<<<< HEAD
+=======
+    confirm = input(
+        f"WARNING: This will purge all seed data from database '{DB_NAME}'.\n"
+        "App-created entries (no source field) are preserved.\n"
+        "Are you sure? (yes/no): "
+    )
+    if confirm.strip().lower() != "yes":
+        print("Aborted.")
+        client.close()
+        return
+
+>>>>>>> 0d4fdc7ecc548cafa0e5057bf25d0119cf6420f5
     # 1. Drop historical vault (entirely fake)
     r = db.historical_vault.delete_many({})
     print(f"historical_vault: deleted {r.deleted_count} fake weeks")
@@ -48,9 +69,16 @@ def main():
     r = db.audit_log.delete_many({})
     print(f"audit_log:        deleted {r.deleted_count} seeded entries")
 
+<<<<<<< HEAD
     # 4. Drop seeded production_entries (no source field, or source not real)
     r = db.production_entries.delete_many(
         {"source": {"$nin": list(REAL_SOURCES)}}
+=======
+    # 4. Drop seeded production_entries (source explicitly set but not real).
+    # Entries without a source field are live app submissions — never delete them.
+    r = db.production_entries.delete_many(
+        {"source": {"$exists": True, "$nin": list(REAL_SOURCES)}}
+>>>>>>> 0d4fdc7ecc548cafa0e5057bf25d0119cf6420f5
     )
     print(f"production_entries: deleted {r.deleted_count} seeded entries")
 
