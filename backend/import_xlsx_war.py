@@ -14,14 +14,13 @@ import sys
 import os
 import uuid
 from datetime import datetime, timezone, timedelta, date
+from zoneinfo import ZoneInfo
 
 import openpyxl
 from pymongo import MongoClient
 
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017/")
 DB_NAME = os.environ.get("MONGO_DB", "vantagelife")
-
-DETROIT_OFFSET = timedelta(hours=-4)  # EDT
 
 # Tabs that represent daily production, mapped to day offset from week start (Wednesday)
 TAB_DAY_OFFSET = {
@@ -49,7 +48,7 @@ except (KeyError, ValueError):
 
 def detroit_submit_time(date_str: str) -> datetime:
     d = datetime.strptime(date_str, "%Y-%m-%d")
-    local = d.replace(hour=20, minute=30, tzinfo=timezone(DETROIT_OFFSET))
+    local = d.replace(hour=20, minute=30, tzinfo=ZoneInfo("America/Detroit"))
     return local.astimezone(timezone.utc)
 
 
@@ -213,16 +212,21 @@ def import_xlsx_file(db, path: str, week_start: date) -> int:
     wb = openpyxl.load_workbook(path, data_only=True)
 
     # Get office name from any daily tab (they all share the same header)
-    office = extract_office_name(wb["Wed"])
+    header_sheet = wb["Wed"] if "Wed" in wb.sheetnames else wb[wb.sheetnames[0]]
+    office = extract_office_name(header_sheet)
     print(f"  Office: {office}")
+
+    # Build stripped→actual sheet name map so "Mon" and "Mon " both match
+    sheet_map = {s.strip(): s for s in wb.sheetnames}
 
     total = 0
     for tab_name, day_offset in TAB_DAY_OFFSET.items():
-        if tab_name not in wb.sheetnames:
+        actual_name = sheet_map.get(tab_name.strip())
+        if actual_name is None:
             continue
 
         date_str = (week_start + timedelta(days=day_offset)).strftime("%Y-%m-%d")
-        ws = wb[tab_name]
+        ws = wb[actual_name]
         agents = parse_daily_tab(ws)
 
         if not agents:

@@ -36,6 +36,16 @@ def main():
     db = client[DB_NAME]
     print(f"Connected to '{DB_NAME}'\n")
 
+    confirm = input(
+        f"WARNING: This will purge all seed data from database '{DB_NAME}'.\n"
+        "App-created entries (no source field) are preserved.\n"
+        "Are you sure? (yes/no): "
+    )
+    if confirm.strip().lower() != "yes":
+        print("Aborted.")
+        client.close()
+        return
+
     # 1. Drop historical vault (entirely fake)
     r = db.historical_vault.delete_many({})
     print(f"historical_vault: deleted {r.deleted_count} fake weeks")
@@ -48,9 +58,10 @@ def main():
     r = db.audit_log.delete_many({})
     print(f"audit_log:        deleted {r.deleted_count} seeded entries")
 
-    # 4. Drop seeded production_entries (no source field, or source not real)
+    # 4. Drop seeded production_entries (source explicitly set but not real).
+    # Entries without a source field are live app submissions — never delete them.
     r = db.production_entries.delete_many(
-        {"source": {"$nin": list(REAL_SOURCES)}}
+        {"source": {"$exists": True, "$nin": list(REAL_SOURCES)}}
     )
     print(f"production_entries: deleted {r.deleted_count} seeded entries")
 
