@@ -240,7 +240,7 @@ def import_xlsx_file(db, path: str, week_start: date) -> int:
             entry = make_entry(agent_id, office, date_str, a)
             db.production_entries.insert_one(entry)
             total += 1
-            print(f"    ✓ {name} | ALP ${entry['gross_alp']:,.0f}")
+            print(f"    [OK] {name} | ALP ${entry['gross_alp']:,.0f}")
 
     return total
 
