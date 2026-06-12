@@ -27,7 +27,7 @@ DB_NAME = os.environ.get("MONGO_DB", "vantagelife")
 # phone: cell number as a string, e.g. "3135550100" (used for notifications)
 USERS = [
     ("mj@aopremier.com",  "MJ Aljahmi", "level_4", "MJ RGA",  "3135550101"),
-    ("alice@example.com", "Alice Smith", "level_1", "MJ RGA",  "3135550102"),
+    ("linnzi@aoluxor.com", "Linnzi Ek", "level_4", "MJ RGA",  "3609109934"),
 ]
 # ───────────────────────────────────────────────────────────────────────────
 
