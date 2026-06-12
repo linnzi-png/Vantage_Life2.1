@@ -180,6 +180,9 @@ def parse_daily_tab(ws) -> list[dict]:
             continue
         agent_name = str(agent_name).strip()
 
+        if agent_name.lower() in ("total", "totals", "grand total", "grand totals"):
+            continue
+
         # Skip formula remnants (shouldn't appear in data section but guard anyway)
         if agent_name.startswith("="):
             continue
@@ -213,16 +216,21 @@ def import_xlsx_file(db, path: str, week_start: date) -> int:
     wb = openpyxl.load_workbook(path, data_only=True)
 
     # Get office name from any daily tab (they all share the same header)
-    office = extract_office_name(wb["Wed"])
+    header_sheet = wb["Wed"] if "Wed" in wb.sheetnames else wb[wb.sheetnames[0]]
+    office = extract_office_name(header_sheet)
     print(f"  Office: {office}")
+
+    # Build stripped→actual sheet name map so "Mon" and "Mon " both match
+    sheet_map = {s.strip(): s for s in wb.sheetnames}
 
     total = 0
     for tab_name, day_offset in TAB_DAY_OFFSET.items():
-        if tab_name not in wb.sheetnames:
+        actual_name = sheet_map.get(tab_name.strip())
+        if actual_name is None:
             continue
 
         date_str = (week_start + timedelta(days=day_offset)).strftime("%Y-%m-%d")
-        ws = wb[tab_name]
+        ws = wb[actual_name]
         agents = parse_daily_tab(ws)
 
         if not agents:
