@@ -169,6 +169,7 @@ def set_session_cookie(resp: Response, token: str):
 
 
 async def upsert_user_and_session(email: str, name: str, picture: Optional[str], session_token: str, role: str = "level_1", agent_id: Optional[str] = None) -> Dict[str, Any]:
+    email = email.lower().strip()
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
