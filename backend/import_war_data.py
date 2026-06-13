@@ -86,7 +86,6 @@ def import_daily_format(db, data: dict) -> int:
             name = p.get("agent", "").strip()
             if not name:
                 continue
-            # Skip if entry already exists for this agent+date
             agent_id = get_or_create_agent(db, name, office)
             if db.production_entries.find_one({"agent_id": agent_id, "sales_day": date_str}):
                 print(f"  Skipping duplicate: {name} on {date_str}")
