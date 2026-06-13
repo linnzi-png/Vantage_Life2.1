@@ -104,6 +104,7 @@ def upsert_agent(db, name, phone, email, io_role, app_role, upline_id) -> str:
         db.agent_profiles.update_one(
             {"agent_id": existing["agent_id"]},
             {"$set": {
+                "name":     name.strip(),
                 "phone":    phone,
                 "email":    email.lower(),
                 "io_role":  io_role,

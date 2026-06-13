@@ -25,10 +25,14 @@ const IO_ROLE_LABEL: Record<string, string> = {
   Agent: 'Agent', Builder: 'Builder', inTraining: 'In Training',
 };
 
-function formatPhone(raw: string): string {
+export function formatPhone(raw: string): string {
   const d = raw.replace(/\D/g, '');
   if (d.length === 10) return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
   return raw;
+}
+
+function openLink(url: string) {
+  Linking.openURL(url).catch((err) => console.error('Failed to open link', err));
 }
 
 export function AgentContactSheet({ agent, onClose }: Props) {
@@ -38,6 +42,7 @@ export function AgentContactSheet({ agent, onClose }: Props) {
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.container}>
       <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
       <View style={styles.sheet}>
         <View style={styles.handle} />
@@ -51,7 +56,7 @@ export function AgentContactSheet({ agent, onClose }: Props) {
         {agent.phone ? (
           <TouchableOpacity
             style={styles.contactRow}
-            onPress={() => Linking.openURL(`tel:${agent.phone!.replace(/\D/g, '')}`)}
+            onPress={() => openLink(`tel:${agent.phone!.replace(/\D/g, '')}`)}
             activeOpacity={0.7}
           >
             <View style={styles.iconWrap}>
@@ -68,7 +73,7 @@ export function AgentContactSheet({ agent, onClose }: Props) {
         {agent.phone ? (
           <TouchableOpacity
             style={styles.contactRow}
-            onPress={() => Linking.openURL(`sms:${agent.phone!.replace(/\D/g, '')}`)}
+            onPress={() => openLink(`sms:${agent.phone!.replace(/\D/g, '')}`)}
             activeOpacity={0.7}
           >
             <View style={styles.iconWrap}>
@@ -85,7 +90,7 @@ export function AgentContactSheet({ agent, onClose }: Props) {
         {agent.email ? (
           <TouchableOpacity
             style={styles.contactRow}
-            onPress={() => Linking.openURL(`mailto:${agent.email}`)}
+            onPress={() => openLink(`mailto:${agent.email}`)}
             activeOpacity={0.7}
           >
             <View style={styles.iconWrap}>
@@ -103,13 +108,22 @@ export function AgentContactSheet({ agent, onClose }: Props) {
           <Text style={styles.closeTxt}>CLOSE</Text>
         </TouchableOpacity>
       </View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  container: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   sheet: {

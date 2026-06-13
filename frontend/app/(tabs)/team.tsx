@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth, levelNum } from '../../src/lib/auth';
-import { AgentContactSheet } from '../../src/components/AgentContactSheet';
+import { AgentContactSheet, formatPhone } from '../../src/components/AgentContactSheet';
 
 interface TeamRow {
   agent_id: string; name: string; office: string; role: string; io_role: string;
@@ -88,7 +88,7 @@ export default function TeamScreen() {
               </View>
               <Text style={styles.meta}>
                 {r.office} · {r.io_role || r.role.replace('level_', 'L')}
-                {r.phone ? ` · ${r.phone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3')}` : ''}
+                {r.phone ? ` · ${formatPhone(r.phone)}` : ''}
               </Text>
               {r.alerts?.length ? (
                 <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
