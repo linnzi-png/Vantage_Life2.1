@@ -9,12 +9,14 @@ What it removes:
   - ALL shoutouts (all seeded)
   - ALL audit_log documents (all seeded)
   - production_entries where source is explicitly set but not in real set
-  - agent_profiles not referenced by any remaining production_entries
+  - agent_profiles not referenced by any remaining production_entries,
+    their uplines, or existing user records
 
 What it keeps:
   - production_entries with source = "war_xlsx_import" or "war_import"
   - production_entries with no source field (live app submissions)
-  - agent_profiles that own those entries
+  - agent_profiles that own those entries, their uplines, and any profile
+    linked from a users record
   - users and user_sessions (untouched)
 
 Run from repo root:
@@ -66,14 +68,23 @@ def main():
     )
     print(f"production_entries: deleted {r.deleted_count} seeded entries")
 
-    # 5. Collect agent_ids still referenced by real entries
+    # 5. Collect agent_ids to keep: real producers + their uplines + user-linked profiles
     real_agent_ids = set(
         db.production_entries.distinct("agent_id", {"source": {"$in": list(REAL_SOURCES)}})
     )
-    print(f"\nReal agent_ids with production data: {len(real_agent_ids)}")
+    active_uplines = set(
+        db.agent_profiles.distinct("upline_id", {"agent_id": {"$in": list(real_agent_ids)}})
+    )
+    user_linked_ids = set(
+        a for a in db.users.distinct("agent_id") if a
+    )
+    agents_to_keep = real_agent_ids.union(active_uplines).union(user_linked_ids) - {None}
+    print(f"\nProfiles to keep: {len(agents_to_keep)} "
+          f"({len(real_agent_ids)} producers, {len(active_uplines)} uplines, "
+          f"{len(user_linked_ids)} user-linked)")
 
     # 6. Drop agent_profiles not in that set
-    r = db.agent_profiles.delete_many({"agent_id": {"$nin": list(real_agent_ids)}})
+    r = db.agent_profiles.delete_many({"agent_id": {"$nin": list(agents_to_keep)}})
     print(f"agent_profiles: deleted {r.deleted_count} synthetic agents")
 
     # Summary
