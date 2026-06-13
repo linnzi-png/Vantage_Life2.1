@@ -48,8 +48,13 @@ except (KeyError, ValueError):
 # ---------------------------------------------------------------------------
 
 def detroit_submit_time(date_str: str) -> datetime:
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("America/Detroit")
+    except Exception:
+        tz = timezone(DETROIT_OFFSET)
     d = datetime.strptime(date_str, "%Y-%m-%d")
-    local = d.replace(hour=20, minute=30, tzinfo=timezone(DETROIT_OFFSET))
+    local = d.replace(hour=20, minute=30, tzinfo=tz)
     return local.astimezone(timezone.utc)
 
 
@@ -181,7 +186,7 @@ def parse_daily_tab(ws) -> list[dict]:
         agent_name = str(agent_name).strip()
 
         if agent_name.lower() in ("total", "totals", "grand total", "grand totals"):
-            continue
+            break
 
         # Skip formula remnants (shouldn't appear in data section but guard anyway)
         if agent_name.startswith("="):

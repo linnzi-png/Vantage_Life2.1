@@ -32,7 +32,7 @@ def main():
 
     # Build email → agent_profile lookup (lowercase keys)
     profiles = list(db.agent_profiles.find({}, {"_id": 0}))
-    profile_by_email = {p["email"].lower(): p for p in profiles if p.get("email")}
+    profile_by_email = {p["email"].strip().lower(): p for p in profiles if p.get("email")}
     print(f"Loaded {len(profile_by_email)} agent profiles\n")
 
     users = list(db.users.find({}, {"_id": 0}))

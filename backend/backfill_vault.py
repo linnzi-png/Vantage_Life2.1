@@ -43,7 +43,7 @@ def main():
     entries = list(db.production_entries.find(
         {"source": {"$in": ["war_xlsx_import", "war_import"]}},
         {"_id": 0, "sales_day": 1, "office": 1,
-         "gross_alp": 1, "net_alp": 1, "sits": 1, "sales": 1}
+         "gross_alp": 1, "net_alp": 1, "sits": 1, "sales": 1, "agent_id": 1}
     ))
     print(f"Found {len(entries)} real production entries\n")
 
@@ -66,6 +66,8 @@ def main():
         w["by_office"][office]["net_alp"]   += float(e.get("net_alp") or 0)
         w["by_office"][office]["sits"]      += int(e.get("sits") or 0)
         w["by_office"][office]["sales"]     += int(e.get("sales") or 0)
+        if e.get("agent_id"):
+            w["agent_ids"].add(e["agent_id"])
 
     inserted = 0
     skipped = 0
@@ -76,13 +78,7 @@ def main():
             skipped += 1
             continue
 
-        # Count distinct agents active that week (upper bound prevents counting future weeks)
-        week_end = (date.fromisoformat(ws) + timedelta(days=6)).isoformat()
-        active_agents = db.production_entries.distinct(
-            "agent_id",
-            {"source": {"$in": ["war_xlsx_import", "war_import"]},
-             "sales_day": {"$gte": ws, "$lte": week_end}}
-        )
+        active_agents = data["agent_ids"]
 
         totals = {k: (int(v) if k in ("sits", "sales") else round(v, 2))
                   for k, v in data["totals"].items()}

@@ -54,14 +54,18 @@ def main():
     )
     print(f"production_entries: deleted {r.deleted_count} seeded entries")
 
-    # 5. Collect agent_ids still referenced by real entries
+    # 5. Collect agent_ids still referenced by real entries, plus their uplines to preserve hierarchy
     real_agent_ids = set(
         db.production_entries.distinct("agent_id", {"source": {"$in": list(REAL_SOURCES)}})
     )
-    print(f"\nReal agent_ids with production data: {len(real_agent_ids)}")
+    active_uplines = set(
+        db.agent_profiles.distinct("upline_id", {"agent_id": {"$in": list(real_agent_ids)}})
+    )
+    agents_to_keep = real_agent_ids.union(active_uplines) - {None}
+    print(f"\nReal active agents and uplines to keep: {len(agents_to_keep)}")
 
     # 6. Drop agent_profiles not in that set
-    r = db.agent_profiles.delete_many({"agent_id": {"$nin": list(real_agent_ids)}})
+    r = db.agent_profiles.delete_many({"agent_id": {"$nin": list(agents_to_keep)}})
     print(f"agent_profiles: deleted {r.deleted_count} synthetic agents")
 
     # Summary

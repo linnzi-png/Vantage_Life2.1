@@ -145,7 +145,7 @@ def main():
     for name, phone, email, io_role, app_role, upline_name in ROSTER:
         upline_id = None
         if upline_name:
-            upline_id = id_map.get(upline_name)
+            upline_id = id_map.get(upline_name.strip().upper())
             if upline_id is None:
                 # Fall back to a DB lookup so batched/partial imports still link correctly
                 upline_agent = find_agent(db, upline_name)
@@ -154,7 +154,7 @@ def main():
                 else:
                     print(f"  [WARN] upline '{upline_name}' not found in DB or id_map for {name} — check order")
         agent_id = upsert_agent(db, name, phone, email, io_role, app_role, upline_id)
-        id_map[name] = agent_id
+        id_map[name.strip().upper()] = agent_id
 
     print(f"\nDone. {len(ROSTER)} agents processed.")
     print("Hierarchy is live — uplines can now see their full downline in the app.")
