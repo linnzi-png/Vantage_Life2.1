@@ -608,6 +608,9 @@ async def team_view(user: Dict[str, Any] = Depends(require_level(2))):
             "name": a["name"],
             "office": a["office"],
             "role": a["role"],
+            "io_role": a.get("io_role") or "",
+            "phone": a.get("phone") or "",
+            "email": a.get("email") or "",
             "is_rookie": a.get("is_rookie", False),
             "gross_alp": float(r["gross_alp"]),
             "net_alp": float(r["net_alp"]),
@@ -623,6 +626,7 @@ async def team_view(user: Dict[str, Any] = Depends(require_level(2))):
         if aid not in listed:
             out.append({
                 "agent_id": aid, "name": a["name"], "office": a["office"], "role": a["role"],
+                "io_role": a.get("io_role") or "", "phone": a.get("phone") or "", "email": a.get("email") or "",
                 "is_rookie": a.get("is_rookie", False),
                 "gross_alp": 0, "net_alp": 0, "sits": 0, "sales": 0,
                 "close_ratio": 0, "avg_deal": 0, "alerts": ["no_pulse"],
