@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   empty:         { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 },
   emptyTxt:      { color: COLORS.textDim, marginTop: 12, textAlign: 'center' },
   row:           { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, padding: 12, borderRadius: 6, marginBottom: 6 },
-  name:          { color: '#fff', fontWeight: '800', fontSize: 14, flex: 1 },
+  name:          { color: '#fff', fontWeight: '800', fontSize: 14, flexShrink: 1 },
   meta:          { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
   alp:           { color: COLORS.primary, fontWeight: '900', fontSize: 16, fontVariant: ['tabular-nums' as any] },
   metric:        { color: COLORS.textDim, fontSize: 11, marginTop: 2 },

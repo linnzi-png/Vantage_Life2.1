@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
-  Linking, Platform,
+  Linking, Platform, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../lib/auth';
@@ -25,14 +25,18 @@ const IO_ROLE_LABEL: Record<string, string> = {
   Agent: 'Agent', Builder: 'Builder', inTraining: 'In Training',
 };
 
-export function formatPhone(raw: string): string {
+export function formatPhone(raw: string | undefined | null): string {
+  if (!raw) return '';
   const d = raw.replace(/\D/g, '');
   if (d.length === 10) return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
   return raw;
 }
 
-function openLink(url: string) {
-  Linking.openURL(url).catch((err) => console.error('Failed to open link', err));
+function openLink(url: string, errorMessage: string) {
+  Linking.openURL(url).catch((err) => {
+    console.error('Failed to open link', err);
+    Alert.alert('Error', errorMessage);
+  });
 }
 
 export function AgentContactSheet({ agent, onClose }: Props) {
@@ -56,7 +60,7 @@ export function AgentContactSheet({ agent, onClose }: Props) {
         {agent.phone ? (
           <TouchableOpacity
             style={styles.contactRow}
-            onPress={() => openLink(`tel:${agent.phone!.replace(/\D/g, '')}`)}
+            onPress={() => openLink(`tel:${agent.phone!.replace(/\D/g, '')}`, 'Could not open the phone dialer.')}
             activeOpacity={0.7}
           >
             <View style={styles.iconWrap}>
@@ -73,7 +77,7 @@ export function AgentContactSheet({ agent, onClose }: Props) {
         {agent.phone ? (
           <TouchableOpacity
             style={styles.contactRow}
-            onPress={() => openLink(`sms:${agent.phone!.replace(/\D/g, '')}`)}
+            onPress={() => openLink(`sms:${agent.phone!.replace(/\D/g, '')}`, 'Could not open the SMS app.')}
             activeOpacity={0.7}
           >
             <View style={styles.iconWrap}>
@@ -90,7 +94,7 @@ export function AgentContactSheet({ agent, onClose }: Props) {
         {agent.email ? (
           <TouchableOpacity
             style={styles.contactRow}
-            onPress={() => openLink(`mailto:${agent.email}`)}
+            onPress={() => openLink(`mailto:${agent.email}`, 'Could not open the mail app.')}
             activeOpacity={0.7}
           >
             <View style={styles.iconWrap}>
