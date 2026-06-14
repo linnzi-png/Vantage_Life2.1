@@ -30,7 +30,7 @@ app = FastAPI(title="VantageLife 2.0 API")
 api_router = APIRouter(prefix="/api")
 
 DETROIT_TZ = pytz.timezone("America/Detroit")
-OFFICES = ["MCM", "AMP", "Dearborn", "Heritage", "Siren"]
+_SEED_OFFICES = ["MCM", "AMP", "Dearborn", "Heritage", "Siren"]  # used only for demo seed data
 LEVELS = {
     "level_1": "Agent",
     "level_2": "GA",
@@ -445,8 +445,14 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(get_current_use
 async def dashboard_offices(user: Dict[str, Any] = Depends(get_current_user)):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
+    # Discover offices from the actual agent_profiles so new RGAs appear automatically
+    office_filter: Dict[str, Any] = {}
+    if ids is not None:
+        office_filter["agent_id"] = {"$in": ids}
+    offices = await db.agent_profiles.distinct("office", office_filter)
+
     out = []
-    for office in OFFICES:
+    for office in sorted(offices):
         agent_q: Dict[str, Any] = {"office": office}
         if ids is not None:
             agent_q["agent_id"] = {"$in": ids}
@@ -857,9 +863,10 @@ async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
         d = docs[0]
         totals = {"gross_alp": float(d.get("gross_alp", 0) or 0), "net_alp": float(d.get("net_alp", 0) or 0), "sits": int(d.get("sits", 0) or 0), "sales": int(d.get("sales", 0) or 0)}
 
-    # Per-office breakdown
+    # Per-office breakdown — discover from DB so all RGA offices are included
     by_office = {}
-    for office in OFFICES:
+    all_offices = await db.agent_profiles.distinct("office")
+    for office in all_offices:
         ag_ids = [a["agent_id"] async for a in db.agent_profiles.find({"office": office}, {"_id": 0, "agent_id": 1})]
         a = await aggregate_alp({"agent_id": {"$in": ag_ids}})
         by_office[office] = a
@@ -968,7 +975,7 @@ async def seed_data(request: Request, payload: Optional[Dict[str, Any]] = Body(d
     for i in range(agents_count):
         ga = gas[i % len(gas)]
         # vary office: 70% same as GA, 30% any office
-        office = ga["office"] if random.random() < 0.7 else random.choice(OFFICES)
+        office = ga["office"] if random.random() < 0.7 else random.choice(_SEED_OFFICES)
         is_rookie = random.random() < 0.30
         a = mk_agent("level_1", office, name_pool(), ga["agent_id"], ga["agent_id"], is_rookie)
         agents.append(a)
@@ -1060,11 +1067,11 @@ async def seed_data(request: Request, payload: Optional[Dict[str, Any]] = Body(d
         sits = random.randint(150, 380)
         per_office = {}
         rem = gross
-        for o in OFFICES[:-1]:
+        for o in _SEED_OFFICES[:-1]:
             slice_ = int(rem * random.uniform(0.1, 0.35))
             per_office[o] = {"gross_alp": slice_, "net_alp": int(slice_ * 0.92), "sales": random.randint(10, 50), "sits": random.randint(20, 80)}
             rem -= slice_
-        per_office[OFFICES[-1]] = {"gross_alp": max(0, rem), "net_alp": int(max(0, rem) * 0.92), "sales": random.randint(10, 50), "sits": random.randint(20, 80)}
+        per_office[_SEED_OFFICES[-1]] = {"gross_alp": max(0, rem), "net_alp": int(max(0, rem) * 0.92), "sales": random.randint(10, 50), "sits": random.randint(20, 80)}
         await db.historical_vault.insert_one({
             "week_id": f"wk_{uuid.uuid4().hex[:8]}",
             "week_start": ws,
