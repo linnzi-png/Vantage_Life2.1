@@ -31,7 +31,7 @@ export default function TeamScreen() {
     try {
       const [r, u] = await Promise.all([
         api<{ team: TeamRow[] }>('/api/team'),
-        api<{ upline: AgentContact | null }>('/api/my-upline'),
+        api<{ upline: AgentContact | null }>('/api/my-upline').catch(() => ({ upline: null })),
       ]);
       setRows(r.team);
       setUpline(u.upline);
@@ -77,7 +77,7 @@ export default function TeamScreen() {
           testID="team-upline-card"
         >
           <View style={{ flex: 1 }}>
-            <Text style={styles.uplineKicker}>YOUR {(upline.io_role || upline.role.replace('level_', 'L')).toUpperCase()}</Text>
+            <Text style={styles.uplineKicker}>YOUR {(upline.io_role || upline.role?.replace('level_', 'L') || '').toUpperCase()}</Text>
             <Text style={styles.uplineName}>{upline.name}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

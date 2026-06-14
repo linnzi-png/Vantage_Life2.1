@@ -114,8 +114,8 @@ export default function PulseScreen() {
     try {
       const [t, s, u] = await Promise.all([
         api<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string }>('/api/pulse/me/today'),
-        api<{ streak: number }>('/api/pulse/me/streak'),
-        api<{ upline: AgentContact | null }>('/api/my-upline'),
+        api<{ streak: number }>('/api/pulse/me/streak').catch(() => ({ streak: 0 })),
+        api<{ upline: AgentContact | null }>('/api/my-upline').catch(() => ({ upline: null })),
       ]);
       setToday(t);
       setStreak(s.streak);
@@ -330,7 +330,7 @@ export default function PulseScreen() {
               testID="upline-contact-card"
             >
               <View style={styles.uplineLeft}>
-                <Text style={styles.uplineKicker}>YOUR {(upline.io_role || upline.role.replace('level_', 'L')).toUpperCase()}</Text>
+                <Text style={styles.uplineKicker}>YOUR {(upline.io_role || upline.role?.replace('level_', 'L') || '').toUpperCase()}</Text>
                 <Text style={styles.uplineName}>{upline.name}</Text>
                 {upline.office ? <Text style={styles.uplineOffice}>{upline.office}</Text> : null}
               </View>
