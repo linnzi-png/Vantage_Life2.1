@@ -449,7 +449,7 @@ async def dashboard_offices(user: Dict[str, Any] = Depends(get_current_user)):
     office_filter: Dict[str, Any] = {}
     if ids is not None:
         office_filter["agent_id"] = {"$in": ids}
-    offices = await db.agent_profiles.distinct("office", office_filter)
+    offices = [o for o in await db.agent_profiles.distinct("office", office_filter) if o]
 
     out = []
     for office in sorted(offices):
@@ -865,7 +865,7 @@ async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
 
     # Per-office breakdown — discover from DB so all RGA offices are included
     by_office = {}
-    all_offices = await db.agent_profiles.distinct("office")
+    all_offices = [o for o in await db.agent_profiles.distinct("office") if o]
     for office in all_offices:
         ag_ids = [a["agent_id"] async for a in db.agent_profiles.find({"office": office}, {"_id": 0, "agent_id": 1})]
         a = await aggregate_alp({"agent_id": {"$in": ag_ids}})
