@@ -568,6 +568,27 @@ async def pulse_streak(user: Dict[str, Any] = Depends(get_current_user)):
 
 
 # =========================================================
+#                       MY UPLINE
+# =========================================================
+
+@api_router.get("/my-upline")
+async def my_upline(user: Dict[str, Any] = Depends(get_current_user)):
+    agent_id = user.get("agent_id")
+    if not agent_id:
+        return {"upline": None}
+    agent = await db.agent_profiles.find_one({"agent_id": agent_id}, {"_id": 0, "upline_id": 1})
+    if not agent or not agent.get("upline_id"):
+        return {"upline": None}
+    upline = await db.agent_profiles.find_one(
+        {"agent_id": agent["upline_id"]},
+        {"_id": 0, "name": 1, "phone": 1, "email": 1, "role": 1, "io_role": 1, "office": 1}
+    )
+    if not upline:
+        return {"upline": None}
+    return {"upline": upline}
+
+
+# =========================================================
 #                          TEAM
 # =========================================================
 
