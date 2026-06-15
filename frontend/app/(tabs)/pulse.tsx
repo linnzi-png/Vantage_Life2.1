@@ -4,9 +4,10 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Keyboa
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api, COLORS, useAuth } from '../../src/lib/auth';
+import { api, COLORS, useAuth, levelNum } from '../../src/lib/auth';
 import { BufferedPulse, PulsePayload, getUpcomingSalesDay, isBufferEntryEligible, isLateNightBuffer } from '../../src/lib/cycle';
 import GateBanner from '../../src/components/GateBanner';
+import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 
 const STEPS: { key: keyof PulseForm; label: string; hint: string; type?: 'int' | 'money' }[] = [
   { key: 'sets', label: 'Total Appointments (Sets)', hint: 'Total appointments booked.', type: 'int' },
@@ -98,6 +99,8 @@ function buildPayload(form: PulseForm): PulsePayload {
 
 export default function PulseScreen() {
   const { user } = useAuth();
+  const [upline, setUpline] = useState<AgentContact | null>(null);
+  const [contactOpen, setContactOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<PulseForm>(empty);
   const [today, setToday] = useState<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string } | null>(null);
@@ -109,10 +112,14 @@ export default function PulseScreen() {
 
   const refresh = useCallback(async () => {
     try {
-      const t = await api<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string }>('/api/pulse/me/today');
+      const [t, s, u] = await Promise.all([
+        api<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string }>('/api/pulse/me/today'),
+        api<{ streak: number }>('/api/pulse/me/streak').catch(() => ({ streak: 0 })),
+        api<{ upline: AgentContact | null }>('/api/my-upline').catch(() => ({ upline: null })),
+      ]);
       setToday(t);
-      const s = await api<{ streak: number }>('/api/pulse/me/streak');
       setStreak(s.streak);
+      setUpline(u.upline);
     } catch { /* not linked */ }
   }, []);
 
@@ -314,7 +321,37 @@ export default function PulseScreen() {
               </View>
             ))
           )}
+
+          {upline && levelNum(user?.role) < 4 ? (
+            <TouchableOpacity
+              style={styles.uplineCard}
+              onPress={() => setContactOpen(true)}
+              activeOpacity={0.75}
+              testID="upline-contact-card"
+            >
+              <View style={styles.uplineLeft}>
+                <Text style={styles.uplineKicker}>YOUR {(upline.io_role || upline.role?.replace('level_', 'L') || '').toUpperCase()}</Text>
+                <Text style={styles.uplineName}>{upline.name}</Text>
+                {upline.office ? <Text style={styles.uplineOffice}>{upline.office}</Text> : null}
+              </View>
+              <View style={styles.uplineActions}>
+                {upline.phone ? (
+                  <View style={styles.uplineIcon}>
+                    <Ionicons name="call" size={16} color={COLORS.primary} />
+                  </View>
+                ) : null}
+                {upline.phone ? (
+                  <View style={styles.uplineIcon}>
+                    <Ionicons name="chatbubble" size={16} color={COLORS.secondary} />
+                  </View>
+                ) : null}
+                <Ionicons name="chevron-forward" size={14} color={COLORS.textDim} />
+              </View>
+            </TouchableOpacity>
+          ) : null}
         </ScrollView>
+
+      <AgentContactSheet agent={contactOpen ? upline : null} onClose={() => setContactOpen(false)} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -387,4 +424,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18, paddingVertical: 10, borderRadius: 4,
   },
   queuedBtnTxt: { color: '#60A5FA', fontWeight: '900', fontSize: 11, letterSpacing: 1 },
+  uplineCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: COLORS.primary,
+    padding: 14, borderRadius: 6, marginTop: 18,
+  },
+  uplineLeft: { flex: 1 },
+  uplineKicker: { color: COLORS.primary, fontSize: 9, fontWeight: '900', letterSpacing: 1.8, marginBottom: 3 },
+  uplineName: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  uplineOffice: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
+  uplineActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  uplineIcon: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: COLORS.surface2,
+    alignItems: 'center', justifyContent: 'center',
+  },
 });

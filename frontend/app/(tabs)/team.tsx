@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth, levelNum } from '../../src/lib/auth';
-import { AgentContactSheet, formatPhone } from '../../src/components/AgentContactSheet';
+import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
 
 interface TeamRow {
   agent_id: string; name: string; office: string; role: string; io_role: string;
@@ -21,12 +21,21 @@ const ALERT_LABELS: Record<string, { label: string; color: string }> = {
 export default function TeamScreen() {
   const { user } = useAuth();
   const [rows, setRows] = useState<TeamRow[]>([]);
+  const [upline, setUpline] = useState<AgentContact | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [sortKey, setSortKey] = useState<keyof TeamRow>('gross_alp');
   const [selected, setSelected] = useState<TeamRow | null>(null);
+  const [uplineOpen, setUplineOpen] = useState(false);
 
   const fetchAll = async () => {
-    try { const r = await api<{ team: TeamRow[] }>('/api/team'); setRows(r.team); } catch {}
+    try {
+      const [r, u] = await Promise.all([
+        api<{ team: TeamRow[] }>('/api/team'),
+        api<{ upline: AgentContact | null }>('/api/my-upline').catch(() => ({ upline: null })),
+      ]);
+      setRows(r.team);
+      setUpline(u.upline);
+    } catch {}
   };
   useEffect(() => { fetchAll(); }, []);
 
@@ -59,6 +68,26 @@ export default function TeamScreen() {
         <Text style={styles.kicker}>HIERARCHY VIEW · LIVE</Text>
         <Text style={styles.title}>TEAM PRODUCTION</Text>
       </View>
+
+      {upline && levelNum(user?.role) < 4 ? (
+        <TouchableOpacity
+          style={styles.uplineCard}
+          onPress={() => setUplineOpen(true)}
+          activeOpacity={0.75}
+          testID="team-upline-card"
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.uplineKicker}>YOUR {(upline.io_role || upline.role?.replace('level_', 'L') || '').toUpperCase()}</Text>
+            <Text style={styles.uplineName}>{upline.name}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {upline.phone ? <Ionicons name="call" size={15} color={COLORS.primary} /> : null}
+            {upline.phone ? <Ionicons name="chatbubble" size={15} color={COLORS.secondary} /> : null}
+            <Ionicons name="chevron-forward" size={14} color={COLORS.textDim} />
+          </View>
+        </TouchableOpacity>
+      ) : null}
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortBar}>
         {sortBtn('gross_alp', 'Gross ALP')}
         {sortBtn('net_alp', 'Net ALP')}
@@ -112,6 +141,7 @@ export default function TeamScreen() {
       </ScrollView>
 
       <AgentContactSheet agent={selected} onClose={() => setSelected(null)} />
+      <AgentContactSheet agent={uplineOpen ? upline : null} onClose={() => setUplineOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -138,4 +168,13 @@ const styles = StyleSheet.create({
   alertTxt:      { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   rookie:        { backgroundColor: COLORS.orange, paddingHorizontal: 4, borderRadius: 2 },
   rookieTxt:     { color: '#000', fontWeight: '900', fontSize: 9 },
+  uplineCard:    {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 16, marginBottom: 8,
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: COLORS.primary,
+    padding: 12, borderRadius: 6,
+  },
+  uplineKicker:  { color: COLORS.primary, fontSize: 9, fontWeight: '900', letterSpacing: 1.8, marginBottom: 2 },
+  uplineName:    { color: '#fff', fontWeight: '800', fontSize: 14 },
 });
