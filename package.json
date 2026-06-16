@@ -1,0 +1,20 @@
+{
+  "name": "vantage-life-2-1",
+  "version": "2.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run web\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run web",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "replit": "npm run install:all && npm run dev",
+    "check": "npm --prefix backend run check && npm --prefix frontend run lint",
+    "build:backend": "npm --prefix backend run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

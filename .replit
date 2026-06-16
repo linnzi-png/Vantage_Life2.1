@@ -1,0 +1,5 @@
+modules = ["nodejs-20"]
+run = "npm install && npm run replit"
+
+[deployment]
+run = ["sh", "-c", "npm install && npm --prefix backend install && npm --prefix backend run build && npm --prefix backend start"]

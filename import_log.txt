@@ -1,0 +1,3966 @@
+[OK] 2026-02-18 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_02_18.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-02-18): 15 agents with activity
+    ~ Skipping duplicate: Trysha Greenwood on 2026-02-18
+    ~ Skipping duplicate: Julian Hyman on 2026-02-18
+    ~ Skipping duplicate: Marcus Norton on 2026-02-18
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-02-18
+    ~ Skipping duplicate: Ethan Lasley on 2026-02-18
+    ~ Skipping duplicate: Danielle Loux on 2026-02-18
+    ~ Skipping duplicate: Timothy Noe on 2026-02-18
+    ~ Skipping duplicate: Bilal Abdullah on 2026-02-18
+    ~ Skipping duplicate: Andre Alire on 2026-02-18
+    ~ Skipping duplicate: Kelvin Claney on 2026-02-18
+    ~ Skipping duplicate: Toel Jefferson on 2026-02-18
+    ~ Skipping duplicate: Ken Hermann on 2026-02-18
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-02-18
+    ~ Skipping duplicate: Wendy Huber on 2026-02-18
+    ~ Skipping duplicate: Alissa Charles on 2026-02-18
+  Thurs (2026-02-19): 13 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-02-19
+    ~ Skipping duplicate: Eddie Leon on 2026-02-19
+    ~ Skipping duplicate: Trysha Greenwood on 2026-02-19
+    ~ Skipping duplicate: Marcus Norton on 2026-02-19
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-02-19
+    ~ Skipping duplicate: Ethan Lasley on 2026-02-19
+    ~ Skipping duplicate: Timothy Noe on 2026-02-19
+    ~ Skipping duplicate: Preston Opperman on 2026-02-19
+    ~ Skipping duplicate: Andre Alire on 2026-02-19
+    ~ Skipping duplicate: Kelvin Claney on 2026-02-19
+    ~ Skipping duplicate: Derron Alexander on 2026-02-19
+    ~ Skipping duplicate: Toel Jefferson on 2026-02-19
+    ~ Skipping duplicate: Ken Hermann on 2026-02-19
+  Fri (2026-02-20): 7 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-02-20
+    ~ Skipping duplicate: Marcus Norton on 2026-02-20
+    ~ Skipping duplicate: Ethan Lasley on 2026-02-20
+    ~ Skipping duplicate: Melissa Elam on 2026-02-20
+    ~ Skipping duplicate: Nathan Fast on 2026-02-20
+    ~ Skipping duplicate: Timothy Noe on 2026-02-20
+    ~ Skipping duplicate: Ken Hermann on 2026-02-20
+  Sat (2026-02-21): 5 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-02-21
+    ~ Skipping duplicate: Marcus Norton on 2026-02-21
+    ~ Skipping duplicate: Ethan Lasley on 2026-02-21
+    ~ Skipping duplicate: Timothy Noe on 2026-02-21
+    ~ Skipping duplicate: Ken Hermann on 2026-02-21
+  Sun (2026-02-22): 4 agents with activity
+    ~ Skipping duplicate: Joylynn Harris on 2026-02-22
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-02-22
+    ~ Skipping duplicate: Ethan Lasley on 2026-02-22
+    ~ Skipping duplicate: Nathan Fast on 2026-02-22
+  Mon  (2026-02-23): 14 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-02-23
+    ~ Skipping duplicate: Eddie Leon on 2026-02-23
+    ~ Skipping duplicate: Trysha Greenwood on 2026-02-23
+    ~ Skipping duplicate: Marcus Norton on 2026-02-23
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-02-23
+    ~ Skipping duplicate: Ethan Lasley on 2026-02-23
+    ~ Skipping duplicate: Melissa Elam on 2026-02-23
+    ~ Skipping duplicate: Frances Gonzalez on 2026-02-23
+    ~ Skipping duplicate: Chistopher Jacko on 2026-02-23
+    ~ Skipping duplicate: Timothy Noe on 2026-02-23
+    ~ Skipping duplicate: Preston Opperman on 2026-02-23
+    ~ Skipping duplicate: Bilal Abdullah on 2026-02-23
+    ~ Skipping duplicate: Ken Hermann on 2026-02-23
+    ~ Skipping duplicate: Caroline Sanazaro on 2026-02-23
+  Tues  (2026-02-24): 17 agents with activity
+    ~ Skipping duplicate: Marci Dyer on 2026-02-24
+    ~ Skipping duplicate: Joylynn Harris on 2026-02-24
+    ~ Skipping duplicate: Eddie Leon on 2026-02-24
+    ~ Skipping duplicate: Rick Argote on 2026-02-24
+    ~ Skipping duplicate: Julian Hyman on 2026-02-24
+    ~ Skipping duplicate: Marcus Norton on 2026-02-24
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-02-24
+    ~ Skipping duplicate: Ethan Lasley on 2026-02-24
+    ~ Skipping duplicate: Melissa Elam on 2026-02-24
+    ~ Skipping duplicate: Nathan Fast on 2026-02-24
+    ~ Skipping duplicate: Danielle Loux on 2026-02-24
+    ~ Skipping duplicate: Timothy Noe on 2026-02-24
+    ~ Skipping duplicate: Derron Alexander on 2026-02-24
+    ~ Skipping duplicate: Toel Jefferson on 2026-02-24
+    ~ Skipping duplicate: Jordan McFarlane on 2026-02-24
+    ~ Skipping duplicate: Ken Hermann on 2026-02-24
+    ~ Skipping duplicate: Caroline Sanazaro on 2026-02-24
+  Wed (2) (2026-02-25): 7 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-02-25
+    ~ Skipping duplicate: Marci Dyer on 2026-02-25
+    ~ Skipping duplicate: Joylynn Harris on 2026-02-25
+    ~ Skipping duplicate: Shafay Sutton on 2026-02-25
+    ~ Skipping duplicate: Derron Alexander on 2026-02-25
+    ~ Skipping duplicate: Toel Jefferson on 2026-02-25
+    ~ Skipping duplicate: Jordan McFarlane on 2026-02-25
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-02-18 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_02_18.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-02-18): 10 agents with activity
+    ~ Skipping duplicate: Hannah Sanders on 2026-02-18
+    ~ Skipping duplicate: Awni Shuaib on 2026-02-18
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-02-18
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-02-18
+    ~ Skipping duplicate: Christine Demaras on 2026-02-18
+    ~ Skipping duplicate: Basel Musaed on 2026-02-18
+    ~ Skipping duplicate: Lamese Bader on 2026-02-18
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-02-18
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-02-18
+    ~ Skipping duplicate: Waleed Othman on 2026-02-18
+  Thurs (2026-02-19): 10 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-02-19
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-02-19
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-02-19
+    ~ Skipping duplicate: Ali Elrez on 2026-02-19
+    ~ Skipping duplicate: Christine Demaras on 2026-02-19
+    ~ Skipping duplicate: Maher Altairi on 2026-02-19
+    ~ Skipping duplicate: Basel Musaed on 2026-02-19
+    ~ Skipping duplicate: Lamese Bader on 2026-02-19
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-02-19
+    ~ Skipping duplicate: Waleed Othman on 2026-02-19
+  Fri (2026-02-20): 8 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-02-20
+    ~ Skipping duplicate: Hannah Sanders on 2026-02-20
+    ~ Skipping duplicate: Tyren Cosare on 2026-02-20
+    ~ Skipping duplicate: Ali Elrez on 2026-02-20
+    ~ Skipping duplicate: Christine Demaras on 2026-02-20
+    ~ Skipping duplicate: Basel Musaed on 2026-02-20
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-02-20
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-02-20
+  Sat (2026-02-21): 5 agents with activity
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-02-21
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-02-21
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-02-21
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-02-21
+    ~ Skipping duplicate: Waleed Othman on 2026-02-21
+  Sun (2026-02-22): 1 agents with activity
+    ~ Skipping duplicate: Tina Tilley on 2026-02-22
+  Mon  (2026-02-23): 10 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-02-23
+    ~ Skipping duplicate: Hannah Sanders on 2026-02-23
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-02-23
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-02-23
+    ~ Skipping duplicate: Ali Elrez on 2026-02-23
+    ~ Skipping duplicate: Christine Demaras on 2026-02-23
+    ~ Skipping duplicate: Basel Musaed on 2026-02-23
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-02-23
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-02-23
+    ~ Skipping duplicate: Waleed Othman on 2026-02-23
+  Tues  (2026-02-24): 12 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-02-24
+    ~ Skipping duplicate: Hannah Sanders on 2026-02-24
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-02-24
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-02-24
+    ~ Skipping duplicate: Ali Elrez on 2026-02-24
+    ~ Skipping duplicate: Christine Demaras on 2026-02-24
+    ~ Skipping duplicate: Maher Altairi on 2026-02-24
+    ~ Skipping duplicate: Basel Musaed on 2026-02-24
+    ~ Skipping duplicate: Lamese Bader on 2026-02-24
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-02-24
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-02-24
+    ~ Skipping duplicate: Waleed Othman on 2026-02-24
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-02-18 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_02_18.xlsx ...
+  Office: Rust RGA
+  Wed (2026-02-18): 15 agents with activity
+    ~ Skipping duplicate: Karami Kovar on 2026-02-18
+    ~ Skipping duplicate: Jasmine Marquez on 2026-02-18
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-02-18
+    ~ Skipping duplicate: Isabela Maneiro on 2026-02-18
+    ~ Skipping duplicate: Ryan Cummings on 2026-02-18
+    ~ Skipping duplicate: Charlie Hudson on 2026-02-18
+    ~ Skipping duplicate: Jared Kelly on 2026-02-18
+    ~ Skipping duplicate: Torian Fields on 2026-02-18
+    ~ Skipping duplicate: Devin Gould on 2026-02-18
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-02-18
+    ~ Skipping duplicate: Anthony Golino on 2026-02-18
+    ~ Skipping duplicate: Cameron Platt on 2026-02-18
+    ~ Skipping duplicate: Taylor Waldrip on 2026-02-18
+    ~ Skipping duplicate: Jeton Ajvazi on 2026-02-18
+    ~ Skipping duplicate: Mikaela Hayes on 2026-02-18
+  Thurs (2026-02-19): 15 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-02-19
+    ~ Skipping duplicate: Andrea Mulder on 2026-02-19
+    ~ Skipping duplicate: Karami Kovar on 2026-02-19
+    ~ Skipping duplicate: Bridgett McDaniels Russell on 2026-02-19
+    ~ Skipping duplicate: Isabela Maneiro on 2026-02-19
+    ~ Skipping duplicate: Courtney Morse on 2026-02-19
+    ~ Skipping duplicate: Shayla Williamson on 2026-02-19
+    ~ Skipping duplicate: Maria Farley on 2026-02-19
+    ~ Skipping duplicate: Devin Gould on 2026-02-19
+    ~ Skipping duplicate: Mariah Ruff on 2026-02-19
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-02-19
+    ~ Skipping duplicate: Anthony Golino on 2026-02-19
+    ~ Skipping duplicate: Cameron Platt on 2026-02-19
+    ~ Skipping duplicate: Taylor Waldrip on 2026-02-19
+    ~ Skipping duplicate: Jaedeen Perez on 2026-02-19
+  Fri (2026-02-20): 12 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-02-20
+    ~ Skipping duplicate: Andrea Mulder on 2026-02-20
+    ~ Skipping duplicate: Isabela Maneiro on 2026-02-20
+    ~ Skipping duplicate: Joy Vann-Austin on 2026-02-20
+    ~ Skipping duplicate: Courtney Morse on 2026-02-20
+    ~ Skipping duplicate: Shayla Williamson on 2026-02-20
+    ~ Skipping duplicate: Maria Farley on 2026-02-20
+    ~ Skipping duplicate: Devin Gould on 2026-02-20
+    ~ Skipping duplicate: Lisa Berry on 2026-02-20
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-02-20
+    ~ Skipping duplicate: Anthony Golino on 2026-02-20
+    ~ Skipping duplicate: Cameron Platt on 2026-02-20
+  Sat (2026-02-21): 6 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-02-21
+    ~ Skipping duplicate: Jared Kelly on 2026-02-21
+    ~ Skipping duplicate: Devin Gould on 2026-02-21
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-02-21
+    ~ Skipping duplicate: Cameron Platt on 2026-02-21
+    ~ Skipping duplicate: Jaedeen Perez on 2026-02-21
+  Sun (2026-02-22): 4 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-02-22
+    ~ Skipping duplicate: Devin Gould on 2026-02-22
+    ~ Skipping duplicate: Cameron Platt on 2026-02-22
+    ~ Skipping duplicate: Jaedeen Perez on 2026-02-22
+  Mon  (2026-02-23): 13 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-02-23
+    ~ Skipping duplicate: Karami Kovar on 2026-02-23
+    ~ Skipping duplicate: Jasmine Marquez on 2026-02-23
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-02-23
+    ~ Skipping duplicate: Kristen Walton on 2026-02-23
+    ~ Skipping duplicate: Isabela Maneiro on 2026-02-23
+    ~ Skipping duplicate: Shayla Williamson on 2026-02-23
+    ~ Skipping duplicate: Maria Farley on 2026-02-23
+    ~ Skipping duplicate: Devin Gould on 2026-02-23
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-02-23
+    ~ Skipping duplicate: Cameron Platt on 2026-02-23
+    ~ Skipping duplicate: Jeton Ajvazi on 2026-02-23
+    ~ Skipping duplicate: Anya White on 2026-02-23
+  Tues  (2026-02-24): 17 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-02-24
+    ~ Skipping duplicate: Karami Kovar on 2026-02-24
+    ~ Skipping duplicate: Jasmine Marquez on 2026-02-24
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-02-24
+    ~ Skipping duplicate: Kristen Walton on 2026-02-24
+    ~ Skipping duplicate: Isabela Maneiro on 2026-02-24
+    ~ Skipping duplicate: Bayle Kizer on 2026-02-24
+    ~ Skipping duplicate: Shayla Williamson on 2026-02-24
+    ~ Skipping duplicate: Devin Gould on 2026-02-24
+    ~ Skipping duplicate: Mariah Ruff on 2026-02-24
+    ~ Skipping duplicate: Lisa Berry on 2026-02-24
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-02-24
+    ~ Skipping duplicate: Anthony Golino on 2026-02-24
+    ~ Skipping duplicate: Cameron Platt on 2026-02-24
+    ~ Skipping duplicate: Taylor Waldrip on 2026-02-24
+    ~ Skipping duplicate: Jeton Ajvazi on 2026-02-24
+    ~ Skipping duplicate: Anya White on 2026-02-24
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-02-18 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_02_18.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-02-18): 14 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-02-18
+    ~ Skipping duplicate: Ashton Marshall on 2026-02-18
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-02-18
+    ~ Skipping duplicate: Yousif Alsaad on 2026-02-18
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-02-18
+    ~ Skipping duplicate: Ronald Hishaw on 2026-02-18
+    ~ Skipping duplicate: Ali Alwatan on 2026-02-18
+    ~ Skipping duplicate: Mahdy Alwatan on 2026-02-18
+    ~ Skipping duplicate: Tolu Alualu on 2026-02-18
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-02-18
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-02-18
+    ~ Skipping duplicate: Mohammad Saad on 2026-02-18
+    ~ Skipping duplicate: Ali Khanafer on 2026-02-18
+    ~ Skipping duplicate: Faye Saad on 2026-02-18
+  Thurs (2026-02-19): 15 agents with activity
+    ~ Skipping duplicate: Ashton Marshall on 2026-02-19
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-02-19
+    ~ Skipping duplicate: Ronald Hishaw on 2026-02-19
+    ~ Skipping duplicate: Ali Alwatan on 2026-02-19
+    ~ Skipping duplicate: Mahdy Alwatan on 2026-02-19
+    ~ Skipping duplicate: Tolu Alualu on 2026-02-19
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-02-19
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-02-19
+    ~ Skipping duplicate: Ali Chanine on 2026-02-19
+    ~ Skipping duplicate: Hassane Zahr on 2026-02-19
+    ~ Skipping duplicate: Ali Nasser on 2026-02-19
+    ~ Skipping duplicate: Mohammad Saad on 2026-02-19
+    ~ Skipping duplicate: Faye Saad on 2026-02-19
+    ~ Skipping duplicate: Ali Merhi on 2026-02-19
+    ~ Skipping duplicate: David Schultz on 2026-02-19
+  Fri (2026-02-20): 11 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-02-20
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-02-20
+    ~ Skipping duplicate: Yousif Alsaad on 2026-02-20
+    ~ Skipping duplicate: Ronald Hishaw on 2026-02-20
+    ~ Skipping duplicate: Sabrina Leu on 2026-02-20
+    ~ Skipping duplicate: Tolu Alualu on 2026-02-20
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-02-20
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-02-20
+    ~ Skipping duplicate: Hassane Zahr on 2026-02-20
+    ~ Skipping duplicate: Ali Khanafer on 2026-02-20
+    ~ Skipping duplicate: Faye Saad on 2026-02-20
+  Sat (2026-02-21): 11 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-02-21
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-02-21
+    ~ Skipping duplicate: Ronald Hishaw on 2026-02-21
+    ~ Skipping duplicate: Mahdy Alwatan on 2026-02-21
+    ~ Skipping duplicate: Ali Hammoud on 2026-02-21
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-02-21
+    ~ Skipping duplicate: Hassane Zahr on 2026-02-21
+    ~ Skipping duplicate: Mohammad Saad on 2026-02-21
+    ~ Skipping duplicate: Hussein Habhab on 2026-02-21
+    ~ Skipping duplicate: Ali Khanafer on 2026-02-21
+    ~ Skipping duplicate: Ali Merhi on 2026-02-21
+  Sun (2026-02-22): 3 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-02-22
+    ~ Skipping duplicate: Ali Nasser on 2026-02-22
+    ~ Skipping duplicate: Mohammad Saad on 2026-02-22
+  Mon  (2026-02-23): 16 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-02-23
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-02-23
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-02-23
+    ~ Skipping duplicate: Ronald Hishaw on 2026-02-23
+    ~ Skipping duplicate: Ali Alwatan on 2026-02-23
+    ~ Skipping duplicate: Mahdy Alwatan on 2026-02-23
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-02-23
+    ~ Skipping duplicate: Hasan Nasser on 2026-02-23
+    ~ Skipping duplicate: Ali Hammoud on 2026-02-23
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-02-23
+    ~ Skipping duplicate: Hassane Zahr on 2026-02-23
+    ~ Skipping duplicate: Ali Nasser on 2026-02-23
+    ~ Skipping duplicate: Mohammad Saad on 2026-02-23
+    ~ Skipping duplicate: Ali Khanafer on 2026-02-23
+    ~ Skipping duplicate: Faye Saad on 2026-02-23
+    ~ Skipping duplicate: Ali Merhi on 2026-02-23
+  Tues  (2026-02-24): 13 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-02-24
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-02-24
+    ~ Skipping duplicate: Ronald Hishaw on 2026-02-24
+    ~ Skipping duplicate: Ali Alwatan on 2026-02-24
+    ~ Skipping duplicate: Sabrina Leu on 2026-02-24
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-02-24
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-02-24
+    ~ Skipping duplicate: Hassane Zahr on 2026-02-24
+    ~ Skipping duplicate: Ali Nasser on 2026-02-24
+    ~ Skipping duplicate: Mohammad Saad on 2026-02-24
+    ~ Skipping duplicate: Ali Khanafer on 2026-02-24
+    ~ Skipping duplicate: Faye Saad on 2026-02-24
+    ~ Skipping duplicate: Ali Merhi on 2026-02-24
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-02-25 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_02_25.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-02-25): 22 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-02-25
+    ~ Skipping duplicate: Joylynn Harris on 2026-02-25
+    ~ Skipping duplicate: Shafay Sutton on 2026-02-25
+    ~ Skipping duplicate: Eddie Leon on 2026-02-25
+    ~ Skipping duplicate: Julian Hyman on 2026-02-25
+    ~ Skipping duplicate: Marcus Norton on 2026-02-25
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-02-25
+    ~ Skipping duplicate: Ethan Lasley on 2026-02-25
+    ~ Skipping duplicate: Melissa Elam on 2026-02-25
+    ~ Skipping duplicate: Danielle Loux on 2026-02-25
+    ~ Skipping duplicate: Frances Gonzalez on 2026-02-25
+    ~ Skipping duplicate: Timothy Noe on 2026-02-25
+    ~ Skipping duplicate: Andre Alire on 2026-02-25
+    ~ Skipping duplicate: Kelvin Claney on 2026-02-25
+    ~ Skipping duplicate: Derron Alexander on 2026-02-25
+    ~ Skipping duplicate: Toel Jefferson on 2026-02-25
+    ~ Skipping duplicate: Jordan McFarlane on 2026-02-25
+    ~ Skipping duplicate: Caroline Sanazaro on 2026-02-25
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-02-25
+    ~ Skipping duplicate: Wendy Huber on 2026-02-25
+    ~ Skipping duplicate: Alissa Charles on 2026-02-25
+    ~ Skipping duplicate: Bryanna Wagner on 2026-02-25
+  Thurs (2026-02-26): 11 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-02-26
+    ~ Skipping duplicate: Marcus Norton on 2026-02-26
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-02-26
+    ~ Skipping duplicate: Ethan Lasley on 2026-02-26
+    ~ Skipping duplicate: Danielle Loux on 2026-02-26
+    ~ Skipping duplicate: Frances Gonzalez on 2026-02-26
+    ~ Skipping duplicate: Andre Alire on 2026-02-26
+    ~ Skipping duplicate: Kelvin Claney on 2026-02-26
+    ~ Skipping duplicate: Derron Alexander on 2026-02-26
+    ~ Skipping duplicate: Jordan McFarlane on 2026-02-26
+    ~ Skipping duplicate: Ken Hermann on 2026-02-26
+  Fri (2026-02-27): 14 agents with activity
+    ~ Skipping duplicate: Shafay Sutton on 2026-02-27
+    ~ Skipping duplicate: Rick Argote on 2026-02-27
+    ~ Skipping duplicate: Julian Hyman on 2026-02-27
+    ~ Skipping duplicate: Marcus Norton on 2026-02-27
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-02-27
+    ~ Skipping duplicate: Ethan Lasley on 2026-02-27
+    ~ Skipping duplicate: Danielle Loux on 2026-02-27
+    ~ Skipping duplicate: Timothy Noe on 2026-02-27
+    ~ Skipping duplicate: Preston Opperman on 2026-02-27
+    ~ Skipping duplicate: Bilal Abdullah on 2026-02-27
+    ~ Skipping duplicate: Andre Alire on 2026-02-27
+    ~ Skipping duplicate: Kelvin Claney on 2026-02-27
+    ~ Skipping duplicate: Derron Alexander on 2026-02-27
+    ~ Skipping duplicate: Jordan McFarlane on 2026-02-27
+  Sat (2026-02-28): 10 agents with activity
+    ~ Skipping duplicate: Marci Dyer on 2026-02-28
+    ~ Skipping duplicate: Joylynn Harris on 2026-02-28
+    ~ Skipping duplicate: Eddie Leon on 2026-02-28
+    ~ Skipping duplicate: Rick Argote on 2026-02-28
+    ~ Skipping duplicate: Julian Hyman on 2026-02-28
+    ~ Skipping duplicate: Marcus Norton on 2026-02-28
+    ~ Skipping duplicate: Timothy Noe on 2026-02-28
+    ~ Skipping duplicate: Andre Alire on 2026-02-28
+    ~ Skipping duplicate: Kelvin Claney on 2026-02-28
+    ~ Skipping duplicate: Jordan McFarlane on 2026-02-28
+  Sun (2026-03-01): 6 agents with activity
+    ~ Skipping duplicate: Marci Dyer on 2026-03-01
+    ~ Skipping duplicate: Julian Hyman on 2026-03-01
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-01
+    ~ Skipping duplicate: Melissa Elam on 2026-03-01
+    ~ Skipping duplicate: Danielle Loux on 2026-03-01
+    ~ Skipping duplicate: Derron Alexander on 2026-03-01
+  Mon  (2026-03-02): 13 agents with activity
+    ~ Skipping duplicate: Marci Dyer on 2026-03-02
+    ~ Skipping duplicate: Eddie Leon on 2026-03-02
+    ~ Skipping duplicate: Rick Argote on 2026-03-02
+    ~ Skipping duplicate: Julian Hyman on 2026-03-02
+    ~ Skipping duplicate: Marcus Norton on 2026-03-02
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-02
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-02
+    ~ Skipping duplicate: Melissa Elam on 2026-03-02
+    ~ Skipping duplicate: Timothy Noe on 2026-03-02
+    ~ Skipping duplicate: Preston Opperman on 2026-03-02
+    ~ Skipping duplicate: Derron Alexander on 2026-03-02
+    ~ Skipping duplicate: Jordan McFarlane on 2026-03-02
+    ~ Skipping duplicate: Ken Hermann on 2026-03-02
+  Tues  (2026-03-03): 14 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-03-03
+    ~ Skipping duplicate: Joylynn Harris on 2026-03-03
+    ~ Skipping duplicate: Eddie Leon on 2026-03-03
+    ~ Skipping duplicate: Rick Argote on 2026-03-03
+    ~ Skipping duplicate: Julian Hyman on 2026-03-03
+    ~ Skipping duplicate: Marcus Norton on 2026-03-03
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-03
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-03
+    ~ Skipping duplicate: Danielle Loux on 2026-03-03
+    ~ Skipping duplicate: Frances Gonzalez on 2026-03-03
+    ~ Skipping duplicate: Timothy Noe on 2026-03-03
+    ~ Skipping duplicate: Derron Alexander on 2026-03-03
+    ~ Skipping duplicate: Jordan McFarlane on 2026-03-03
+    ~ Skipping duplicate: Ken Hermann on 2026-03-03
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-02-25 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_02_25.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-02-25): 11 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-02-25
+    ~ Skipping duplicate: Gabriela Romero on 2026-02-25
+    ~ Skipping duplicate: Hannah Sanders on 2026-02-25
+    ~ Skipping duplicate: Awni Shuaib on 2026-02-25
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-02-25
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-02-25
+    ~ Skipping duplicate: Basel Musaed on 2026-02-25
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-02-25
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-02-25
+    ~ Skipping duplicate: Bilal Olayan on 2026-02-25
+    ~ Skipping duplicate: Waleed Othman on 2026-02-25
+  Thurs (2026-02-26): 10 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-02-26
+    ~ Skipping duplicate: Gabriela Romero on 2026-02-26
+    ~ Skipping duplicate: Awni Shuaib on 2026-02-26
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-02-26
+    ~ Skipping duplicate: Christine Demaras on 2026-02-26
+    ~ Skipping duplicate: Maher Altairi on 2026-02-26
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-02-26
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-02-26
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-02-26
+    ~ Skipping duplicate: Waleed Othman on 2026-02-26
+  Fri (2026-02-27): 7 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-02-27
+    ~ Skipping duplicate: Hannah Sanders on 2026-02-27
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-02-27
+    ~ Skipping duplicate: Basel Musaed on 2026-02-27
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-02-27
+    ~ Skipping duplicate: Tina Tilley on 2026-02-27
+    ~ Skipping duplicate: Waleed Othman on 2026-02-27
+  Sat (2026-02-28): 2 agents with activity
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-02-28
+    ~ Skipping duplicate: Bruce Curry on 2026-02-28
+  Sun (2026-03-01): 3 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-01
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-01
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-01
+  Mon  (2026-03-02): 10 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-02
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-02
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-02
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-02
+    ~ Skipping duplicate: Christine Demaras on 2026-03-02
+    ~ Skipping duplicate: Lamese Bader on 2026-03-02
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-02
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-02
+    ~ Skipping duplicate: Bruce Curry on 2026-03-02
+    ~ Skipping duplicate: Waleed Othman on 2026-03-02
+  Tues  (2026-03-03): 13 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-03
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-03
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-03
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-03
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-03
+    ~ Skipping duplicate: Christine Demaras on 2026-03-03
+    ~ Skipping duplicate: Maher Altairi on 2026-03-03
+    ~ Skipping duplicate: Basel Musaed on 2026-03-03
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-03
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-03
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-03
+    ~ Skipping duplicate: Daniella Robinson on 2026-03-03
+    ~ Skipping duplicate: Waleed Othman on 2026-03-03
+  Wed (2) (2026-03-04): 2 agents with activity
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-04
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-04
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-02-25 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_02_25.xlsx ...
+  Office: Rust RGA
+  Wed (2026-02-25): 10 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-02-25
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-02-25
+    ~ Skipping duplicate: Isabela Maneiro on 2026-02-25
+    ~ Skipping duplicate: Bayle Kizer on 2026-02-25
+    ~ Skipping duplicate: Courtney Morse on 2026-02-25
+    ~ Skipping duplicate: Shayla Williamson on 2026-02-25
+    ~ Skipping duplicate: Anthony Golino on 2026-02-25
+    ~ Skipping duplicate: Cameron Platt on 2026-02-25
+    ~ Skipping duplicate: Taylor Waldrip on 2026-02-25
+    ~ Skipping duplicate: Jeton Ajvazi on 2026-02-25
+  Thurs (2026-02-26): 12 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-02-26
+    ~ Skipping duplicate: Jasmine Marquez on 2026-02-26
+    ~ Skipping duplicate: Isabela Maneiro on 2026-02-26
+    ~ Skipping duplicate: Charlie Hudson on 2026-02-26
+    ~ Skipping duplicate: Joy Vann-Austin on 2026-02-26
+    ~ Skipping duplicate: Courtney Morse on 2026-02-26
+    ~ Skipping duplicate: Shayla Williamson on 2026-02-26
+    ~ Skipping duplicate: Devin Gould on 2026-02-26
+    ~ Skipping duplicate: Anthony Golino on 2026-02-26
+    ~ Skipping duplicate: Taylor Waldrip on 2026-02-26
+    ~ Skipping duplicate: Jeton Ajvazi on 2026-02-26
+    ~ Skipping duplicate: Anya White on 2026-02-26
+  Fri (2026-02-27): 7 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-02-27
+    ~ Skipping duplicate: Andrea Mulder on 2026-02-27
+    ~ Skipping duplicate: Jasmine Marquez on 2026-02-27
+    ~ Skipping duplicate: Kristen Walton on 2026-02-27
+    ~ Skipping duplicate: Isabela Maneiro on 2026-02-27
+    ~ Skipping duplicate: Shayla Williamson on 2026-02-27
+    ~ Skipping duplicate: Taylor Waldrip on 2026-02-27
+  Sat (2026-02-28): 6 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-02-28
+    ~ Skipping duplicate: Joy Vann-Austin on 2026-02-28
+    ~ Skipping duplicate: Shayla Williamson on 2026-02-28
+    ~ Skipping duplicate: Devin Gould on 2026-02-28
+    ~ Skipping duplicate: Anthony Golino on 2026-02-28
+    ~ Skipping duplicate: Anya White on 2026-02-28
+  Sun (2026-03-01): 4 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-03-01
+    ~ Skipping duplicate: Joy Vann-Austin on 2026-03-01
+    ~ Skipping duplicate: Devin Gould on 2026-03-01
+    ~ Skipping duplicate: Jaedeen Perez on 2026-03-01
+  Mon  (2026-03-02): 7 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-02
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-02
+    ~ Skipping duplicate: Courtney Morse on 2026-03-02
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-02
+    ~ Skipping duplicate: Devin Gould on 2026-03-02
+    ~ Skipping duplicate: Anthony Golino on 2026-03-02
+    ~ Skipping duplicate: Jaedeen Perez on 2026-03-02
+  Tues  (2026-03-03): 7 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-03
+    ~ Skipping duplicate: Bridgett McDaniels Russell on 2026-03-03
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-03
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-03
+    ~ Skipping duplicate: Devin Gould on 2026-03-03
+    ~ Skipping duplicate: Anthony Golino on 2026-03-03
+    ~ Skipping duplicate: Taylor Waldrip on 2026-03-03
+  Wed (2) (2026-03-04): 5 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-04
+    ~ Skipping duplicate: Jasmine Marquez on 2026-03-04
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-04
+    ~ Skipping duplicate: Kristen Walton on 2026-03-04
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-04
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-02-25 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_02_25.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-02-25): 14 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-02-25
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-02-25
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-02-25
+    ~ Skipping duplicate: Yousif Alsaad on 2026-02-25
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-02-25
+    ~ Skipping duplicate: Ronald Hishaw on 2026-02-25
+    ~ Skipping duplicate: Ali Alwatan on 2026-02-25
+    ~ Skipping duplicate: Sabrina Leu on 2026-02-25
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-02-25
+    ~ Skipping duplicate: Ali Hammoud on 2026-02-25
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-02-25
+    ~ Skipping duplicate: Hassane Zahr on 2026-02-25
+    ~ Skipping duplicate: Mohammad Saad on 2026-02-25
+    ~ Skipping duplicate: Faye Saad on 2026-02-25
+  Thurs (2026-02-26): 16 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-02-26
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-02-26
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-02-26
+    ~ Skipping duplicate: Yousif Alsaad on 2026-02-26
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-02-26
+    ~ Skipping duplicate: Ali Alwatan on 2026-02-26
+    ~ Skipping duplicate: Mahdy Alwatan on 2026-02-26
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-02-26
+    ~ Skipping duplicate: Ali Hammoud on 2026-02-26
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-02-26
+    ~ Skipping duplicate: Ali Chanine on 2026-02-26
+    ~ Skipping duplicate: Hassane Zahr on 2026-02-26
+    ~ Skipping duplicate: Ali Nasser on 2026-02-26
+    ~ Skipping duplicate: Mohammad Saad on 2026-02-26
+    ~ Skipping duplicate: Hussein Habhab on 2026-02-26
+    ~ Skipping duplicate: Faye Saad on 2026-02-26
+  Fri (2026-02-27): 11 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-02-27
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-02-27
+    ~ Skipping duplicate: Yousif Alsaad on 2026-02-27
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-02-27
+    ~ Skipping duplicate: Ali Alwatan on 2026-02-27
+    ~ Skipping duplicate: Mahdy Alwatan on 2026-02-27
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-02-27
+    ~ Skipping duplicate: Hasan Nasser on 2026-02-27
+    ~ Skipping duplicate: Ali Hammoud on 2026-02-27
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-02-27
+    ~ Skipping duplicate: Faye Saad on 2026-02-27
+  Sat (2026-02-28): 7 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-02-28
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-02-28
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-02-28
+    ~ Skipping duplicate: Ali Alwatan on 2026-02-28
+    ~ Skipping duplicate: Hasan Nasser on 2026-02-28
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-02-28
+    ~ Skipping duplicate: Hassane Zahr on 2026-02-28
+  Sun (2026-03-01): 9 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-01
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-01
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-01
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-01
+    ~ Skipping duplicate: Mahdy Alwatan on 2026-03-01
+    ~ Skipping duplicate: Ali Hammoud on 2026-03-01
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-01
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-01
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-01
+  Mon  (2026-03-02): 17 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-03-02
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-02
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-02
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-02
+    ~ Skipping duplicate: Yousif Alsaad on 2026-03-02
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-02
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-02
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-02
+    ~ Skipping duplicate: Tolu Alualu on 2026-03-02
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-02
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-02
+    ~ Skipping duplicate: Ali Chanine on 2026-03-02
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-02
+    ~ Skipping duplicate: Ali Nasser on 2026-03-02
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-02
+    ~ Skipping duplicate: Ali Khanafer on 2026-03-02
+    ~ Skipping duplicate: Amy Conner on 2026-03-02
+  Tues  (2026-03-03): 16 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-03
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-03
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-03
+    ~ Skipping duplicate: Yousif Alsaad on 2026-03-03
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-03
+    ~ Skipping duplicate: Ronald Hishaw on 2026-03-03
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-03
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-03
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-03
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-03
+    ~ Skipping duplicate: Ali Chanine on 2026-03-03
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-03
+    ~ Skipping duplicate: Ali Nasser on 2026-03-03
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-03
+    ~ Skipping duplicate: Ali Khanafer on 2026-03-03
+    ~ Skipping duplicate: Ali Merhi on 2026-03-03
+  Wed (2) (2026-03-04): 2 agents with activity
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-04
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-04
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-04 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_03_04.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-03-04): 11 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-03-04
+    ~ Skipping duplicate: Marci Dyer on 2026-03-04
+    ~ Skipping duplicate: Shafay Sutton on 2026-03-04
+    ~ Skipping duplicate: Rick Argote on 2026-03-04
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-04
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-04
+    ~ Skipping duplicate: Danielle Loux on 2026-03-04
+    ~ Skipping duplicate: Timothy Noe on 2026-03-04
+    ~ Skipping duplicate: Preston Opperman on 2026-03-04
+    ~ Skipping duplicate: Andre Alire on 2026-03-04
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-04
+  Thurs (2026-03-05): 11 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-03-05
+    ~ Skipping duplicate: Shafay Sutton on 2026-03-05
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-05
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-05
+    ~ Skipping duplicate: Danielle Loux on 2026-03-05
+    ~ Skipping duplicate: Timothy Noe on 2026-03-05
+    ~ Skipping duplicate: Preston Opperman on 2026-03-05
+    ~ Skipping duplicate: Andre Alire on 2026-03-05
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-05
+    ~ Skipping duplicate: Toel Jefferson on 2026-03-05
+    ~ Skipping duplicate: Ken Hermann on 2026-03-05
+  Fri (2026-03-06): 14 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-03-06
+    ~ Skipping duplicate: Marci Dyer on 2026-03-06
+    ~ Skipping duplicate: Joylynn Harris on 2026-03-06
+    ~ Skipping duplicate: Shafay Sutton on 2026-03-06
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-06
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-06
+    ~ Skipping duplicate: Melissa Elam on 2026-03-06
+    ~ Skipping duplicate: Frances Gonzalez on 2026-03-06
+    ~ Skipping duplicate: Timothy Noe on 2026-03-06
+    ~ Skipping duplicate: Preston Opperman on 2026-03-06
+    ~ Skipping duplicate: Andre Alire on 2026-03-06
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-06
+    ~ Skipping duplicate: Jordan McFarlane on 2026-03-06
+    ~ Skipping duplicate: Bryanna Wagner on 2026-03-06
+  Sat (2026-03-07): 10 agents with activity
+    ~ Skipping duplicate: Joylynn Harris on 2026-03-07
+    ~ Skipping duplicate: Eddie Leon on 2026-03-07
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-07
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-07
+    ~ Skipping duplicate: Danielle Loux on 2026-03-07
+    ~ Skipping duplicate: Frances Gonzalez on 2026-03-07
+    ~ Skipping duplicate: Lacie Herring on 2026-03-07
+    ~ Skipping duplicate: Timothy Noe on 2026-03-07
+    ~ Skipping duplicate: Andre Alire on 2026-03-07
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-07
+  Sun (2026-03-08): 1 agents with activity
+    ~ Skipping duplicate: Joylynn Harris on 2026-03-08
+  Mon  (2026-03-09): 15 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-03-09
+    ~ Skipping duplicate: Marci Dyer on 2026-03-09
+    ~ Skipping duplicate: Joylynn Harris on 2026-03-09
+    ~ Skipping duplicate: Eddie Leon on 2026-03-09
+    ~ Skipping duplicate: Julian Hyman on 2026-03-09
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-09
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-09
+    ~ Skipping duplicate: Melissa Elam on 2026-03-09
+    ~ Skipping duplicate: Lacie Herring on 2026-03-09
+    ~ Skipping duplicate: Timothy Noe on 2026-03-09
+    ~ Skipping duplicate: Preston Opperman on 2026-03-09
+    ~ Skipping duplicate: Andre Alire on 2026-03-09
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-09
+    ~ Skipping duplicate: Derron Alexander on 2026-03-09
+    ~ Skipping duplicate: Ken Hermann on 2026-03-09
+  Tues  (2026-03-10): 14 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-03-10
+    ~ Skipping duplicate: Marci Dyer on 2026-03-10
+    ~ Skipping duplicate: Eddie Leon on 2026-03-10
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-10
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-10
+    ~ Skipping duplicate: Melissa Elam on 2026-03-10
+    ~ Skipping duplicate: Danielle Loux on 2026-03-10
+    ~ Skipping duplicate: Timothy Noe on 2026-03-10
+    ~ Skipping duplicate: Preston Opperman on 2026-03-10
+    ~ Skipping duplicate: Bilal Abdullah on 2026-03-10
+    ~ Skipping duplicate: Andre Alire on 2026-03-10
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-10
+    ~ Skipping duplicate: Derron Alexander on 2026-03-10
+    ~ Skipping duplicate: Ken Hermann on 2026-03-10
+  Wed (2) (2026-03-11): 1 agents with activity
+    ~ Skipping duplicate: Derron Alexander on 2026-03-11
+  Thurs (2) (2026-03-12): 1 agents with activity
+    ~ Skipping duplicate: Derron Alexander on 2026-03-12
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-04 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_03_04.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-03-04): 8 agents with activity
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-04
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-04
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-04
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-04
+    ~ Skipping duplicate: Lamese Bader on 2026-03-04
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-04
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-04
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-04
+  Thurs (2026-03-05): 9 agents with activity
+    ~ Skipping duplicate: Tyren Cosare on 2026-03-05
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-05
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-05
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-03-05
+    ~ Skipping duplicate: Ali Elrez on 2026-03-05
+    ~ Skipping duplicate: Christine Demaras on 2026-03-05
+    ~ Skipping duplicate: Lamese Bader on 2026-03-05
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-05
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-05
+  Fri (2026-03-06): 4 agents with activity
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-06
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-06
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-06
+    ~ Skipping duplicate: Basel Musaed on 2026-03-06
+  Sat (2026-03-07): 5 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-07
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-07
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-07
+    ~ Skipping duplicate: Christine Demaras on 2026-03-07
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-07
+  Sun (2026-03-08): 5 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-08
+    ~ Skipping duplicate: Ali Elrez on 2026-03-08
+    ~ Skipping duplicate: Christine Demaras on 2026-03-08
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-08
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-08
+  Mon  (2026-03-09): 9 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-09
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-09
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-09
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-09
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-03-09
+    ~ Skipping duplicate: Ali Elrez on 2026-03-09
+    ~ Skipping duplicate: Christine Demaras on 2026-03-09
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-09
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-09
+  Tues  (2026-03-10): 11 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-10
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-10
+    ~ Skipping duplicate: Tyren Cosare on 2026-03-10
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-10
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-10
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-03-10
+    ~ Skipping duplicate: Christine Demaras on 2026-03-10
+    ~ Skipping duplicate: Maher Altairi on 2026-03-10
+    ~ Skipping duplicate: Basel Musaed on 2026-03-10
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-10
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-10
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-04 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_03_04.xlsx ...
+  Office: Rust RGA
+  Wed (2026-03-04): 12 agents with activity
+    ~ Skipping duplicate: Jasmine Marquez on 2026-03-04
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-04
+    ~ Skipping duplicate: Kristen Walton on 2026-03-04
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-04
+    ~ Skipping duplicate: Devin Gould on 2026-03-04
+    ~ Skipping duplicate: Lisa Berry on 2026-03-04
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-03-04
+    ~ Skipping duplicate: Anthony Golino on 2026-03-04
+    ~ Skipping duplicate: Cameron Platt on 2026-03-04
+    ~ Skipping duplicate: Taylor Waldrip on 2026-03-04
+    ~ Skipping duplicate: Jaedeen Perez on 2026-03-04
+    ~ Skipping duplicate: Anya White on 2026-03-04
+  Thurs (2026-03-05): 7 agents with activity
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-05
+    ~ Skipping duplicate: Kristen Walton on 2026-03-05
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-05
+    ~ Skipping duplicate: Devin Gould on 2026-03-05
+    ~ Skipping duplicate: Taylor Waldrip on 2026-03-05
+    ~ Skipping duplicate: Jeton Ajvazi on 2026-03-05
+    ~ Skipping duplicate: Jaedeen Perez on 2026-03-05
+  Fri (2026-03-06): 2 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-06
+    ~ Skipping duplicate: Devin Gould on 2026-03-06
+  Sat (2026-03-07): 4 agents with activity
+    ~ Skipping duplicate: Kristen Walton on 2026-03-07
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-07
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-07
+    ~ Skipping duplicate: Devin Gould on 2026-03-07
+  Sun (2026-03-08): 2 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-08
+    ~ Skipping duplicate: Devin Gould on 2026-03-08
+  Mon  (2026-03-09): 4 agents with activity
+    ~ Skipping duplicate: Jasmine Marquez on 2026-03-09
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-09
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-09
+    ~ Skipping duplicate: Devin Gould on 2026-03-09
+  Tues  (2026-03-10): 7 agents with activity
+    ~ Skipping duplicate: Jasmine Marquez on 2026-03-10
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-10
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-10
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-10
+    ~ Skipping duplicate: Torian Fields on 2026-03-10
+    ~ Skipping duplicate: Devin Gould on 2026-03-10
+    ~ Skipping duplicate: Anya White on 2026-03-10
+  Wed (2) (2026-03-11): 4 agents with activity
+    ~ Skipping duplicate: Jasmine Marquez on 2026-03-11
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-11
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-11
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-11
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-04 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_03_04.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-03-04): 21 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-04
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-04
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-04
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-04
+    ~ Skipping duplicate: Ronald Hishaw on 2026-03-04
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-04
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-04
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-04
+    ~ Skipping duplicate: Salai Alualu on 2026-03-04
+    ~ Skipping duplicate: Hasan Nasser on 2026-03-04
+    ~ Skipping duplicate: Ali Hammoud on 2026-03-04
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-04
+    ~ Skipping duplicate: Ali Chanine on 2026-03-04
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-04
+    ~ Skipping duplicate: Ali Nasser on 2026-03-04
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-04
+    ~ Skipping duplicate: Faye Saad on 2026-03-04
+    ~ Skipping duplicate: Ayah Hammoud on 2026-03-04
+    ~ Skipping duplicate: Ali Merhi on 2026-03-04
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-04
+    ~ Skipping duplicate: Amy Conner on 2026-03-04
+  Thurs (2026-03-05): 15 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-03-05
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-05
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-05
+    ~ Skipping duplicate: Yousif Alsaad on 2026-03-05
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-05
+    ~ Skipping duplicate: Ronald Hishaw on 2026-03-05
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-05
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-05
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-05
+    ~ Skipping duplicate: Ali Hammoud on 2026-03-05
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-05
+    ~ Skipping duplicate: Ali Chanine on 2026-03-05
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-05
+    ~ Skipping duplicate: Ali Nasser on 2026-03-05
+    ~ Skipping duplicate: Amy Conner on 2026-03-05
+  Fri (2026-03-06): 11 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-06
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-06
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-06
+    ~ Skipping duplicate: Yousif Alsaad on 2026-03-06
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-06
+    ~ Skipping duplicate: Ronald Hishaw on 2026-03-06
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-06
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-06
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-06
+    ~ Skipping duplicate: Salai Alualu on 2026-03-06
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-06
+  Sat (2026-03-07): 7 agents with activity
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-07
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-07
+    ~ Skipping duplicate: Ronald Hishaw on 2026-03-07
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-07
+    ~ Skipping duplicate: Salai Alualu on 2026-03-07
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-07
+    ~ Skipping duplicate: Amy Conner on 2026-03-07
+  Sun (2026-03-08): 4 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-08
+    ~ Skipping duplicate: Ronald Hishaw on 2026-03-08
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-08
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-08
+  Mon  (2026-03-09): 11 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-09
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-09
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-09
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-09
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-09
+    ~ Skipping duplicate: Salai Alualu on 2026-03-09
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-09
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-09
+    ~ Skipping duplicate: Ali Nasser on 2026-03-09
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-09
+    ~ Skipping duplicate: Faye Saad on 2026-03-09
+  Tues  (2026-03-10): 12 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-10
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-10
+    ~ Skipping duplicate: Ronald Hishaw on 2026-03-10
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-10
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-10
+    ~ Skipping duplicate: Salai Alualu on 2026-03-10
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-10
+    ~ Skipping duplicate: Ali Nasser on 2026-03-10
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-10
+    ~ Skipping duplicate: Ali Khanafer on 2026-03-10
+    ~ Skipping duplicate: Faye Saad on 2026-03-10
+    ~ Skipping duplicate: Amy Conner on 2026-03-10
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-11 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_03_11.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-03-11): 10 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-03-11
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-11
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-11
+    ~ Skipping duplicate: Danielle Loux on 2026-03-11
+    ~ Skipping duplicate: Lacie Herring on 2026-03-11
+    ~ Skipping duplicate: Timothy Noe on 2026-03-11
+    ~ Skipping duplicate: Preston Opperman on 2026-03-11
+    ~ Skipping duplicate: Bilal Abdullah on 2026-03-11
+    ~ Skipping duplicate: Kain White-Conley on 2026-03-11
+    ~ Skipping duplicate: Ken Hermann on 2026-03-11
+  Thurs (2026-03-12): 10 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-03-12
+    ~ Skipping duplicate: Julian Hyman on 2026-03-12
+    ~ Skipping duplicate: Marcus Norton on 2026-03-12
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-12
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-12
+    ~ Skipping duplicate: Melissa Elam on 2026-03-12
+    ~ Skipping duplicate: Frances Gonzalez on 2026-03-12
+    ~ Skipping duplicate: Lacie Herring on 2026-03-12
+    ~ Skipping duplicate: Timothy Noe on 2026-03-12
+    ~ Skipping duplicate: Ken Hermann on 2026-03-12
+  Fri (2026-03-13): 11 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-03-13
+    ~ Skipping duplicate: Joylynn Harris on 2026-03-13
+    ~ Skipping duplicate: Julian Hyman on 2026-03-13
+    ~ Skipping duplicate: Marcus Norton on 2026-03-13
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-13
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-13
+    ~ Skipping duplicate: Danielle Loux on 2026-03-13
+    ~ Skipping duplicate: Lacie Herring on 2026-03-13
+    ~ Skipping duplicate: Timothy Noe on 2026-03-13
+    ~ Skipping duplicate: Preston Opperman on 2026-03-13
+    ~ Skipping duplicate: Ken Hermann on 2026-03-13
+  Sat (2026-03-14): 6 agents with activity
+    ~ Skipping duplicate: Joylynn Harris on 2026-03-14
+    ~ Skipping duplicate: Shafay Sutton on 2026-03-14
+    ~ Skipping duplicate: Marcus Norton on 2026-03-14
+    ~ Skipping duplicate: Melissa Elam on 2026-03-14
+    ~ Skipping duplicate: Danielle Loux on 2026-03-14
+    ~ Skipping duplicate: Timothy Noe on 2026-03-14
+  Sun (2026-03-15): 3 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-03-15
+    ~ Skipping duplicate: Ken Hermann on 2026-03-15
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-03-15
+  Mon  (2026-03-16): 8 agents with activity
+    ~ Skipping duplicate: Marci Dyer on 2026-03-16
+    ~ Skipping duplicate: Joylynn Harris on 2026-03-16
+    ~ Skipping duplicate: Rick Argote on 2026-03-16
+    ~ Skipping duplicate: Julian Hyman on 2026-03-16
+    ~ Skipping duplicate: Marcus Norton on 2026-03-16
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-16
+    ~ Skipping duplicate: Timothy Noe on 2026-03-16
+    ~ Skipping duplicate: Ken Hermann on 2026-03-16
+  Tues  (2026-03-17): 9 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-03-17
+    ~ Skipping duplicate: Rick Argote on 2026-03-17
+    ~ Skipping duplicate: Julian Hyman on 2026-03-17
+    ~ Skipping duplicate: Marcus Norton on 2026-03-17
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-17
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-17
+    ~ Skipping duplicate: Melissa Elam on 2026-03-17
+    ~ Skipping duplicate: Timothy Noe on 2026-03-17
+    ~ Skipping duplicate: Ken Hermann on 2026-03-17
+  Wed (2) (2026-03-18): 2 agents with activity
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-03-18
+    ~ Skipping duplicate: Wendy Huber on 2026-03-18
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-11 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_03_11.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-03-11): 11 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-11
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-11
+    ~ Skipping duplicate: Tyren Cosare on 2026-03-11
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-11
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-11
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-03-11
+    ~ Skipping duplicate: Christine Demaras on 2026-03-11
+    ~ Skipping duplicate: Lamese Bader on 2026-03-11
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-11
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-11
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-11
+  Thurs (2026-03-12): 9 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-12
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-12
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-12
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-12
+    ~ Skipping duplicate: Maher Altairi on 2026-03-12
+    ~ Skipping duplicate: Basel Musaed on 2026-03-12
+    ~ Skipping duplicate: Lamese Bader on 2026-03-12
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-12
+    ~ Skipping duplicate: Tina Tilley on 2026-03-12
+  Fri (2026-03-13): 8 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-13
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-13
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-13
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-13
+    ~ Skipping duplicate: Ali Elrez on 2026-03-13
+    ~ Skipping duplicate: Christine Demaras on 2026-03-13
+    ~ Skipping duplicate: Basel Musaed on 2026-03-13
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-13
+  Sat (2026-03-14): 3 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-14
+    ~ Skipping duplicate: Basel Musaed on 2026-03-14
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-14
+  Sun (2026-03-15): 5 agents with activity
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-15
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-15
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-15
+    ~ Skipping duplicate: Basel Musaed on 2026-03-15
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-15
+  Mon  (2026-03-16): 7 agents with activity
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-16
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-16
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-16
+    ~ Skipping duplicate: Christine Demaras on 2026-03-16
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-16
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-16
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-16
+  Tues  (2026-03-17): 7 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-17
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-17
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-17
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-17
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-17
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-17
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-17
+  Wed (2) (2026-03-18): 2 agents with activity
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-18
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-18
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-11 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_03_11.xlsx ...
+  Office: Rust RGA
+  Wed (2026-03-11): 6 agents with activity
+    ~ Skipping duplicate: Jasmine Marquez on 2026-03-11
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-11
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-11
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-11
+    ~ Skipping duplicate: Torian Fields on 2026-03-11
+    ~ Skipping duplicate: Devin Gould on 2026-03-11
+  Thurs (2026-03-12): 5 agents with activity
+    ~ Skipping duplicate: Jasmine Marquez on 2026-03-12
+    ~ Skipping duplicate: Kristen Walton on 2026-03-12
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-12
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-12
+    ~ Skipping duplicate: Taylor Waldrip on 2026-03-12
+  Fri (2026-03-13): 3 agents with activity
+    ~ Skipping duplicate: Kristen Walton on 2026-03-13
+    ~ Skipping duplicate: Devin Gould on 2026-03-13
+    ~ Skipping duplicate: Jeton Ajvazi on 2026-03-13
+  Sat (2026-03-14): 1 agents with activity
+    ~ Skipping duplicate: Devin Gould on 2026-03-14
+  Sun (2026-03-15): 1 agents with activity
+    ~ Skipping duplicate: Devin Gould on 2026-03-15
+  Mon  (2026-03-16): 2 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-16
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-16
+  Tues  (2026-03-17): 4 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-17
+    ~ Skipping duplicate: Devin Gould on 2026-03-17
+    ~ Skipping duplicate: Anthony Golino on 2026-03-17
+    ~ Skipping duplicate: Cameron Platt on 2026-03-17
+  Wed (2) (2026-03-18): 1 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-18
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-11 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_03_11.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-03-11): 13 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-03-11
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-11
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-11
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-11
+    ~ Skipping duplicate: Ronald Hishaw on 2026-03-11
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-11
+    ~ Skipping duplicate: Tolu Alualu on 2026-03-11
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-11
+    ~ Skipping duplicate: Salai Alualu on 2026-03-11
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-11
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-11
+    ~ Skipping duplicate: Faye Saad on 2026-03-11
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-11
+  Thurs (2026-03-12): 13 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-03-12
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-12
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-12
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-12
+    ~ Skipping duplicate: Ronald Hishaw on 2026-03-12
+    ~ Skipping duplicate: Tolu Alualu on 2026-03-12
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-12
+    ~ Skipping duplicate: Salai Alualu on 2026-03-12
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-12
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-12
+    ~ Skipping duplicate: Faye Saad on 2026-03-12
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-12
+    ~ Skipping duplicate: Amy Conner on 2026-03-12
+  Fri (2026-03-13): 6 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-13
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-13
+    ~ Skipping duplicate: Salai Alualu on 2026-03-13
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-13
+    ~ Skipping duplicate: Faye Saad on 2026-03-13
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-13
+  Sat (2026-03-14): 5 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-14
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-14
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-14
+    ~ Skipping duplicate: Salai Alualu on 2026-03-14
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-14
+  Mon  (2026-03-16): 9 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-16
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-16
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-16
+    ~ Skipping duplicate: Salai Alualu on 2026-03-16
+    ~ Skipping duplicate: Ali Hammoud on 2026-03-16
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-16
+    ~ Skipping duplicate: Ali Chanine on 2026-03-16
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-16
+    ~ Skipping duplicate: Ali Nasser on 2026-03-16
+  Tues  (2026-03-17): 10 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-17
+    ~ Skipping duplicate: Yousif Alsaad on 2026-03-17
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-17
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-17
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-17
+    ~ Skipping duplicate: Salai Alualu on 2026-03-17
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-17
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-17
+    ~ Skipping duplicate: Ali Nasser on 2026-03-17
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-17
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-18 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_03_18.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-03-18): 15 agents with activity
+    ~ Skipping duplicate: Rick Argote on 2026-03-18
+    ~ Skipping duplicate: Julian Hyman on 2026-03-18
+    ~ Skipping duplicate: Marcus Norton on 2026-03-18
+    ~ Skipping duplicate: Danielle Loux on 2026-03-18
+    ~ Skipping duplicate: Frances Gonzalez on 2026-03-18
+    ~ Skipping duplicate: Timothy Noe on 2026-03-18
+    ~ Skipping duplicate: Preston Opperman on 2026-03-18
+    ~ Skipping duplicate: Bilal Abdullah on 2026-03-18
+    ~ Skipping duplicate: Jacob Brown on 2026-03-18
+    ~ Skipping duplicate: Kristen Fox on 2026-03-18
+    ~ Skipping duplicate: Marci Dyer on 2026-03-18
+    ~ Skipping duplicate: Michael Hall on 2026-03-18
+    ~ Skipping duplicate: Toel Jefferson on 2026-03-18
+    ~ Skipping duplicate: Jordan McFarlane on 2026-03-18
+    ~ Skipping duplicate: Ken Hermann on 2026-03-18
+  Thurs (2026-03-19): 10 agents with activity
+    ~ Skipping duplicate: Rick Argote on 2026-03-19
+    ~ Skipping duplicate: Marcus Norton on 2026-03-19
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-19
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-19
+    ~ Skipping duplicate: Danielle Loux on 2026-03-19
+    ~ Skipping duplicate: Frances Gonzalez on 2026-03-19
+    ~ Skipping duplicate: Timothy Noe on 2026-03-19
+    ~ Skipping duplicate: Toel Jefferson on 2026-03-19
+    ~ Skipping duplicate: Jordan McFarlane on 2026-03-19
+    ~ Skipping duplicate: Ken Hermann on 2026-03-19
+  Fri (2026-03-20): 5 agents with activity
+    ~ Skipping duplicate: Marcus Norton on 2026-03-20
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-20
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-20
+    ~ Skipping duplicate: Timothy Noe on 2026-03-20
+    ~ Skipping duplicate: Shafay Sutton on 2026-03-20
+  Sat (2026-03-21): 2 agents with activity
+    ~ Skipping duplicate: Marcus Norton on 2026-03-21
+    ~ Skipping duplicate: Ken Hermann on 2026-03-21
+  Sun (2026-03-22): 3 agents with activity
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-03-22
+    ~ Skipping duplicate: Wendy Huber on 2026-03-22
+    ~ Skipping duplicate: Bryanna Wagner on 2026-03-22
+  Mon  (2026-03-23): 5 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-03-23
+    ~ Skipping duplicate: Danielle Loux on 2026-03-23
+    ~ Skipping duplicate: Lacie Herring on 2026-03-23
+    ~ Skipping duplicate: Kristen Fox on 2026-03-23
+    ~ Skipping duplicate: Ken Hermann on 2026-03-23
+  Tues  (2026-03-24): 10 agents with activity
+    ~ Skipping duplicate: Melissa Elam on 2026-03-24
+    ~ Skipping duplicate: Danielle Loux on 2026-03-24
+    ~ Skipping duplicate: Lacie Herring on 2026-03-24
+    ~ Skipping duplicate: Preston Opperman on 2026-03-24
+    ~ Skipping duplicate: Shafay Sutton on 2026-03-24
+    ~ Skipping duplicate: Michael Hall on 2026-03-24
+    ~ Skipping duplicate: Ken Hermann on 2026-03-24
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-03-24
+    ~ Skipping duplicate: Wendy Huber on 2026-03-24
+    ~ Skipping duplicate: Bryanna Wagner on 2026-03-24
+  Wed (2) (2026-03-25): 2 agents with activity
+    ~ Skipping duplicate: Danielle Loux on 2026-03-25
+    ~ Skipping duplicate: Lacie Herring on 2026-03-25
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-18 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_03_18.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-03-18): 9 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-18
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-18
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-18
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-18
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-03-18
+    ~ Skipping duplicate: Basel Musaed on 2026-03-18
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-18
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-18
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-18
+  Thurs (2026-03-19): 9 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-19
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-19
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-19
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-19
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-19
+    ~ Skipping duplicate: Lamese Bader on 2026-03-19
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-19
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-19
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-19
+  Fri (2026-03-20): 6 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-20
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-20
+    ~ Skipping duplicate: Christine Demaras on 2026-03-20
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-20
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-20
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-20
+  Sat (2026-03-21): 4 agents with activity
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-21
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-21
+    ~ Skipping duplicate: Maher Altairi on 2026-03-21
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-21
+  Sun (2026-03-22): 4 agents with activity
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-22
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-22
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-03-22
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-22
+  Mon  (2026-03-23): 11 agents with activity
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-23
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-23
+    ~ Skipping duplicate: Tyren Cosare on 2026-03-23
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-23
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-03-23
+    ~ Skipping duplicate: Christine Demaras on 2026-03-23
+    ~ Skipping duplicate: Maher Altairi on 2026-03-23
+    ~ Skipping duplicate: Basel Musaed on 2026-03-23
+    ~ Skipping duplicate: Lamese Bader on 2026-03-23
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-23
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-23
+  Tues  (2026-03-24): 10 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-03-24
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-24
+    ~ Skipping duplicate: Tyren Cosare on 2026-03-24
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-24
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-03-24
+    ~ Skipping duplicate: Christine Demaras on 2026-03-24
+    ~ Skipping duplicate: Maher Altairi on 2026-03-24
+    ~ Skipping duplicate: Lamese Bader on 2026-03-24
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-24
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-24
+  Wed (2) (2026-03-25): 2 agents with activity
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-25
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-25
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-18 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_03_18.xlsx ...
+  Office: Rust RGA
+  Wed (2026-03-18): 9 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-18
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-18
+    ~ Skipping duplicate: Kristen Walton on 2026-03-18
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-18
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-18
+    ~ Skipping duplicate: Devin Gould on 2026-03-18
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-03-18
+    ~ Skipping duplicate: Cameron Platt on 2026-03-18
+    ~ Skipping duplicate: Kelsey Folcarelli on 2026-03-18
+  Thurs (2026-03-19): 9 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-19
+    ~ Skipping duplicate: Jasmine Marquez on 2026-03-19
+    ~ Skipping duplicate: Kristen Walton on 2026-03-19
+    ~ Skipping duplicate: Thomas Kirk on 2026-03-19
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-19
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-19
+    ~ Skipping duplicate: Devin Gould on 2026-03-19
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-03-19
+    ~ Skipping duplicate: Taylor Waldrip on 2026-03-19
+  Fri (2026-03-20): 4 agents with activity
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-20
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-20
+    ~ Skipping duplicate: Devin Gould on 2026-03-20
+    ~ Skipping duplicate: Maria Farley on 2026-03-20
+  Sat (2026-03-21): 3 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-21
+    ~ Skipping duplicate: Devin Gould on 2026-03-21
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-03-21
+  Mon  (2026-03-23): 8 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-23
+    ~ Skipping duplicate: Jasmine Marquez on 2026-03-23
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-23
+    ~ Skipping duplicate: Kristen Walton on 2026-03-23
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-23
+    ~ Skipping duplicate: Devin Gould on 2026-03-23
+    ~ Skipping duplicate: Anthony Golino on 2026-03-23
+    ~ Skipping duplicate: Maria Farley on 2026-03-23
+  Tues  (2026-03-24): 7 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-24
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-24
+    ~ Skipping duplicate: Kristen Walton on 2026-03-24
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-24
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-24
+    ~ Skipping duplicate: Devin Gould on 2026-03-24
+    ~ Skipping duplicate: Anthony Golino on 2026-03-24
+  Wed (2) (2026-03-25): 1 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-25
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-18 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_03_18.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-03-18): 11 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-03-18
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-18
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-18
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-18
+    ~ Skipping duplicate: Tolu Alualu on 2026-03-18
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-18
+    ~ Skipping duplicate: Salai Alualu on 2026-03-18
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-18
+    ~ Skipping duplicate: Ali Nasser on 2026-03-18
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-18
+    ~ Skipping duplicate: Faye Saad on 2026-03-18
+  Thurs (2026-03-19): 10 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-03-19
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-19
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-19
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-19
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-19
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-19
+    ~ Skipping duplicate: Salai Alualu on 2026-03-19
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-19
+    ~ Skipping duplicate: Ali Khanafer on 2026-03-19
+    ~ Skipping duplicate: Faye Saad on 2026-03-19
+  Fri (2026-03-20): 6 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-03-20
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-20
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-20
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-20
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-20
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-20
+  Sat (2026-03-21): 8 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-21
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-21
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-21
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-21
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-21
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-21
+    ~ Skipping duplicate: Hussein Habhab on 2026-03-21
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-21
+  Sun (2026-03-22): 4 agents with activity
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-22
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-22
+    ~ Skipping duplicate: Ali Nasser on 2026-03-22
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-22
+  Mon  (2026-03-23): 18 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-03-23
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-23
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-23
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-23
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-23
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-23
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-23
+    ~ Skipping duplicate: Tolu Alualu on 2026-03-23
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-23
+    ~ Skipping duplicate: Salai Alualu on 2026-03-23
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-23
+    ~ Skipping duplicate: Ali Chanine on 2026-03-23
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-23
+    ~ Skipping duplicate: Ali Nasser on 2026-03-23
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-23
+    ~ Skipping duplicate: Hussein Habhab on 2026-03-23
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-23
+    ~ Skipping duplicate: Amy Conner on 2026-03-23
+  Tues  (2026-03-24): 14 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-24
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-24
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-24
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-24
+    ~ Skipping duplicate: Tolu Alualu on 2026-03-24
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-24
+    ~ Skipping duplicate: Ali Chanine on 2026-03-24
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-24
+    ~ Skipping duplicate: Ali Nasser on 2026-03-24
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-24
+    ~ Skipping duplicate: Hussein Habhab on 2026-03-24
+    ~ Skipping duplicate: Ali Khanafer on 2026-03-24
+    ~ Skipping duplicate: Faye Saad on 2026-03-24
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-24
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-25 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_03_25.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-03-25): 14 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-03-25
+    ~ Skipping duplicate: Rick Argote on 2026-03-25
+    ~ Skipping duplicate: Julian Hyman on 2026-03-25
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-25
+    ~ Skipping duplicate: Melissa Elam on 2026-03-25
+    ~ Skipping duplicate: Danielle Loux on 2026-03-25
+    ~ Skipping duplicate: Andre Alire on 2026-03-25
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-25
+    ~ Skipping duplicate: Jacob Bandyk on 2026-03-25
+    ~ Skipping duplicate: Kristen Fox on 2026-03-25
+    ~ Skipping duplicate: Marci Dyer on 2026-03-25
+    ~ Skipping duplicate: LaToya Clark on 2026-03-25
+    ~ Skipping duplicate: Ken Hermann on 2026-03-25
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-03-25
+  Thurs (2026-03-26): 13 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-03-26
+    ~ Skipping duplicate: Rick Argote on 2026-03-26
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-26
+    ~ Skipping duplicate: Melissa Elam on 2026-03-26
+    ~ Skipping duplicate: Danielle Loux on 2026-03-26
+    ~ Skipping duplicate: Andre Alire on 2026-03-26
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-26
+    ~ Skipping duplicate: Jacob Bandyk on 2026-03-26
+    ~ Skipping duplicate: Joylynn Harris on 2026-03-26
+    ~ Skipping duplicate: Michael Hall on 2026-03-26
+    ~ Skipping duplicate: Derron Alexander on 2026-03-26
+    ~ Skipping duplicate: LaToya Clark on 2026-03-26
+    ~ Skipping duplicate: Ken Hermann on 2026-03-26
+  Fri (2026-03-27): 7 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-03-27
+    ~ Skipping duplicate: Melissa Elam on 2026-03-27
+    ~ Skipping duplicate: Andre Alire on 2026-03-27
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-27
+    ~ Skipping duplicate: Jacob Bandyk on 2026-03-27
+    ~ Skipping duplicate: Kristen Fox on 2026-03-27
+    ~ Skipping duplicate: Shafay Sutton on 2026-03-27
+  Sat (2026-03-28): 7 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-03-28
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-28
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-28
+    ~ Skipping duplicate: Danielle Loux on 2026-03-28
+    ~ Skipping duplicate: Andre Alire on 2026-03-28
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-28
+    ~ Skipping duplicate: Joylynn Harris on 2026-03-28
+  Sun (2026-03-29): 2 agents with activity
+    ~ Skipping duplicate: Ethan Lasley on 2026-03-29
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-29
+  Mon  (2026-03-30): 9 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-03-30
+    ~ Skipping duplicate: Julian Hyman on 2026-03-30
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-30
+    ~ Skipping duplicate: Melissa Elam on 2026-03-30
+    ~ Skipping duplicate: Ronald Montoya on 2026-03-30
+    ~ Skipping duplicate: Andre Alire on 2026-03-30
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-30
+    ~ Skipping duplicate: Jacob Bandyk on 2026-03-30
+    ~ Skipping duplicate: Joylynn Harris on 2026-03-30
+  Tues  (2026-03-31): 6 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-03-31
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-03-31
+    ~ Skipping duplicate: Melissa Elam on 2026-03-31
+    ~ Skipping duplicate: Danielle Loux on 2026-03-31
+    ~ Skipping duplicate: Andre Alire on 2026-03-31
+    ~ Skipping duplicate: Kelvin Claney on 2026-03-31
+  Wed (2) (2026-04-01): 1 agents with activity
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-04-01
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-25 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_03_25.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-03-25): 6 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-25
+    ~ Skipping duplicate: Christine Demaras on 2026-03-25
+    ~ Skipping duplicate: Lamese Bader on 2026-03-25
+    ~ Skipping duplicate: Husein Ghasham on 2026-03-25
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-25
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-25
+  Thurs (2026-03-26): 6 agents with activity
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-26
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-26
+    ~ Skipping duplicate: Husein Ghasham on 2026-03-26
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-26
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-26
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-26
+  Fri (2026-03-27): 9 agents with activity
+    ~ Skipping duplicate: Hannah Sanders on 2026-03-27
+    ~ Skipping duplicate: Tyren Cosare on 2026-03-27
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-27
+    ~ Skipping duplicate: Christine Demaras on 2026-03-27
+    ~ Skipping duplicate: Maher Altairi on 2026-03-27
+    ~ Skipping duplicate: Basel Musaed on 2026-03-27
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-27
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-03-27
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-27
+  Sat (2026-03-28): 3 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-28
+    ~ Skipping duplicate: Maher Altairi on 2026-03-28
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-28
+  Sun (2026-03-29): 3 agents with activity
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-29
+    ~ Skipping duplicate: Awni Shuaib on 2026-03-29
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-29
+  Mon  (2026-03-30): 4 agents with activity
+    ~ Skipping duplicate: Lamese Bader on 2026-03-30
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-30
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-03-30
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-30
+  Tues  (2026-03-31): 3 agents with activity
+    ~ Skipping duplicate: Gabriela Romero on 2026-03-31
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-03-31
+    ~ Skipping duplicate: Angel Ruiz on 2026-03-31
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-25 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_03_25.xlsx ...
+  Office: Rust RGA
+  Wed (2026-03-25): 10 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-03-25
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-25
+    ~ Skipping duplicate: Jasmine Marquez on 2026-03-25
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-25
+    ~ Skipping duplicate: Kristen Walton on 2026-03-25
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-25
+    ~ Skipping duplicate: Devin Gould on 2026-03-25
+    ~ Skipping duplicate: Lisa Berry on 2026-03-25
+    ~ Skipping duplicate: Taylor Waldrip on 2026-03-25
+    ~ Skipping duplicate: Jeton Ajvazi on 2026-03-25
+  Thurs (2026-03-26): 5 agents with activity
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-26
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-26
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-26
+    ~ Skipping duplicate: Devin Gould on 2026-03-26
+    ~ Skipping duplicate: Taylor Waldrip on 2026-03-26
+  Fri (2026-03-27): 6 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-27
+    ~ Skipping duplicate: Isabela Maneiro on 2026-03-27
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-27
+    ~ Skipping duplicate: Devin Gould on 2026-03-27
+    ~ Skipping duplicate: Mariah Ruff on 2026-03-27
+    ~ Skipping duplicate: Anthony Golino on 2026-03-27
+  Sat (2026-03-28): 5 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-03-28
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-28
+    ~ Skipping duplicate: Thomas Kirk on 2026-03-28
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-28
+    ~ Skipping duplicate: Devin Gould on 2026-03-28
+  Sun (2026-03-29): 1 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-29
+  Mon  (2026-03-30): 3 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-03-30
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-30
+    ~ Skipping duplicate: Shayla Williamson on 2026-03-30
+  Tues  (2026-03-31): 2 agents with activity
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-03-31
+    ~ Skipping duplicate: Kristen Walton on 2026-03-31
+  Wed (2) (2026-04-01): 2 agents with activity
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-01
+    ~ Skipping duplicate: Kristen Walton on 2026-04-01
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-03-25 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_03_25.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-03-25): 20 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-03-25
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-25
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-25
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-25
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-25
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-25
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-25
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-25
+    ~ Skipping duplicate: Salai Alualu on 2026-03-25
+    ~ Skipping duplicate: Hasan Nasser on 2026-03-25
+    ~ Skipping duplicate: Ali Hammoud on 2026-03-25
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-25
+    ~ Skipping duplicate: Ali Chanine on 2026-03-25
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-25
+    ~ Skipping duplicate: Ali Nasser on 2026-03-25
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-25
+    ~ Skipping duplicate: Hussein Habhab on 2026-03-25
+    ~ Skipping duplicate: Faye Saad on 2026-03-25
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-25
+    ~ Skipping duplicate: Amy Conner on 2026-03-25
+  Thurs (2026-03-26): 18 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-03-26
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-26
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-26
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-26
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-26
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-26
+    ~ Skipping duplicate: Tolu Alualu on 2026-03-26
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-26
+    ~ Skipping duplicate: Salai Alualu on 2026-03-26
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-26
+    ~ Skipping duplicate: Ali Chanine on 2026-03-26
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-26
+    ~ Skipping duplicate: Ali Nasser on 2026-03-26
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-26
+    ~ Skipping duplicate: Ali Khanafer on 2026-03-26
+    ~ Skipping duplicate: Faye Saad on 2026-03-26
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-26
+    ~ Skipping duplicate: Amy Conner on 2026-03-26
+  Fri (2026-03-27): 18 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-03-27
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-27
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-27
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-27
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-27
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-27
+    ~ Skipping duplicate: Korey Mucchiello on 2026-03-27
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-27
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-27
+    ~ Skipping duplicate: Salai Alualu on 2026-03-27
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-27
+    ~ Skipping duplicate: Ali Chanine on 2026-03-27
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-27
+    ~ Skipping duplicate: Ali Nasser on 2026-03-27
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-27
+    ~ Skipping duplicate: Ali Khanafer on 2026-03-27
+    ~ Skipping duplicate: Faye Saad on 2026-03-27
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-27
+  Sat (2026-03-28): 11 agents with activity
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-28
+    ~ Skipping duplicate: Tolu Alualu on 2026-03-28
+    ~ Skipping duplicate: Salai Alualu on 2026-03-28
+    ~ Skipping duplicate: Hasan Nasser on 2026-03-28
+    ~ Skipping duplicate: Ali Hammoud on 2026-03-28
+    ~ Skipping duplicate: Ali Chanine on 2026-03-28
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-28
+    ~ Skipping duplicate: Ali Nasser on 2026-03-28
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-28
+    ~ Skipping duplicate: Hussein Habhab on 2026-03-28
+    ~ Skipping duplicate: Amy Conner on 2026-03-28
+  Sun (2026-03-29): 8 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-29
+    ~ Skipping duplicate: Yousif Alsaad on 2026-03-29
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-29
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-29
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-29
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-29
+    ~ Skipping duplicate: Ali Hammoud on 2026-03-29
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-29
+  Mon  (2026-03-30): 18 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-03-30
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-30
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-30
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-30
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-30
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-30
+    ~ Skipping duplicate: Tolu Alualu on 2026-03-30
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-30
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-30
+    ~ Skipping duplicate: Ali Chanine on 2026-03-30
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-30
+    ~ Skipping duplicate: Ali Nasser on 2026-03-30
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-30
+    ~ Skipping duplicate: Hussein Habhab on 2026-03-30
+    ~ Skipping duplicate: Ali Khanafer on 2026-03-30
+    ~ Skipping duplicate: Ayah Hammoud on 2026-03-30
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-30
+    ~ Skipping duplicate: Amy Conner on 2026-03-30
+  Tues  (2026-03-31): 18 agents with activity
+    ~ Skipping duplicate: Ashton Marshall on 2026-03-31
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-03-31
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-03-31
+    ~ Skipping duplicate: Ali Alwatan on 2026-03-31
+    ~ Skipping duplicate: Korey Mucchiello on 2026-03-31
+    ~ Skipping duplicate: Sabrina Leu on 2026-03-31
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-03-31
+    ~ Skipping duplicate: Ali Hammoud on 2026-03-31
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-03-31
+    ~ Skipping duplicate: Ali Chanine on 2026-03-31
+    ~ Skipping duplicate: Hassane Zahr on 2026-03-31
+    ~ Skipping duplicate: Ali Nasser on 2026-03-31
+    ~ Skipping duplicate: Mohammad Saad on 2026-03-31
+    ~ Skipping duplicate: Hussein Habhab on 2026-03-31
+    ~ Skipping duplicate: Ali Khanafer on 2026-03-31
+    ~ Skipping duplicate: Faye Saad on 2026-03-31
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-03-31
+    ~ Skipping duplicate: Amy Conner on 2026-03-31
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-01 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_04_01.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-04-01): 4 agents with activity
+    ~ Skipping duplicate: Cheri DiPiero on 2026-04-01
+    ~ Skipping duplicate: Regina Gumma on 2026-04-01
+    ~ Skipping duplicate: Andre Alire on 2026-04-01
+    ~ Skipping duplicate: Kelvin Claney on 2026-04-01
+  Thurs (2026-04-02): 3 agents with activity
+    ~ Skipping duplicate: Cheri DiPiero on 2026-04-02
+    ~ Skipping duplicate: Andre Alire on 2026-04-02
+    ~ Skipping duplicate: Ken Hermann on 2026-04-02
+  Fri (2026-04-03): 4 agents with activity
+    ~ Skipping duplicate: Cheri DiPiero on 2026-04-03
+    ~ Skipping duplicate: Andre Alire on 2026-04-03
+    ~ Skipping duplicate: Joylynn Harris on 2026-04-03
+    ~ Skipping duplicate: Derron Alexander on 2026-04-03
+  Sat (2026-04-04): 2 agents with activity
+    ~ Skipping duplicate: Andre Alire on 2026-04-04
+    ~ Skipping duplicate: LaToya Clark on 2026-04-04
+  Sun (2026-04-05): 4 agents with activity
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-04-05
+    ~ Skipping duplicate: Wendy Huber on 2026-04-05
+    ~ Skipping duplicate: Alissa Charles on 2026-04-05
+    ~ Skipping duplicate: Jennifer Munson on 2026-04-05
+  Mon  (2026-04-06): 3 agents with activity
+    ~ Skipping duplicate: Melissa Elam on 2026-04-06
+    ~ Skipping duplicate: Ronald Montoya on 2026-04-06
+    ~ Skipping duplicate: Danielle Loux on 2026-04-06
+  Wed (2) (2026-04-08): 2 agents with activity
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-04-08
+    ~ Skipping duplicate: Wendy Huber on 2026-04-08
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-01 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_04_01.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-04-01): 4 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-01
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-04-01
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-04-01
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-01
+  Thurs (2026-04-02): 4 agents with activity
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-04-02
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-04-02
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-02
+    ~ Skipping duplicate: Bruce Curry on 2026-04-02
+  Sat (2026-04-04): 1 agents with activity
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-04
+  Mon  (2026-04-06): 4 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-06
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-04-06
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-04-06
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-06
+  Tues  (2026-04-07): 4 agents with activity
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-04-07
+    ~ Skipping duplicate: Maher Altairi on 2026-04-07
+    ~ Skipping duplicate: Husein Ghasham on 2026-04-07
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-07
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-01 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_04_01.xlsx ...
+  Office: Rust RGA
+  Wed (2026-04-01): 3 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-01
+    ~ Skipping duplicate: Kristen Walton on 2026-04-01
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-01
+  Thurs (2026-04-02): 2 agents with activity
+    ~ Skipping duplicate: Kristen Walton on 2026-04-02
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-02
+  Fri (2026-04-03): 5 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-03
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-03
+    ~ Skipping duplicate: Kristen Walton on 2026-04-03
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-03
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-03
+  Mon  (2026-04-06): 1 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-06
+  Tues  (2026-04-07): 5 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-07
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-07
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-07
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-07
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-07
+  Wed (2) (2026-04-08): 5 agents with activity
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-08
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-08
+    ~ Skipping duplicate: Kristen Walton on 2026-04-08
+    ~ Skipping duplicate: Isabela Maneiro on 2026-04-08
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-08
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-01 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_04_01.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-04-01): 12 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-04-01
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-01
+    ~ Skipping duplicate: Korey Mucchiello on 2026-04-01
+    ~ Skipping duplicate: Ali Hammoud on 2026-04-01
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-04-01
+    ~ Skipping duplicate: Ali Chanine on 2026-04-01
+    ~ Skipping duplicate: Ali Nasser on 2026-04-01
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-01
+    ~ Skipping duplicate: Ali Khanafer on 2026-04-01
+    ~ Skipping duplicate: Faye Saad on 2026-04-01
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-01
+    ~ Skipping duplicate: Omran Daher on 2026-04-01
+  Thurs (2026-04-02): 13 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-04-02
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-04-02
+    ~ Skipping duplicate: Ali Alwatan on 2026-04-02
+    ~ Skipping duplicate: Korey Mucchiello on 2026-04-02
+    ~ Skipping duplicate: Ali Chanine on 2026-04-02
+    ~ Skipping duplicate: Hassane Zahr on 2026-04-02
+    ~ Skipping duplicate: Ali Nasser on 2026-04-02
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-02
+    ~ Skipping duplicate: Hussein Habhab on 2026-04-02
+    ~ Skipping duplicate: Faye Saad on 2026-04-02
+    ~ Skipping duplicate: Ayah Hammoud on 2026-04-02
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-02
+    ~ Skipping duplicate: Amy Conner on 2026-04-02
+  Fri (2026-04-03): 10 agents with activity
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-04-03
+    ~ Skipping duplicate: Ali Alwatan on 2026-04-03
+    ~ Skipping duplicate: Korey Mucchiello on 2026-04-03
+    ~ Skipping duplicate: Tolu Alualu on 2026-04-03
+    ~ Skipping duplicate: Ali Chanine on 2026-04-03
+    ~ Skipping duplicate: Hassane Zahr on 2026-04-03
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-03
+    ~ Skipping duplicate: Hussein Habhab on 2026-04-03
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-03
+    ~ Skipping duplicate: Amy Conner on 2026-04-03
+  Sat (2026-04-04): 4 agents with activity
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-04-04
+    ~ Skipping duplicate: Ali Alwatan on 2026-04-04
+    ~ Skipping duplicate: Ali Chanine on 2026-04-04
+    ~ Skipping duplicate: Hassane Zahr on 2026-04-04
+  Mon  (2026-04-06): 6 agents with activity
+    ~ Skipping duplicate: Hassane Zahr on 2026-04-06
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-06
+    ~ Skipping duplicate: Hussein Habhab on 2026-04-06
+    ~ Skipping duplicate: Ali Kawtharani on 2026-04-06
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-06
+    ~ Skipping duplicate: Omran Daher on 2026-04-06
+  Tues  (2026-04-07): 6 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-07
+    ~ Skipping duplicate: Hassane Zahr on 2026-04-07
+    ~ Skipping duplicate: Ali Nasser on 2026-04-07
+    ~ Skipping duplicate: Faye Saad on 2026-04-07
+    ~ Skipping duplicate: Ali Kawtharani on 2026-04-07
+    ~ Skipping duplicate: Amy Conner on 2026-04-07
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-08 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_04_08.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-04-08): 9 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-04-08
+    ~ Skipping duplicate: Michael Hall on 2026-04-08
+    ~ Skipping duplicate: Sasha Blake on 2026-04-08
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-04-08
+    ~ Skipping duplicate: Paige Weatherhead on 2026-04-08
+    ~ Skipping duplicate: Wendy Huber on 2026-04-08
+    ~ Skipping duplicate: Alissa Charles on 2026-04-08
+    ~ Skipping duplicate: Jennifer Munson on 2026-04-08
+    ~ Skipping duplicate: Bryanna Wagner on 2026-04-08
+  Thurs (2026-04-09): 5 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-04-09
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-04-09
+    ~ Skipping duplicate: Keith Chmiel on 2026-04-09
+    ~ Skipping duplicate: Ken Hermann on 2026-04-09
+    ~ Skipping duplicate: Sasha Blake on 2026-04-09
+  Fri (2026-04-10): 3 agents with activity
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-04-10
+    ~ Skipping duplicate: Kristen Fox on 2026-04-10
+    ~ Skipping duplicate: Sasha Blake on 2026-04-10
+  Sat (2026-04-11): 4 agents with activity
+    ~ Skipping duplicate: Rick Argote on 2026-04-11
+    ~ Skipping duplicate: Julian Hyman on 2026-04-11
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-04-11
+    ~ Skipping duplicate: Derron Alexander on 2026-04-11
+  Sun (2026-04-12): 3 agents with activity
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-04-12
+    ~ Skipping duplicate: Keith Chmiel on 2026-04-12
+    ~ Skipping duplicate: Ken Hermann on 2026-04-12
+  Mon  (2026-04-13): 12 agents with activity
+    ~ Skipping duplicate: Rick Argote on 2026-04-13
+    ~ Skipping duplicate: Julian Hyman on 2026-04-13
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-04-13
+    ~ Skipping duplicate: Ethan Lasley on 2026-04-13
+    ~ Skipping duplicate: Keith Chmiel on 2026-04-13
+    ~ Skipping duplicate: Ronald Montoya on 2026-04-13
+    ~ Skipping duplicate: Danielle Loux on 2026-04-13
+    ~ Skipping duplicate: Kristen Fox on 2026-04-13
+    ~ Skipping duplicate: Dylan Alexander on 2026-04-13
+    ~ Skipping duplicate: LaToya Clark on 2026-04-13
+    ~ Skipping duplicate: Ken Hermann on 2026-04-13
+    ~ Skipping duplicate: Sasha Blake on 2026-04-13
+  Tues  (2026-04-14): 3 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-04-14
+    ~ Skipping duplicate: Keith Chmiel on 2026-04-14
+    ~ Skipping duplicate: Sasha Blake on 2026-04-14
+  Wed (2) (2026-04-15): 8 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-04-15
+    ~ Skipping duplicate: Brittany Luke on 2026-04-15
+    ~ Skipping duplicate: Derron Alexander on 2026-04-15
+    ~ Skipping duplicate: Dylan Alexander on 2026-04-15
+    ~ Skipping duplicate: LaToya Clark on 2026-04-15
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-04-15
+    ~ Skipping duplicate: Wendy Huber on 2026-04-15
+    ~ Skipping duplicate: Bryanna Wagner on 2026-04-15
+  Thurs (2) (2026-04-16): 3 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-04-16
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-04-16
+    ~ Skipping duplicate: Keith Chmiel on 2026-04-16
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-08 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_04_08.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-04-08): 3 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-08
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-04-08
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-08
+  Thurs (2026-04-09): 2 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-09
+    ~ Skipping duplicate: Angel Ruiz on 2026-04-09
+  Fri (2026-04-10): 1 agents with activity
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-04-10
+  Sat (2026-04-11): 1 agents with activity
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-11
+  Sun (2026-04-12): 3 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-12
+    ~ Skipping duplicate: Maher Altairi on 2026-04-12
+    ~ Skipping duplicate: Angel Ruiz on 2026-04-12
+  Mon  (2026-04-13): 8 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-13
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-04-13
+    ~ Skipping duplicate: Christine Demaras on 2026-04-13
+    ~ Skipping duplicate: Maher Altairi on 2026-04-13
+    ~ Skipping duplicate: Basel Musaed on 2026-04-13
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-04-13
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-13
+    ~ Skipping duplicate: Angel Ruiz on 2026-04-13
+  Tues  (2026-04-14): 7 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-14
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-04-14
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-04-14
+    ~ Skipping duplicate: Christine Demaras on 2026-04-14
+    ~ Skipping duplicate: Maher Altairi on 2026-04-14
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-14
+    ~ Skipping duplicate: Angel Ruiz on 2026-04-14
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-08 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_04_08.xlsx ...
+  Office: Rust RGA
+  Wed (2026-04-08): 8 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-08
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-08
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-08
+    ~ Skipping duplicate: Kristen Walton on 2026-04-08
+    ~ Skipping duplicate: Isabela Maneiro on 2026-04-08
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-08
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-08
+    ~ Skipping duplicate: Devin Gould on 2026-04-08
+  Thurs (2026-04-09): 5 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-09
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-09
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-09
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-09
+    ~ Skipping duplicate: Devin Gould on 2026-04-09
+  Fri (2026-04-10): 7 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-04-10
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-10
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-10
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-10
+    ~ Skipping duplicate: Isabela Maneiro on 2026-04-10
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-10
+    ~ Skipping duplicate: Devin Gould on 2026-04-10
+  Sat (2026-04-11): 7 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-04-11
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-11
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-11
+    ~ Skipping duplicate: Kristen Walton on 2026-04-11
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-11
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-11
+    ~ Skipping duplicate: Devin Gould on 2026-04-11
+  Sun (2026-04-12): 6 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-04-12
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-12
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-12
+    ~ Skipping duplicate: Kristen Walton on 2026-04-12
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-12
+    ~ Skipping duplicate: Devin Gould on 2026-04-12
+  Mon  (2026-04-13): 5 agents with activity
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-13
+    ~ Skipping duplicate: Kristen Walton on 2026-04-13
+    ~ Skipping duplicate: Thomas Kirk on 2026-04-13
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-13
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-13
+  Tues  (2026-04-14): 11 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-14
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-14
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-14
+    ~ Skipping duplicate: Kristen Walton on 2026-04-14
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-14
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-14
+    ~ Skipping duplicate: Devin Gould on 2026-04-14
+    ~ Skipping duplicate: Lisa Berry on 2026-04-14
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-04-14
+    ~ Skipping duplicate: Mikaela Hayes on 2026-04-14
+    ~ Skipping duplicate: Kelsey Folcarelli on 2026-04-14
+  Wed (2) (2026-04-15): 3 agents with activity
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-15
+    ~ Skipping duplicate: Isabela Maneiro on 2026-04-15
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-15
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-08 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_04_08.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-04-08): 7 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-08
+    ~ Skipping duplicate: Korey Mucchiello on 2026-04-08
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-04-08
+    ~ Skipping duplicate: Hassane Zahr on 2026-04-08
+    ~ Skipping duplicate: Ali Khanafer on 2026-04-08
+    ~ Skipping duplicate: Faye Saad on 2026-04-08
+    ~ Skipping duplicate: Ali Kawtharani on 2026-04-08
+  Thurs (2026-04-09): 4 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-09
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-04-09
+    ~ Skipping duplicate: Faye Saad on 2026-04-09
+    ~ Skipping duplicate: Amy Conner on 2026-04-09
+  Fri (2026-04-10): 5 agents with activity
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-04-10
+    ~ Skipping duplicate: Ali Nasser on 2026-04-10
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-10
+    ~ Skipping duplicate: Faye Saad on 2026-04-10
+    ~ Skipping duplicate: Amy Conner on 2026-04-10
+  Sat (2026-04-11): 3 agents with activity
+    ~ Skipping duplicate: Hassane Zahr on 2026-04-11
+    ~ Skipping duplicate: Hussein Habhab on 2026-04-11
+    ~ Skipping duplicate: Amy Conner on 2026-04-11
+  Sun (2026-04-12): 1 agents with activity
+    ~ Skipping duplicate: Hassane Zahr on 2026-04-12
+  Mon  (2026-04-13): 10 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-13
+    ~ Skipping duplicate: Ali Alwatan on 2026-04-13
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-04-13
+    ~ Skipping duplicate: Ali Chanine on 2026-04-13
+    ~ Skipping duplicate: Hassane Zahr on 2026-04-13
+    ~ Skipping duplicate: Ali Nasser on 2026-04-13
+    ~ Skipping duplicate: Hussein Habhab on 2026-04-13
+    ~ Skipping duplicate: Faye Saad on 2026-04-13
+    ~ Skipping duplicate: Ali Kawtharani on 2026-04-13
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-13
+  Tues  (2026-04-14): 10 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-14
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-04-14
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-04-14
+    ~ Skipping duplicate: Ali Alwatan on 2026-04-14
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-04-14
+    ~ Skipping duplicate: Ali Chanine on 2026-04-14
+    ~ Skipping duplicate: Ali Nasser on 2026-04-14
+    ~ Skipping duplicate: Hussein Habhab on 2026-04-14
+    ~ Skipping duplicate: Faye Saad on 2026-04-14
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-14
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-15 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_04_15.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-04-15): 8 agents with activity
+    ~ Skipping duplicate: Danielle Loux on 2026-04-15
+    ~ Skipping duplicate: Timothy Noe on 2026-04-15
+    ~ Skipping duplicate: Bilal Abdullah on 2026-04-15
+    ~ Skipping duplicate: Jacob Bandyk on 2026-04-15
+    ~ Skipping duplicate: Kristen Fox on 2026-04-15
+    ~ Skipping duplicate: Michael Hall on 2026-04-15
+    ~ Skipping duplicate: Ken Hermann on 2026-04-15
+    ~ Skipping duplicate: Sasha Blake on 2026-04-15
+  Thurs (2026-04-16): 5 agents with activity
+    ~ Skipping duplicate: Melissa Elam on 2026-04-16
+    ~ Skipping duplicate: Danielle Loux on 2026-04-16
+    ~ Skipping duplicate: Timothy Noe on 2026-04-16
+    ~ Skipping duplicate: Ken Hermann on 2026-04-16
+    ~ Skipping duplicate: Sasha Blake on 2026-04-16
+  Fri (2026-04-17): 3 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-04-17
+    ~ Skipping duplicate: Ronald Montoya on 2026-04-17
+    ~ Skipping duplicate: Timothy Noe on 2026-04-17
+  Sat (2026-04-18): 6 agents with activity
+    ~ Skipping duplicate: Ronald Montoya on 2026-04-18
+    ~ Skipping duplicate: Timothy Noe on 2026-04-18
+    ~ Skipping duplicate: Bilal Abdullah on 2026-04-18
+    ~ Skipping duplicate: Kristen Fox on 2026-04-18
+    ~ Skipping duplicate: Joylynn Harris on 2026-04-18
+    ~ Skipping duplicate: Sasha Blake on 2026-04-18
+  Sun (2026-04-19): 1 agents with activity
+    ~ Skipping duplicate: Ken Hermann on 2026-04-19
+  Mon  (2026-04-20): 8 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-04-20
+    ~ Skipping duplicate: Julian Hyman on 2026-04-20
+    ~ Skipping duplicate: Danielle Loux on 2026-04-20
+    ~ Skipping duplicate: Timothy Noe on 2026-04-20
+    ~ Skipping duplicate: Kristen Fox on 2026-04-20
+    ~ Skipping duplicate: Joylynn Harris on 2026-04-20
+    ~ Skipping duplicate: LaToya Clark on 2026-04-20
+    ~ Skipping duplicate: Ken Hermann on 2026-04-20
+  Tues  (2026-04-21): 9 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-04-21
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-04-21
+    ~ Skipping duplicate: Keith Chmiel on 2026-04-21
+    ~ Skipping duplicate: Melissa Elam on 2026-04-21
+    ~ Skipping duplicate: Frances Gonzalez on 2026-04-21
+    ~ Skipping duplicate: Karina Picado on 2026-04-21
+    ~ Skipping duplicate: Timothy Noe on 2026-04-21
+    ~ Skipping duplicate: Michael Hall on 2026-04-21
+    ~ Skipping duplicate: Jordan McFarlane on 2026-04-21
+  Wed (2) (2026-04-22): 5 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-04-22
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-04-22
+    ~ Skipping duplicate: Keith Chmiel on 2026-04-22
+    ~ Skipping duplicate: Brittany Luke on 2026-04-22
+    ~ Skipping duplicate: Derron Alexander on 2026-04-22
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-15 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_04_15.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-04-15): 8 agents with activity
+    ~ Skipping duplicate: Gabriela Romero on 2026-04-15
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-15
+    ~ Skipping duplicate: Maher Altairi on 2026-04-15
+    ~ Skipping duplicate: Lamese Bader on 2026-04-15
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-04-15
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-15
+    ~ Skipping duplicate: Angel Ruiz on 2026-04-15
+    ~ Skipping duplicate: Ashley Beraty on 2026-04-15
+  Thurs (2026-04-16): 8 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-04-16
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-16
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-04-16
+    ~ Skipping duplicate: Christine Demaras on 2026-04-16
+    ~ Skipping duplicate: Lamese Bader on 2026-04-16
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-16
+    ~ Skipping duplicate: Bruce Curry on 2026-04-16
+    ~ Skipping duplicate: Angel Ruiz on 2026-04-16
+  Fri (2026-04-17): 1 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-17
+  Sun (2026-04-19): 3 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-19
+    ~ Skipping duplicate: Christine Demaras on 2026-04-19
+    ~ Skipping duplicate: Angel Ruiz on 2026-04-19
+  Mon  (2026-04-20): 6 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-20
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-04-20
+    ~ Skipping duplicate: Christine Demaras on 2026-04-20
+    ~ Skipping duplicate: Maher Altairi on 2026-04-20
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-04-20
+    ~ Skipping duplicate: Angel Ruiz on 2026-04-20
+  Tues  (2026-04-21): 8 agents with activity
+    ~ Skipping duplicate: Cameron Porter on 2026-04-21
+    ~ Skipping duplicate: Hannah Sanders on 2026-04-21
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-21
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-04-21
+    ~ Skipping duplicate: Christine Demaras on 2026-04-21
+    ~ Skipping duplicate: Lamese Bader on 2026-04-21
+    ~ Skipping duplicate: Husein Ghasham on 2026-04-21
+    ~ Skipping duplicate: Angel Ruiz on 2026-04-21
+  Wed (2) (2026-04-22): 2 agents with activity
+    ~ Skipping duplicate: Christine Demaras on 2026-04-22
+    ~ Skipping duplicate: Husein Ghasham on 2026-04-22
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-15 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_04_15.xlsx ...
+  Office: Rust RGA
+  Wed (2026-04-15): 8 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-04-15
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-15
+    ~ Skipping duplicate: Ryan Cummings on 2026-04-15
+    ~ Skipping duplicate: Andrew Child on 2026-04-15
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-15
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-15
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-15
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-15
+  Thurs (2026-04-16): 6 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-16
+    ~ Skipping duplicate: Ryan Cummings on 2026-04-16
+    ~ Skipping duplicate: Andrew Child on 2026-04-16
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-16
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-16
+    ~ Skipping duplicate: Torian Fields on 2026-04-16
+  Fri (2026-04-17): 10 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-04-17
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-17
+    ~ Skipping duplicate: Andrew Child on 2026-04-17
+    ~ Skipping duplicate: Jaxon Holt on 2026-04-17
+    ~ Skipping duplicate: Sean Seelbach on 2026-04-17
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-17
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-17
+    ~ Skipping duplicate: Kristen Walton on 2026-04-17
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-17
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-17
+  Sat (2026-04-18): 4 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-18
+    ~ Skipping duplicate: Isabela Maneiro on 2026-04-18
+    ~ Skipping duplicate: Ryan Cummings on 2026-04-18
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-18
+  Sun (2026-04-19): 1 agents with activity
+    ~ Skipping duplicate: Karly Kelly on 2026-04-19
+  Mon  (2026-04-20): 5 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-20
+    ~ Skipping duplicate: Ryan Cummings on 2026-04-20
+    ~ Skipping duplicate: Kristen Walton on 2026-04-20
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-20
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-20
+  Tues  (2026-04-21): 6 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-21
+    ~ Skipping duplicate: Ryan Cummings on 2026-04-21
+    ~ Skipping duplicate: Jaxon Holt on 2026-04-21
+    ~ Skipping duplicate: Sean Seelbach on 2026-04-21
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-21
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-21
+  Wed (2) (2026-04-22): 1 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-22
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-15 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_04_15.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-04-15): 12 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-04-15
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-15
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-04-15
+    ~ Skipping duplicate: Gabriel Alsheeblawy on 2026-04-15
+    ~ Skipping duplicate: Ali Alameedi on 2026-04-15
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-04-15
+    ~ Skipping duplicate: Ali Alwatan on 2026-04-15
+    ~ Skipping duplicate: Korey Mucchiello on 2026-04-15
+    ~ Skipping duplicate: Ali Nasser on 2026-04-15
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-15
+    ~ Skipping duplicate: Ali Kawtharani on 2026-04-15
+    ~ Skipping duplicate: Amy Conner on 2026-04-15
+  Thurs (2026-04-16): 16 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-04-16
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-16
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-04-16
+    ~ Skipping duplicate: Yousif Alsaad on 2026-04-16
+    ~ Skipping duplicate: Gabriel Alsheeblawy on 2026-04-16
+    ~ Skipping duplicate: Ali Alameedi on 2026-04-16
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-04-16
+    ~ Skipping duplicate: Ali Alwatan on 2026-04-16
+    ~ Skipping duplicate: Korey Mucchiello on 2026-04-16
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-04-16
+    ~ Skipping duplicate: Ali Chahine on 2026-04-16
+    ~ Skipping duplicate: Ali Nasser on 2026-04-16
+    ~ Skipping duplicate: Hussein Habhab on 2026-04-16
+    ~ Skipping duplicate: Ali Khanafer on 2026-04-16
+    ~ Skipping duplicate: Ali Kawtharani on 2026-04-16
+    ~ Skipping duplicate: Amy Conner on 2026-04-16
+  Fri (2026-04-17): 16 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-04-17
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-17
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-04-17
+    ~ Skipping duplicate: Yousif Alsaad on 2026-04-17
+    ~ Skipping duplicate: Gabriel Alsheeblawy on 2026-04-17
+    ~ Skipping duplicate: Ali Alameedi on 2026-04-17
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-04-17
+    ~ Skipping duplicate: Ali Alwatan on 2026-04-17
+    ~ Skipping duplicate: Ali Chahine on 2026-04-17
+    ~ Skipping duplicate: Hassane Zahr on 2026-04-17
+    ~ Skipping duplicate: Ali Nasser on 2026-04-17
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-17
+    ~ Skipping duplicate: Hussein Habhab on 2026-04-17
+    ~ Skipping duplicate: Faye Saad on 2026-04-17
+    ~ Skipping duplicate: Ali Kawtharani on 2026-04-17
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-17
+  Sat (2026-04-18): 4 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-04-18
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-18
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-18
+    ~ Skipping duplicate: Amy Conner on 2026-04-18
+  Sun (2026-04-19): 1 agents with activity
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-19
+  Mon  (2026-04-20): 13 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-04-20
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-20
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-04-20
+    ~ Skipping duplicate: Yousif Alsaad on 2026-04-20
+    ~ Skipping duplicate: Gabriel Alsheeblawy on 2026-04-20
+    ~ Skipping duplicate: Ali Alameedi on 2026-04-20
+    ~ Skipping duplicate: Ali Chahine on 2026-04-20
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-20
+    ~ Skipping duplicate: Ali Khanafer on 2026-04-20
+    ~ Skipping duplicate: Faye Saad on 2026-04-20
+    ~ Skipping duplicate: Ali Kawtharani on 2026-04-20
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-20
+    ~ Skipping duplicate: Amy Conner on 2026-04-20
+  Tues  (2026-04-21): 7 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-04-21
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-04-21
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-04-21
+    ~ Skipping duplicate: Ali Chahine on 2026-04-21
+    ~ Skipping duplicate: Hussein Habhab on 2026-04-21
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-21
+    ~ Skipping duplicate: Amy Conner on 2026-04-21
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-22 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_04_22.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-04-22): 14 agents with activity
+    ~ Skipping duplicate: Regina Gumma on 2026-04-22
+    ~ Skipping duplicate: Andre Alire on 2026-04-22
+    ~ Skipping duplicate: Kelvin Claney on 2026-04-22
+    ~ Skipping duplicate: Patty Kilburn on 2026-04-22
+    ~ Skipping duplicate: Jacob Bandyk on 2026-04-22
+    ~ Skipping duplicate: Melissa Elam on 2026-04-22
+    ~ Skipping duplicate: Danielle Loux on 2026-04-22
+    ~ Skipping duplicate: Romona Armstead on 2026-04-22
+    ~ Skipping duplicate: Joylynn Harris on 2026-04-22
+    ~ Skipping duplicate: Ken Hermann on 2026-04-22
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-04-22
+    ~ Skipping duplicate: Wendy Huber on 2026-04-22
+    ~ Skipping duplicate: Alissa Charles on 2026-04-22
+    ~ Skipping duplicate: Bryanna Wagner on 2026-04-22
+  Thurs (2026-04-23): 11 agents with activity
+    ~ Skipping duplicate: Andre Alire on 2026-04-23
+    ~ Skipping duplicate: Kelvin Claney on 2026-04-23
+    ~ Skipping duplicate: Patty Kilburn on 2026-04-23
+    ~ Skipping duplicate: Jacob Bandyk on 2026-04-23
+    ~ Skipping duplicate: Melissa Elam on 2026-04-23
+    ~ Skipping duplicate: Karina Picado on 2026-04-23
+    ~ Skipping duplicate: Danielle Loux on 2026-04-23
+    ~ Skipping duplicate: Romona Armstead on 2026-04-23
+    ~ Skipping duplicate: Kristen Fox on 2026-04-23
+    ~ Skipping duplicate: Joylynn Harris on 2026-04-23
+    ~ Skipping duplicate: Ken Hermann on 2026-04-23
+  Fri (2026-04-24): 5 agents with activity
+    ~ Skipping duplicate: Kelvin Claney on 2026-04-24
+    ~ Skipping duplicate: Patty Kilburn on 2026-04-24
+    ~ Skipping duplicate: Melissa Elam on 2026-04-24
+    ~ Skipping duplicate: Karina Picado on 2026-04-24
+    ~ Skipping duplicate: Jordan McFarlane on 2026-04-24
+  Sat (2026-04-25): 3 agents with activity
+    ~ Skipping duplicate: Kelvin Claney on 2026-04-25
+    ~ Skipping duplicate: Jordan McFarlane on 2026-04-25
+    ~ Skipping duplicate: Ken Hermann on 2026-04-25
+  Sun (2026-04-26): 4 agents with activity
+    ~ Skipping duplicate: Melissa Elam on 2026-04-26
+    ~ Skipping duplicate: Ronald Montoya on 2026-04-26
+    ~ Skipping duplicate: LaToya Clark on 2026-04-26
+    ~ Skipping duplicate: Ken Hermann on 2026-04-26
+  Mon  (2026-04-27): 10 agents with activity
+    ~ Skipping duplicate: Rick Argote on 2026-04-27
+    ~ Skipping duplicate: Julian Hyman on 2026-04-27
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-04-27
+    ~ Skipping duplicate: Keith Chmiel on 2026-04-27
+    ~ Skipping duplicate: Andre Alire on 2026-04-27
+    ~ Skipping duplicate: Kelvin Claney on 2026-04-27
+    ~ Skipping duplicate: Jacob Bandyk on 2026-04-27
+    ~ Skipping duplicate: Melissa Elam on 2026-04-27
+    ~ Skipping duplicate: Karina Picado on 2026-04-27
+    ~ Skipping duplicate: Ken Hermann on 2026-04-27
+  Tues  (2026-04-28): 9 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-04-28
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-04-28
+    ~ Skipping duplicate: Keith Chmiel on 2026-04-28
+    ~ Skipping duplicate: Jacob Bandyk on 2026-04-28
+    ~ Skipping duplicate: Kristen Fox on 2026-04-28
+    ~ Skipping duplicate: Shafay Sutton on 2026-04-28
+    ~ Skipping duplicate: Derron Alexander on 2026-04-28
+    ~ Skipping duplicate: Toel Jefferson on 2026-04-28
+    ~ Skipping duplicate: Zev Bienenstock on 2026-04-28
+  Wed (2) (2026-04-29): 6 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-04-29
+    ~ Skipping duplicate: Jordan McFarlane on 2026-04-29
+    ~ Skipping duplicate: LaToya Clark on 2026-04-29
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-04-29
+    ~ Skipping duplicate: Wendy Huber on 2026-04-29
+    ~ Skipping duplicate: Bryanna Wagner on 2026-04-29
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-22 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_04_22.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-04-22): 4 agents with activity
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-04-22
+    ~ Skipping duplicate: Christine Demaras on 2026-04-22
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-04-22
+    ~ Skipping duplicate: Angel Ruiz on 2026-04-22
+  Thurs (2026-04-23): 6 agents with activity
+    ~ Skipping duplicate: Christine Demaras on 2026-04-23
+    ~ Skipping duplicate: Maher Altairi on 2026-04-23
+    ~ Skipping duplicate: Basel Musaed on 2026-04-23
+    ~ Skipping duplicate: Lamese Bader on 2026-04-23
+    ~ Skipping duplicate: Husein Ghasham on 2026-04-23
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-04-23
+  Fri (2026-04-24): 2 agents with activity
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-04-24
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-04-24
+  Sun (2026-04-26): 1 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-26
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-22 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_04_22.xlsx ...
+  Office: Rust RGA
+  Wed (2026-04-22): 3 agents with activity
+    ~ Skipping duplicate: Andrew Child on 2026-04-22
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-22
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-22
+  Thurs (2026-04-23): 9 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-23
+    ~ Skipping duplicate: Karami Kovar on 2026-04-23
+    ~ Skipping duplicate: Isabela Maneiro on 2026-04-23
+    ~ Skipping duplicate: Ryan Cummings on 2026-04-23
+    ~ Skipping duplicate: Andrew Child on 2026-04-23
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-23
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-23
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-23
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-23
+  Fri (2026-04-24): 7 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-24
+    ~ Skipping duplicate: Isabela Maneiro on 2026-04-24
+    ~ Skipping duplicate: Andrew Child on 2026-04-24
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-24
+    ~ Skipping duplicate: Kristen Walton on 2026-04-24
+    ~ Skipping duplicate: Mariah Talicuran on 2026-04-24
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-24
+  Sat (2026-04-25): 4 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-25
+    ~ Skipping duplicate: Karami Kovar on 2026-04-25
+    ~ Skipping duplicate: Andrew Child on 2026-04-25
+    ~ Skipping duplicate: Kristen Walton on 2026-04-25
+  Sun (2026-04-26): 1 agents with activity
+    ~ Skipping duplicate: Kristen Walton on 2026-04-26
+  Mon  (2026-04-27): 5 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-04-27
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-27
+    ~ Skipping duplicate: Thomas Kirk on 2026-04-27
+    ~ Skipping duplicate: Kristen Walton on 2026-04-27
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-27
+  Tues  (2026-04-28): 6 agents with activity
+    ~ Skipping duplicate: Karami Kovar on 2026-04-28
+    ~ Skipping duplicate: Isabela Maneiro on 2026-04-28
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-28
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-28
+    ~ Skipping duplicate: Kristen Walton on 2026-04-28
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-28
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-22 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_04_22.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-04-22): 9 agents with activity
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-04-22
+    ~ Skipping duplicate: Ali Alwatan on 2026-04-22
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-04-22
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-04-22
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-22
+    ~ Skipping duplicate: Faye Saad on 2026-04-22
+    ~ Skipping duplicate: Ali Kawtharani on 2026-04-22
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-22
+    ~ Skipping duplicate: Amy Conner on 2026-04-22
+  Thurs (2026-04-23): 7 agents with activity
+    ~ Skipping duplicate: Sabrina Leu on 2026-04-23
+    ~ Skipping duplicate: Tolu Alualu on 2026-04-23
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-04-23
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-23
+    ~ Skipping duplicate: Ali Khanafer on 2026-04-23
+    ~ Skipping duplicate: Faye Saad on 2026-04-23
+    ~ Skipping duplicate: Ali Kawtharani on 2026-04-23
+  Fri (2026-04-24): 3 agents with activity
+    ~ Skipping duplicate: Sabrina Leu on 2026-04-24
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-04-24
+    ~ Skipping duplicate: Ali Khanafer on 2026-04-24
+  Mon  (2026-04-27): 7 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-04-27
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-04-27
+    ~ Skipping duplicate: Ali Nasser on 2026-04-27
+    ~ Skipping duplicate: Ali Khanafer on 2026-04-27
+    ~ Skipping duplicate: Ali Kawtharani on 2026-04-27
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-27
+    ~ Skipping duplicate: Amy Conner on 2026-04-27
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-29 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_04_29.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-04-29): 7 agents with activity
+    ~ Skipping duplicate: Jacob Bandyk on 2026-04-29
+    ~ Skipping duplicate: Danielle Loux on 2026-04-29
+    ~ Skipping duplicate: Shafay Sutton on 2026-04-29
+    ~ Skipping duplicate: Jordan McFarlane on 2026-04-29
+    ~ Skipping duplicate: Wendy Huber on 2026-04-29
+    ~ Skipping duplicate: Alissa Charles on 2026-04-29
+    ~ Skipping duplicate: Bryanna Wagner on 2026-04-29
+  Thurs (2026-04-30): 3 agents with activity
+    ~ Skipping duplicate: Jacob Bandyk on 2026-04-30
+    ~ Skipping duplicate: Danielle Loux on 2026-04-30
+    ~ Skipping duplicate: Ken Hermann on 2026-04-30
+  Fri (2026-05-01): 4 agents with activity
+    ~ Skipping duplicate: Jacob Bandyk on 2026-05-01
+    ~ Skipping duplicate: Frances Gonzalez on 2026-05-01
+    ~ Skipping duplicate: Karina Picado on 2026-05-01
+    ~ Skipping duplicate: Ken Hermann on 2026-05-01
+  Sat (2026-05-02): 3 agents with activity
+    ~ Skipping duplicate: Timothy Noe on 2026-05-02
+    ~ Skipping duplicate: Bilal Abdullah on 2026-05-02
+    ~ Skipping duplicate: Jacob Bandyk on 2026-05-02
+  Sun (2026-05-03): 7 agents with activity
+    ~ Skipping duplicate: Jacob Bandyk on 2026-05-03
+    ~ Skipping duplicate: Melissa Elam on 2026-05-03
+    ~ Skipping duplicate: Ken Hermann on 2026-05-03
+    ~ Skipping duplicate: O'Neil Mbakwe on 2026-05-03
+    ~ Skipping duplicate: Wendy Huber on 2026-05-03
+    ~ Skipping duplicate: Alissa Charles on 2026-05-03
+    ~ Skipping duplicate: Bryanna Wagner on 2026-05-03
+  Mon  (2026-05-04): 7 agents with activity
+    ~ Skipping duplicate: Timothy Noe on 2026-05-04
+    ~ Skipping duplicate: Jacob Bandyk on 2026-05-04
+    ~ Skipping duplicate: Melissa Elam on 2026-05-04
+    ~ Skipping duplicate: Frances Gonzalez on 2026-05-04
+    ~ Skipping duplicate: Karina Picado on 2026-05-04
+    ~ Skipping duplicate: Danielle Loux on 2026-05-04
+    ~ Skipping duplicate: Ken Hermann on 2026-05-04
+  Tues  (2026-05-05): 7 agents with activity
+    ~ Skipping duplicate: Jacob Bandyk on 2026-05-05
+    ~ Skipping duplicate: Melissa Elam on 2026-05-05
+    ~ Skipping duplicate: Ronald Montoya on 2026-05-05
+    ~ Skipping duplicate: Kristen Fox on 2026-05-05
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-05
+    ~ Skipping duplicate: Michael Hall on 2026-05-05
+    ~ Skipping duplicate: Ken Hermann on 2026-05-05
+  Thurs (2) (2026-05-07): 3 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-05-07
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-07
+    ~ Skipping duplicate: Keith Chmiel on 2026-05-07
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-29 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_04_29.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Thurs (2026-04-30): 3 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-04-30
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-04-30
+    ~ Skipping duplicate: Angel Ruiz on 2026-04-30
+  Fri (2026-05-01): 1 agents with activity
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-05-01
+  Sun (2026-05-03): 1 agents with activity
+    ~ Skipping duplicate: Angel Ruiz on 2026-05-03
+  Mon  (2026-05-04): 4 agents with activity
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-05-04
+    ~ Skipping duplicate: Christine Demaras on 2026-05-04
+    ~ Skipping duplicate: Lamese Bader on 2026-05-04
+    ~ Skipping duplicate: Bruce Curry on 2026-05-04
+  Tues  (2026-05-05): 8 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-05
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-05-05
+    ~ Skipping duplicate: Maher Altairi on 2026-05-05
+    ~ Skipping duplicate: Lamese Bader on 2026-05-05
+    ~ Skipping duplicate: Husein Ghasham on 2026-05-05
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-05-05
+    ~ Skipping duplicate: Bruce Curry on 2026-05-05
+    ~ Skipping duplicate: Angel Ruiz on 2026-05-05
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-29 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_04_29.xlsx ...
+  Office: Rust RGA
+  Wed (2026-04-29): 6 agents with activity
+    ~ Skipping duplicate: Karami Kovar on 2026-04-29
+    ~ Skipping duplicate: Isabela Maneiro on 2026-04-29
+    ~ Skipping duplicate: Andrew Child on 2026-04-29
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-04-29
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-29
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-29
+  Thurs (2026-04-30): 5 agents with activity
+    ~ Skipping duplicate: Karami Kovar on 2026-04-30
+    ~ Skipping duplicate: Isabela Maneiro on 2026-04-30
+    ~ Skipping duplicate: Andrew Child on 2026-04-30
+    ~ Skipping duplicate: Jasmine Marquez on 2026-04-30
+    ~ Skipping duplicate: Shayla Williamson on 2026-04-30
+  Fri (2026-05-01): 3 agents with activity
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-05-01
+    ~ Skipping duplicate: Jasmine Marquez on 2026-05-01
+    ~ Skipping duplicate: Kristen Walton on 2026-05-01
+  Sat (2026-05-02): 1 agents with activity
+    ~ Skipping duplicate: Kristen Walton on 2026-05-02
+  Mon  (2026-05-04): 4 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-04
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-05-04
+    ~ Skipping duplicate: Kristen Walton on 2026-05-04
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-04
+  Tues  (2026-05-05): 9 agents with activity
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-05-05
+    ~ Skipping duplicate: Jasmine Marquez on 2026-05-05
+    ~ Skipping duplicate: Kristen Walton on 2026-05-05
+    ~ Skipping duplicate: Lisa Berry on 2026-05-05
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-05-05
+    ~ Skipping duplicate: Maria Farley on 2026-05-05
+    ~ Skipping duplicate: Mikaela Hayes on 2026-05-05
+    ~ Skipping duplicate: Kelsey Folcarelli on 2026-05-05
+    ~ Skipping duplicate: Deandre Barber on 2026-05-05
+  Wed (2) (2026-05-06): 2 agents with activity
+    ~ Skipping duplicate: Jasmine Marquez on 2026-05-06
+    ~ Skipping duplicate: Kristen Walton on 2026-05-06
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-04-29 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_04_29.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-04-29): 2 agents with activity
+    ~ Skipping duplicate: Ali Nasser on 2026-04-29
+    ~ Skipping duplicate: Ali Khanafer on 2026-04-29
+  Thurs (2026-04-30): 6 agents with activity
+    ~ Skipping duplicate: Ali Chahine on 2026-04-30
+    ~ Skipping duplicate: Hassane Zahr on 2026-04-30
+    ~ Skipping duplicate: Ali Nasser on 2026-04-30
+    ~ Skipping duplicate: Mohammad Saad on 2026-04-30
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-04-30
+    ~ Skipping duplicate: Amy Conner on 2026-04-30
+  Fri (2026-05-01): 1 agents with activity
+    ~ Skipping duplicate: Mohammad Saad on 2026-05-01
+  Sat (2026-05-02): 1 agents with activity
+    ~ Skipping duplicate: Amy Conner on 2026-05-02
+  Mon  (2026-05-04): 8 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-04
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-04
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-04
+    ~ Skipping duplicate: Korey Mucchiello on 2026-05-04
+    ~ Skipping duplicate: Ali Chahine on 2026-05-04
+    ~ Skipping duplicate: Ali Nasser on 2026-05-04
+    ~ Skipping duplicate: Mohammad Saad on 2026-05-04
+    ~ Skipping duplicate: Amy Conner on 2026-05-04
+  Tues  (2026-05-05): 6 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-05
+    ~ Skipping duplicate: Yousif Alsaad on 2026-05-05
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-05
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-05
+    ~ Skipping duplicate: Ali Kawtharani on 2026-05-05
+    ~ Skipping duplicate: Amy Conner on 2026-05-05
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-06 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_05_06.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-05-06): 10 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-05-06
+    ~ Skipping duplicate: Julian Hyman on 2026-05-06
+    ~ Skipping duplicate: Veronica Sanchez on 2026-05-06
+    ~ Skipping duplicate: Timothy Noe on 2026-05-06
+    ~ Skipping duplicate: Preston Opperman on 2026-05-06
+    ~ Skipping duplicate: Bilal Abdullah on 2026-05-06
+    ~ Skipping duplicate: Karina Picado on 2026-05-06
+    ~ Skipping duplicate: Derron Alexander on 2026-05-06
+    ~ Skipping duplicate: Toel Jefferson on 2026-05-06
+    ~ Skipping duplicate: LaToya Clark on 2026-05-06
+  Thurs (2026-05-07): 13 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-05-07
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-07
+    ~ Skipping duplicate: Keith Chmiel on 2026-05-07
+    ~ Skipping duplicate: Kristen Fox on 2026-05-07
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-07
+    ~ Skipping duplicate: Shafay Sutton on 2026-05-07
+    ~ Skipping duplicate: Timothy Noe on 2026-05-07
+    ~ Skipping duplicate: Preston Opperman on 2026-05-07
+    ~ Skipping duplicate: Bilal Abdullah on 2026-05-07
+    ~ Skipping duplicate: Karina Picado on 2026-05-07
+    ~ Skipping duplicate: Danielle Loux on 2026-05-07
+    ~ Skipping duplicate: Jordan McFarlane on 2026-05-07
+    ~ Skipping duplicate: Donte Grant on 2026-05-07
+  Fri (2026-05-08): 14 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-05-08
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-08
+    ~ Skipping duplicate: Kristen Fox on 2026-05-08
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-08
+    ~ Skipping duplicate: Shafay Sutton on 2026-05-08
+    ~ Skipping duplicate: Timothy Noe on 2026-05-08
+    ~ Skipping duplicate: Preston Opperman on 2026-05-08
+    ~ Skipping duplicate: Regina Gumma on 2026-05-08
+    ~ Skipping duplicate: Shana Clapp on 2026-05-08
+    ~ Skipping duplicate: Nicolas Smith on 2026-05-08
+    ~ Skipping duplicate: Danielle Loux on 2026-05-08
+    ~ Skipping duplicate: Jordan McFarlane on 2026-05-08
+    ~ Skipping duplicate: Donte Grant on 2026-05-08
+    ~ Skipping duplicate: Ken Hermann on 2026-05-08
+  Sat (2026-05-09): 5 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-05-09
+    ~ Skipping duplicate: Kristen Fox on 2026-05-09
+    ~ Skipping duplicate: Timothy Noe on 2026-05-09
+    ~ Skipping duplicate: Preston Opperman on 2026-05-09
+    ~ Skipping duplicate: Karina Picado on 2026-05-09
+  Sun (2026-05-10): 1 agents with activity
+    ~ Skipping duplicate: Bilal Abdullah on 2026-05-10
+  Mon  (2026-05-11): 13 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-05-11
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-11
+    ~ Skipping duplicate: Keith Chmiel on 2026-05-11
+    ~ Skipping duplicate: Kristen Fox on 2026-05-11
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-11
+    ~ Skipping duplicate: Shafay Sutton on 2026-05-11
+    ~ Skipping duplicate: Timothy Noe on 2026-05-11
+    ~ Skipping duplicate: Preston Opperman on 2026-05-11
+    ~ Skipping duplicate: Bilal Abdullah on 2026-05-11
+    ~ Skipping duplicate: Melissa Elam on 2026-05-11
+    ~ Skipping duplicate: Danielle Loux on 2026-05-11
+    ~ Skipping duplicate: LaToya Clark on 2026-05-11
+    ~ Skipping duplicate: Ken Hermann on 2026-05-11
+  Tues  (2026-05-12): 9 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-05-12
+    ~ Skipping duplicate: Julian Hyman on 2026-05-12
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-12
+    ~ Skipping duplicate: Kristen Fox on 2026-05-12
+    ~ Skipping duplicate: Timothy Noe on 2026-05-12
+    ~ Skipping duplicate: Preston Opperman on 2026-05-12
+    ~ Skipping duplicate: Bilal Abdullah on 2026-05-12
+    ~ Skipping duplicate: Melissa Elam on 2026-05-12
+    ~ Skipping duplicate: Ken Hermann on 2026-05-12
+  Wed (2) (2026-05-13): 2 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-05-13
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-13
+  Thurs (2) (2026-05-14): 2 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-05-14
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-14
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-06 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_05_06.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-05-06): 7 agents with activity
+    ~ Skipping duplicate: Tyren Cosare on 2026-05-06
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-06
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-05-06
+    ~ Skipping duplicate: Lamese Bader on 2026-05-06
+    ~ Skipping duplicate: Husein Ghasham on 2026-05-06
+    ~ Skipping duplicate: Bruce Curry on 2026-05-06
+    ~ Skipping duplicate: Angel Ruiz on 2026-05-06
+  Thurs (2026-05-07): 3 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-07
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-05-07
+    ~ Skipping duplicate: Christine Demaras on 2026-05-07
+  Fri (2026-05-08): 6 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-08
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-05-08
+    ~ Skipping duplicate: Basel Musaed on 2026-05-08
+    ~ Skipping duplicate: Lamese Bader on 2026-05-08
+    ~ Skipping duplicate: Bruce Curry on 2026-05-08
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-08
+  Sat (2026-05-09): 6 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-09
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-05-09
+    ~ Skipping duplicate: Maher Altairi on 2026-05-09
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-05-09
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-09
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-09
+  Sun (2026-05-10): 3 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-10
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-05-10
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-10
+  Mon  (2026-05-11): 9 agents with activity
+    ~ Skipping duplicate: Tyren Cosare on 2026-05-11
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-11
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-05-11
+    ~ Skipping duplicate: Christine Demaras on 2026-05-11
+    ~ Skipping duplicate: Maher Altairi on 2026-05-11
+    ~ Skipping duplicate: Basel Musaed on 2026-05-11
+    ~ Skipping duplicate: Lamese Bader on 2026-05-11
+    ~ Skipping duplicate: Husein Ghasham on 2026-05-11
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-05-11
+  Tues  (2026-05-12): 10 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-12
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-05-12
+    ~ Skipping duplicate: Christine Demaras on 2026-05-12
+    ~ Skipping duplicate: Maher Altairi on 2026-05-12
+    ~ Skipping duplicate: Basel Musaed on 2026-05-12
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-05-12
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-12
+    ~ Skipping duplicate: Bruce Curry on 2026-05-12
+    ~ Skipping duplicate: Angel Ruiz on 2026-05-12
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-12
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-06 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_05_06.xlsx ...
+  Office: Rust RGA
+  Wed (2026-05-06): 4 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-06
+    ~ Skipping duplicate: Jasmine Marquez on 2026-05-06
+    ~ Skipping duplicate: Kristen Walton on 2026-05-06
+    ~ Skipping duplicate: Devin Gould on 2026-05-06
+  Thurs (2026-05-07): 3 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-07
+    ~ Skipping duplicate: Jasmine Marquez on 2026-05-07
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-07
+  Fri (2026-05-08): 4 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-08
+    ~ Skipping duplicate: Jasmine Marquez on 2026-05-08
+    ~ Skipping duplicate: Kristen Walton on 2026-05-08
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-08
+  Sat (2026-05-09): 1 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-09
+  Mon  (2026-05-11): 5 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-11
+    ~ Skipping duplicate: Jasmine Marquez on 2026-05-11
+    ~ Skipping duplicate: Kristen Walton on 2026-05-11
+    ~ Skipping duplicate: Torian Fields on 2026-05-11
+    ~ Skipping duplicate: Devin Gould on 2026-05-11
+  Tues  (2026-05-12): 4 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-12
+    ~ Skipping duplicate: Jasmine Marquez on 2026-05-12
+    ~ Skipping duplicate: Kristen Walton on 2026-05-12
+    ~ Skipping duplicate: Devin Gould on 2026-05-12
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-06 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_05_06.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-05-06): 6 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-06
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-06
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-06
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-06
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-06
+    ~ Skipping duplicate: Korey Mucchiello on 2026-05-06
+  Thurs (2026-05-07): 6 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-07
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-07
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-07
+    ~ Skipping duplicate: Yousif Alsaad on 2026-05-07
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-07
+    ~ Skipping duplicate: Reiss Dupuis on 2026-05-07
+  Fri (2026-05-08): 7 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-08
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-08
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-08
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-08
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-08
+    ~ Skipping duplicate: Korey Mucchiello on 2026-05-08
+    ~ Skipping duplicate: Reiss Dupuis on 2026-05-08
+  Sat (2026-05-09): 3 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-09
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-09
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-09
+  Mon  (2026-05-11): 7 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-11
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-11
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-11
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-11
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-11
+    ~ Skipping duplicate: Korey Mucchiello on 2026-05-11
+    ~ Skipping duplicate: Reiss Dupuis on 2026-05-11
+  Tues  (2026-05-12): 9 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-12
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-12
+    ~ Skipping duplicate: Ashton Marshall on 2026-05-12
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-12
+    ~ Skipping duplicate: Yousif Alsaad on 2026-05-12
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-12
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-12
+    ~ Skipping duplicate: Korey Mucchiello on 2026-05-12
+    ~ Skipping duplicate: Reiss Dupuis on 2026-05-12
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-13 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_05_13.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-05-13): 14 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-05-13
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-13
+    ~ Skipping duplicate: Kristen Fox on 2026-05-13
+    ~ Skipping duplicate: Shafay Sutton on 2026-05-13
+    ~ Skipping duplicate: Timothy Noe on 2026-05-13
+    ~ Skipping duplicate: Preston Opperman on 2026-05-13
+    ~ Skipping duplicate: Bilal Abdullah on 2026-05-13
+    ~ Skipping duplicate: Zach Norby on 2026-05-13
+    ~ Skipping duplicate: Andy Martin on 2026-05-13
+    ~ Skipping duplicate: Jaxx Felton on 2026-05-13
+    ~ Skipping duplicate: Jacob Bandyk on 2026-05-13
+    ~ Skipping duplicate: Nicolas Smith on 2026-05-13
+    ~ Skipping duplicate: Melissa Elam on 2026-05-13
+    ~ Skipping duplicate: Ken Hermann on 2026-05-13
+  Thurs (2026-05-14): 18 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-05-14
+    ~ Skipping duplicate: Julian Hyman on 2026-05-14
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-14
+    ~ Skipping duplicate: Kristen Fox on 2026-05-14
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-14
+    ~ Skipping duplicate: Timothy Noe on 2026-05-14
+    ~ Skipping duplicate: Preston Opperman on 2026-05-14
+    ~ Skipping duplicate: Bilal Abdullah on 2026-05-14
+    ~ Skipping duplicate: Zach Norby on 2026-05-14
+    ~ Skipping duplicate: Andy Martin on 2026-05-14
+    ~ Skipping duplicate: Jaxx Felton on 2026-05-14
+    ~ Skipping duplicate: Kelvin Claney on 2026-05-14
+    ~ Skipping duplicate: Shana Clapp on 2026-05-14
+    ~ Skipping duplicate: Jacob Bandyk on 2026-05-14
+    ~ Skipping duplicate: Nicolas Smith on 2026-05-14
+    ~ Skipping duplicate: Melissa Elam on 2026-05-14
+    ~ Skipping duplicate: Danielle Loux on 2026-05-14
+    ~ Skipping duplicate: Ken Hermann on 2026-05-14
+  Fri (2026-05-15): 9 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-05-15
+    ~ Skipping duplicate: Julian Hyman on 2026-05-15
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-15
+    ~ Skipping duplicate: Kristen Fox on 2026-05-15
+    ~ Skipping duplicate: Timothy Noe on 2026-05-15
+    ~ Skipping duplicate: Javier Sandoval on 2026-05-15
+    ~ Skipping duplicate: Jacob Bandyk on 2026-05-15
+    ~ Skipping duplicate: Nicolas Smith on 2026-05-15
+    ~ Skipping duplicate: Melissa Elam on 2026-05-15
+  Sat (2026-05-16): 7 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-05-16
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-16
+    ~ Skipping duplicate: Timothy Noe on 2026-05-16
+    ~ Skipping duplicate: Kelvin Claney on 2026-05-16
+    ~ Skipping duplicate: Annabelle Helms on 2026-05-16
+    ~ Skipping duplicate: Jacob Bandyk on 2026-05-16
+    ~ Skipping duplicate: Nicolas Smith on 2026-05-16
+  Sun (2026-05-17): 2 agents with activity
+    ~ Skipping duplicate: Javier Sandoval on 2026-05-17
+    ~ Skipping duplicate: Ken Hermann on 2026-05-17
+  Mon  (2026-05-18): 6 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-05-18
+    ~ Skipping duplicate: Julian Hyman on 2026-05-18
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-18
+    ~ Skipping duplicate: Timothy Noe on 2026-05-18
+    ~ Skipping duplicate: Bilal Abdullah on 2026-05-18
+    ~ Skipping duplicate: Ken Hermann on 2026-05-18
+  Tues  (2026-05-19): 8 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-05-19
+    ~ Skipping duplicate: Rick Argote on 2026-05-19
+    ~ Skipping duplicate: Julian Hyman on 2026-05-19
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-19
+    ~ Skipping duplicate: Kristen Fox on 2026-05-19
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-19
+    ~ Skipping duplicate: Timothy Noe on 2026-05-19
+    ~ Skipping duplicate: Melissa Elam on 2026-05-19
+  Wed (2) (2026-05-20): 3 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-05-20
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-20
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-20
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-13 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_05_13.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-05-13): 5 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-13
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-05-13
+    ~ Skipping duplicate: Christine Demaras on 2026-05-13
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-13
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-13
+  Thurs (2026-05-14): 9 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-14
+    ~ Skipping duplicate: Hannah Sanders on 2026-05-14
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-05-14
+    ~ Skipping duplicate: Christine Demaras on 2026-05-14
+    ~ Skipping duplicate: Maher Altairi on 2026-05-14
+    ~ Skipping duplicate: Basel Musaed on 2026-05-14
+    ~ Skipping duplicate: Husein Ghasham on 2026-05-14
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-14
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-14
+  Fri (2026-05-15): 6 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-15
+    ~ Skipping duplicate: Christine Demaras on 2026-05-15
+    ~ Skipping duplicate: Maher Altairi on 2026-05-15
+    ~ Skipping duplicate: Basel Musaed on 2026-05-15
+    ~ Skipping duplicate: Husein Ghasham on 2026-05-15
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-15
+  Sat (2026-05-16): 3 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-16
+    ~ Skipping duplicate: Hannah Sanders on 2026-05-16
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-16
+  Sun (2026-05-17): 2 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-17
+    ~ Skipping duplicate: Christine Demaras on 2026-05-17
+  Mon  (2026-05-18): 5 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-18
+    ~ Skipping duplicate: Maher Altairi on 2026-05-18
+    ~ Skipping duplicate: Basel Musaed on 2026-05-18
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-18
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-18
+  Tues  (2026-05-19): 4 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-19
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-05-19
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-19
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-19
+  Wed (2) (2026-05-20): 1 agents with activity
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-20
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-13 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_05_13.xlsx ...
+  Office: Rust RGA
+  Wed (2026-05-13): 7 agents with activity
+    ~ Skipping duplicate: Bridgett McDaniels Russell on 2026-05-13
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-13
+    ~ Skipping duplicate: Ryan Cummings on 2026-05-13
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-05-13
+    ~ Skipping duplicate: Jasmine Marquez on 2026-05-13
+    ~ Skipping duplicate: Kristen Walton on 2026-05-13
+    ~ Skipping duplicate: Devin Gould on 2026-05-13
+  Thurs (2026-05-14): 3 agents with activity
+    ~ Skipping duplicate: Ryan Cummings on 2026-05-14
+    ~ Skipping duplicate: Jasmine Marquez on 2026-05-14
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-14
+  Fri (2026-05-15): 3 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-15
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-05-15
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-15
+  Sat (2026-05-16): 1 agents with activity
+    ~ Skipping duplicate: Ryan Cummings on 2026-05-16
+  Sun (2026-05-17): 1 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-17
+  Mon  (2026-05-18): 3 agents with activity
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-05-18
+    ~ Skipping duplicate: Kristen Walton on 2026-05-18
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-18
+  Tues  (2026-05-19): 5 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-19
+    ~ Skipping duplicate: Jasmine Marquez on 2026-05-19
+    ~ Skipping duplicate: Mariah Ruff on 2026-05-19
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-05-19
+    ~ Skipping duplicate: Taylor Waldrip on 2026-05-19
+  Wed (2) (2026-05-20): 1 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-20
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-13 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_05_13.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-05-13): 9 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-13
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-13
+    ~ Skipping duplicate: Ashton Marshall on 2026-05-13
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-13
+    ~ Skipping duplicate: Yousif Alsaad on 2026-05-13
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-13
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-13
+    ~ Skipping duplicate: Korey Mucchiello on 2026-05-13
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-05-13
+  Thurs (2026-05-14): 7 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-14
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-14
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-14
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-14
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-14
+    ~ Skipping duplicate: Korey Mucchiello on 2026-05-14
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-05-14
+  Fri (2026-05-15): 5 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-15
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-15
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-15
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-15
+    ~ Skipping duplicate: Korey Mucchiello on 2026-05-15
+  Sat (2026-05-16): 5 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-16
+    ~ Skipping duplicate: Ashton Marshall on 2026-05-16
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-16
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-16
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-16
+  Sun (2026-05-17): 2 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-17
+    ~ Skipping duplicate: Ali Kawtharani on 2026-05-17
+  Mon  (2026-05-18): 9 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-18
+    ~ Skipping duplicate: Ashton Marshall on 2026-05-18
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-18
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-18
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-18
+    ~ Skipping duplicate: Korey Mucchiello on 2026-05-18
+    ~ Skipping duplicate: Hussein Habhab on 2026-05-18
+    ~ Skipping duplicate: Faye Saad on 2026-05-18
+    ~ Skipping duplicate: Ali Kawtharani on 2026-05-18
+  Tues  (2026-05-19): 5 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-19
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-19
+    ~ Skipping duplicate: Mehdi Elkhatib on 2026-05-19
+    ~ Skipping duplicate: Ali Kawtharani on 2026-05-19
+    ~ Skipping duplicate: Shibil Mahdawe on 2026-05-19
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-20 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_05_20.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-05-20): 12 agents with activity
+    ~ Skipping duplicate: Julian Hyman on 2026-05-20
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-20
+    ~ Skipping duplicate: Kristen Fox on 2026-05-20
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-20
+    ~ Skipping duplicate: Shafay Sutton on 2026-05-20
+    ~ Skipping duplicate: Timothy Noe on 2026-05-20
+    ~ Skipping duplicate: Bilal Abdullah on 2026-05-20
+    ~ Skipping duplicate: Zach Norby on 2026-05-20
+    ~ Skipping duplicate: Andy Martin on 2026-05-20
+    ~ Skipping duplicate: Jaxx Felton on 2026-05-20
+    ~ Skipping duplicate: Melissa Elam on 2026-05-20
+    ~ Skipping duplicate: Ronald Montoya on 2026-05-20
+  Thurs (2026-05-21): 10 agents with activity
+    ~ Skipping duplicate: Rick Argote on 2026-05-21
+    ~ Skipping duplicate: Julian Hyman on 2026-05-21
+    ~ Skipping duplicate: Keith Chmiel on 2026-05-21
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-21
+    ~ Skipping duplicate: Shafay Sutton on 2026-05-21
+    ~ Skipping duplicate: Timothy Noe on 2026-05-21
+    ~ Skipping duplicate: Zach Norby on 2026-05-21
+    ~ Skipping duplicate: Andy Martin on 2026-05-21
+    ~ Skipping duplicate: Jaxx Felton on 2026-05-21
+    ~ Skipping duplicate: Melissa Elam on 2026-05-21
+  Fri (2026-05-22): 6 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-05-22
+    ~ Skipping duplicate: Keith Chmiel on 2026-05-22
+    ~ Skipping duplicate: Kristen Fox on 2026-05-22
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-22
+    ~ Skipping duplicate: Timothy Noe on 2026-05-22
+    ~ Skipping duplicate: Melissa Elam on 2026-05-22
+  Sat (2026-05-23): 5 agents with activity
+    ~ Skipping duplicate: Rick Argote on 2026-05-23
+    ~ Skipping duplicate: Julian Hyman on 2026-05-23
+    ~ Skipping duplicate: Kristen Fox on 2026-05-23
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-23
+    ~ Skipping duplicate: Timothy Noe on 2026-05-23
+  Sun (2026-05-24): 2 agents with activity
+    ~ Skipping duplicate: Shafay Sutton on 2026-05-24
+    ~ Skipping duplicate: Melissa Elam on 2026-05-24
+  Mon  (2026-05-25): 5 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-05-25
+    ~ Skipping duplicate: Kristen Fox on 2026-05-25
+    ~ Skipping duplicate: Shafay Sutton on 2026-05-25
+    ~ Skipping duplicate: Timothy Noe on 2026-05-25
+    ~ Skipping duplicate: Melissa Elam on 2026-05-25
+  Tues  (2026-05-26): 10 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-05-26
+    ~ Skipping duplicate: Julian Hyman on 2026-05-26
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-26
+    ~ Skipping duplicate: Keith Chmiel on 2026-05-26
+    ~ Skipping duplicate: Kennedra Marshall on 2026-05-26
+    ~ Skipping duplicate: Kristen Fox on 2026-05-26
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-26
+    ~ Skipping duplicate: Timothy Noe on 2026-05-26
+    ~ Skipping duplicate: Melissa Elam on 2026-05-26
+    ~ Skipping duplicate: Ronald Montoya on 2026-05-26
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-20 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_05_20.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-05-20): 5 agents with activity
+    ~ Skipping duplicate: Christine Demaras on 2026-05-20
+    ~ Skipping duplicate: Maher Altairi on 2026-05-20
+    ~ Skipping duplicate: Husein Ghasham on 2026-05-20
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-20
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-20
+  Thurs (2026-05-21): 4 agents with activity
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-05-21
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-05-21
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-21
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-21
+  Fri (2026-05-22): 3 agents with activity
+    ~ Skipping duplicate: Christine Demaras on 2026-05-22
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-05-22
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-22
+  Sat (2026-05-23): 1 agents with activity
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-23
+  Mon  (2026-05-25): 2 agents with activity
+    ~ Skipping duplicate: Christine Demaras on 2026-05-25
+    ~ Skipping duplicate: Maher Altairi on 2026-05-25
+  Tues  (2026-05-26): 5 agents with activity
+    ~ Skipping duplicate: Christine Demaras on 2026-05-26
+    ~ Skipping duplicate: Maher Altairi on 2026-05-26
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-05-26
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-05-26
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-26
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-20 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_05_20.xlsx ...
+  Office: Rust RGA
+  Wed (2026-05-20): 3 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-20
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-20
+    ~ Skipping duplicate: Devin Gould on 2026-05-20
+  Thurs (2026-05-21): 3 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-21
+    ~ Skipping duplicate: Karami Kovar on 2026-05-21
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-21
+  Fri (2026-05-22): 4 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-05-22
+    ~ Skipping duplicate: Karami Kovar on 2026-05-22
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-22
+    ~ Skipping duplicate: Devin Gould on 2026-05-22
+  Sat (2026-05-23): 2 agents with activity
+    ~ Skipping duplicate: Karami Kovar on 2026-05-23
+    ~ Skipping duplicate: Shayla Williamson on 2026-05-23
+  Sun (2026-05-24): 1 agents with activity
+    ~ Skipping duplicate: Karami Kovar on 2026-05-24
+  Mon  (2026-05-25): 1 agents with activity
+    ~ Skipping duplicate: Karami Kovar on 2026-05-25
+  Tues  (2026-05-26): 1 agents with activity
+    ~ Skipping duplicate: Karami Kovar on 2026-05-26
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-20 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_05_20.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-05-20): 6 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-05-20
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-20
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-20
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-20
+    ~ Skipping duplicate: Korey Mucchiello on 2026-05-20
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-05-20
+  Thurs (2026-05-21): 5 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-21
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-21
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-21
+    ~ Skipping duplicate: Ali Alwatan on 2026-05-21
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-05-21
+  Fri (2026-05-22): 3 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-22
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-22
+    ~ Skipping duplicate: Korey Mucchiello on 2026-05-22
+  Mon  (2026-05-25): 1 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-25
+  Tues  (2026-05-26): 3 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-26
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-26
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-26
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-27 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_05_27.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-05-27): 9 agents with activity
+    ~ Skipping duplicate: Rick Argote on 2026-05-27
+    ~ Skipping duplicate: Julian Hyman on 2026-05-27
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-27
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-27
+    ~ Skipping duplicate: Timothy Noe on 2026-05-27
+    ~ Skipping duplicate: Zach Norby on 2026-05-27
+    ~ Skipping duplicate: Melissa Elam on 2026-05-27
+    ~ Skipping duplicate: Ronald Montoya on 2026-05-27
+    ~ Skipping duplicate: Karina Picado on 2026-05-27
+  Thurs (2026-05-28): 12 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-05-28
+    ~ Skipping duplicate: Julian Hyman on 2026-05-28
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-05-28
+    ~ Skipping duplicate: Keith Chmiel on 2026-05-28
+    ~ Skipping duplicate: Kennedra Marshall on 2026-05-28
+    ~ Skipping duplicate: Kristen Fox on 2026-05-28
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-28
+    ~ Skipping duplicate: Timothy Noe on 2026-05-28
+    ~ Skipping duplicate: Zach Norby on 2026-05-28
+    ~ Skipping duplicate: Andy Martin on 2026-05-28
+    ~ Skipping duplicate: Melissa Elam on 2026-05-28
+    ~ Skipping duplicate: Ken Hermann on 2026-05-28
+  Fri (2026-05-29): 6 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-05-29
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-29
+    ~ Skipping duplicate: Timothy Noe on 2026-05-29
+    ~ Skipping duplicate: Melissa Elam on 2026-05-29
+    ~ Skipping duplicate: Ronald Montoya on 2026-05-29
+    ~ Skipping duplicate: Karina Picado on 2026-05-29
+  Sat (2026-05-30): 7 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-05-30
+    ~ Skipping duplicate: Joylynn Harris on 2026-05-30
+    ~ Skipping duplicate: Timothy Noe on 2026-05-30
+    ~ Skipping duplicate: Zach Norby on 2026-05-30
+    ~ Skipping duplicate: Andy Martin on 2026-05-30
+    ~ Skipping duplicate: Jaxx Felton on 2026-05-30
+    ~ Skipping duplicate: Melissa Elam on 2026-05-30
+  Sun (2026-05-31): 2 agents with activity
+    ~ Skipping duplicate: Melissa Elam on 2026-05-31
+    ~ Skipping duplicate: Ken Hermann on 2026-05-31
+  Mon  (2026-06-01): 10 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-06-01
+    ~ Skipping duplicate: Keith Chmiel on 2026-06-01
+    ~ Skipping duplicate: Kristen Fox on 2026-06-01
+    ~ Skipping duplicate: Joylynn Harris on 2026-06-01
+    ~ Skipping duplicate: Timothy Noe on 2026-06-01
+    ~ Skipping duplicate: Preston Opperman on 2026-06-01
+    ~ Skipping duplicate: Bilal Abdullah on 2026-06-01
+    ~ Skipping duplicate: Zach Norby on 2026-06-01
+    ~ Skipping duplicate: Andy Martin on 2026-06-01
+    ~ Skipping duplicate: Melissa Elam on 2026-06-01
+  Tues  (2026-06-02): 15 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-06-02
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-06-02
+    ~ Skipping duplicate: Keith Chmiel on 2026-06-02
+    ~ Skipping duplicate: Kennedra Marshall on 2026-06-02
+    ~ Skipping duplicate: Kristen Fox on 2026-06-02
+    ~ Skipping duplicate: Joylynn Harris on 2026-06-02
+    ~ Skipping duplicate: Timothy Noe on 2026-06-02
+    ~ Skipping duplicate: Preston Opperman on 2026-06-02
+    ~ Skipping duplicate: Bilal Abdullah on 2026-06-02
+    ~ Skipping duplicate: Zach Norby on 2026-06-02
+    ~ Skipping duplicate: Andy Martin on 2026-06-02
+    ~ Skipping duplicate: Melissa Elam on 2026-06-02
+    ~ Skipping duplicate: Karina Picado on 2026-06-02
+    ~ Skipping duplicate: Danielle Loux on 2026-06-02
+    ~ Skipping duplicate: Ken Hermann on 2026-06-02
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-27 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_05_27.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-05-27): 4 agents with activity
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-05-27
+    ~ Skipping duplicate: Maher Altairi on 2026-05-27
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-05-27
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-27
+  Thurs (2026-05-28): 6 agents with activity
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-05-28
+    ~ Skipping duplicate: Maher Altairi on 2026-05-28
+    ~ Skipping duplicate: Basel Musaed on 2026-05-28
+    ~ Skipping duplicate: Husein Ghasham on 2026-05-28
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-05-28
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-28
+  Fri (2026-05-29): 2 agents with activity
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-05-29
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-05-29
+  Sat (2026-05-30): 5 agents with activity
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-05-30
+    ~ Skipping duplicate: Maher Altairi on 2026-05-30
+    ~ Skipping duplicate: Husein Ghasham on 2026-05-30
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-05-30
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-05-30
+  Sun (2026-05-31): 2 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-05-31
+    ~ Skipping duplicate: Ashley Beraty on 2026-05-31
+  Mon  (2026-06-01): 7 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-06-01
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-06-01
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-06-01
+    ~ Skipping duplicate: Maher Altairi on 2026-06-01
+    ~ Skipping duplicate: Basel Musaed on 2026-06-01
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-06-01
+    ~ Skipping duplicate: Ashley Beraty on 2026-06-01
+  Tues  (2026-06-02): 7 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-06-02
+    ~ Skipping duplicate: Sajad Aljanaby on 2026-06-02
+    ~ Skipping duplicate: Maher Altairi on 2026-06-02
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-06-02
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-06-02
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-06-02
+    ~ Skipping duplicate: Waleed Othman on 2026-06-02
+  Wed (2) (2026-06-03): 2 agents with activity
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-06-03
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-06-03
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-27 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_05_27.xlsx ...
+  Office: Rust RGA
+  Wed (2026-05-27): 1 agents with activity
+    ~ Skipping duplicate: Devin Gould on 2026-05-27
+  Thurs (2026-05-28): 1 agents with activity
+    ~ Skipping duplicate: Devin Gould on 2026-05-28
+  Fri (2026-05-29): 1 agents with activity
+    ~ Skipping duplicate: Devin Gould on 2026-05-29
+  Mon  (2026-06-01): 2 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-06-01
+    ~ Skipping duplicate: Shayla Williamson on 2026-06-01
+  Tues  (2026-06-02): 2 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-06-02
+    ~ Skipping duplicate: Shayla Williamson on 2026-06-02
+  Wed (2) (2026-06-03): 2 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-06-03
+    ~ Skipping duplicate: Torian Fields on 2026-06-03
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-05-27 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_05_27.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-05-27): 3 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-05-27
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-27
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-05-27
+  Thurs (2026-05-28): 1 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-28
+  Fri (2026-05-29): 1 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-05-29
+  Mon  (2026-06-01): 1 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-06-01
+  Tues  (2026-06-02): 1 agents with activity
+    ~ Skipping duplicate: Muntather Alsheeblawy on 2026-06-02
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-06-03 Gojcaj
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Gojcaj_WAR_2026_06_03.xlsx ...
+  Office: Gojcaj RGA
+  Wed (2026-06-03): 16 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-06-03
+    ~ Skipping duplicate: Julian Hyman on 2026-06-03
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-06-03
+    ~ Skipping duplicate: Kristen Fox on 2026-06-03
+    ~ Skipping duplicate: Joylynn Harris on 2026-06-03
+    ~ Skipping duplicate: Shafay Sutton on 2026-06-03
+    ~ Skipping duplicate: Timothy Noe on 2026-06-03
+    ~ Skipping duplicate: Preston Opperman on 2026-06-03
+    ~ Skipping duplicate: Bilal Abdullah on 2026-06-03
+    ~ Skipping duplicate: Zach Norby on 2026-06-03
+    ~ Skipping duplicate: Andy Martin on 2026-06-03
+    ~ Skipping duplicate: Trey Munn on 2026-06-03
+    ~ Skipping duplicate: Melissa Elam on 2026-06-03
+    ~ Skipping duplicate: Karina Picado on 2026-06-03
+    ~ Skipping duplicate: Jordan McFarlane on 2026-06-03
+    ~ Skipping duplicate: LaToya Clark on 2026-06-03
+  Thurs (2026-06-04): 15 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-06-04
+    ~ Skipping duplicate: Kaliyah Pyles on 2026-06-04
+    ~ Skipping duplicate: Keith Chmiel on 2026-06-04
+    ~ Skipping duplicate: Kennedra Marshall on 2026-06-04
+    ~ Skipping duplicate: Kristen Fox on 2026-06-04
+    ~ Skipping duplicate: Joylynn Harris on 2026-06-04
+    ~ Skipping duplicate: Shafay Sutton on 2026-06-04
+    ~ Skipping duplicate: Preston Opperman on 2026-06-04
+    ~ Skipping duplicate: Bilal Abdullah on 2026-06-04
+    ~ Skipping duplicate: Zach Norby on 2026-06-04
+    ~ Skipping duplicate: Andy Martin on 2026-06-04
+    ~ Skipping duplicate: Jaxx Felton on 2026-06-04
+    ~ Skipping duplicate: Trey Munn on 2026-06-04
+    ~ Skipping duplicate: Ronald Montoya on 2026-06-04
+    ~ Skipping duplicate: Dana Derizzo on 2026-06-04
+  Fri (2026-06-05): 12 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-06-05
+    ~ Skipping duplicate: Julian Hyman on 2026-06-05
+    ~ Skipping duplicate: Ashley Roehm on 2026-06-05
+    ~ Skipping duplicate: Joylynn Harris on 2026-06-05
+    ~ Skipping duplicate: Shafay Sutton on 2026-06-05
+    ~ Skipping duplicate: Preston Opperman on 2026-06-05
+    ~ Skipping duplicate: Bilal Abdullah on 2026-06-05
+    ~ Skipping duplicate: Zach Norby on 2026-06-05
+    ~ Skipping duplicate: Andy Martin on 2026-06-05
+    ~ Skipping duplicate: Jaxx Felton on 2026-06-05
+    ~ Skipping duplicate: Trey Munn on 2026-06-05
+    ~ Skipping duplicate: Melissa Elam on 2026-06-05
+  Sat (2026-06-06): 8 agents with activity
+    ~ Skipping duplicate: Kristen Fox on 2026-06-06
+    ~ Skipping duplicate: Shafay Sutton on 2026-06-06
+    ~ Skipping duplicate: Timothy Noe on 2026-06-06
+    ~ Skipping duplicate: Preston Opperman on 2026-06-06
+    ~ Skipping duplicate: Bilal Abdullah on 2026-06-06
+    ~ Skipping duplicate: Jaxx Felton on 2026-06-06
+    ~ Skipping duplicate: Trey Munn on 2026-06-06
+    ~ Skipping duplicate: Danielle Loux on 2026-06-06
+  Mon  (2026-06-08): 8 agents with activity
+    ~ Skipping duplicate: Eddie Leon on 2026-06-08
+    ~ Skipping duplicate: Kristen Fox on 2026-06-08
+    ~ Skipping duplicate: Joylynn Harris on 2026-06-08
+    ~ Skipping duplicate: Shafay Sutton on 2026-06-08
+    ~ Skipping duplicate: Timothy Noe on 2026-06-08
+    ~ Skipping duplicate: Zach Norby on 2026-06-08
+    ~ Skipping duplicate: Jaxx Felton on 2026-06-08
+    ~ Skipping duplicate: Trey Munn on 2026-06-08
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-06-03 MJ
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing MJ_WAR_2026_06_03.xlsx ...
+  Office: Mohamed Aljahmi RGA
+  Wed (2026-06-03): 7 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-06-03
+    ~ Skipping duplicate: Hannah Sanders on 2026-06-03
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-06-03
+    ~ Skipping duplicate: Basel Musaed on 2026-06-03
+    ~ Skipping duplicate: Husein Ghasham on 2026-06-03
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-06-03
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-06-03
+  Thurs (2026-06-04): 6 agents with activity
+    ~ Skipping duplicate: Awni Shuaib on 2026-06-04
+    ~ Skipping duplicate: Ali Eltanoukhi on 2026-06-04
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-06-04
+    ~ Skipping duplicate: Kimberly Villacampa on 2026-06-04
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-06-04
+    ~ Skipping duplicate: Ashley Beraty on 2026-06-04
+  Fri (2026-06-05): 3 agents with activity
+    ~ Skipping duplicate: Christine Demaras on 2026-06-05
+    ~ Skipping duplicate: Husein Ghasham on 2026-06-05
+    ~ Skipping duplicate: Shiko Qaradaghi on 2026-06-05
+  Sun (2026-06-07): 1 agents with activity
+    ~ Skipping duplicate: Snoor Qaradaghi on 2026-06-07
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-06-03 Rust
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Rust_WAR_2026_06_03.xlsx ...
+  Office: Rust RGA
+  Wed (2026-06-03): 6 agents with activity
+    ~ Skipping duplicate: Andrea Mulder on 2026-06-03
+    ~ Skipping duplicate: Ashley Varner-Warren on 2026-06-03
+    ~ Skipping duplicate: Kristen Walton on 2026-06-03
+    ~ Skipping duplicate: Abdur-Rahmaan Yaseen on 2026-06-03
+    ~ Skipping duplicate: Maria Farley on 2026-06-03
+    ~ Skipping duplicate: Devin Gould on 2026-06-03
+  Fri (2026-06-05): 2 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-06-05
+    ~ Skipping duplicate: Devin Gould on 2026-06-05
+  Sat (2026-06-06): 1 agents with activity
+    ~ Skipping duplicate: Devin Gould on 2026-06-06
+  Sun (2026-06-07): 1 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-06-07
+  Mon  (2026-06-08): 4 agents with activity
+    ~ Skipping duplicate: Shayla Williamson on 2026-06-08
+    ~ Skipping duplicate: Jeton Ajvazi on 2026-06-08
+    ~ Skipping duplicate: Meliza Quintero on 2026-06-08
+    ~ Skipping duplicate: Devin Gould on 2026-06-08
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+[OK] 2026-06-03 Monty
+Connecting to MongoDB ...
+Connected to 'vantagelife'
+
+
+Processing Monty_WAR_2026_06_03.xlsx ...
+  Office: Montzer Alwatan RGA
+  Wed (2026-06-03): 2 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-06-03
+    ~ Skipping duplicate: Korey Mucchiello on 2026-06-03
+  Thurs (2026-06-04): 5 agents with activity
+    ~ Skipping duplicate: Serage Jamil on 2026-06-04
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-06-04
+    ~ Skipping duplicate: Ashton Marshall on 2026-06-04
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-06-04
+    ~ Skipping duplicate: Korey Mucchiello on 2026-06-04
+  Fri (2026-06-05): 4 agents with activity
+    ~ Skipping duplicate: Ashton Marshall on 2026-06-05
+    ~ Skipping duplicate: Ali Alameedi on 2026-06-05
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-06-05
+    ~ Skipping duplicate: Sunshine Faimalo on 2026-06-05
+  Sat (2026-06-06): 2 agents with activity
+    ~ Skipping duplicate: Ashton Marshall on 2026-06-06
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-06-06
+  Sun (2026-06-07): 1 agents with activity
+    ~ Skipping duplicate: Ali Alameedi on 2026-06-07
+  Mon  (2026-06-08): 3 agents with activity
+    ~ Skipping duplicate: Afnan Alfatlawy on 2026-06-08
+    ~ Skipping duplicate: Mohamad-Ali Alwatan on 2026-06-08
+    ~ Skipping duplicate: Ali Alwatan on 2026-06-08
+  → 0 entries inserted
+
+Done. Total entries inserted: 0
+
+Done: 64 OK, 0 FAILED

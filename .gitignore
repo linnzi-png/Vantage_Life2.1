@@ -31,11 +31,10 @@ dist/
 dist
 
 # Environment files (comprehensive coverage)
+
 .env
-.env.local
-.env.*.local
-**/.env
-**/.env.local
+.env.*
+!.env.example
 *token.json*
 *credentials.json*
 
@@ -79,6 +78,7 @@ agenthub/agents/youtube/db
 
 # Build caches
 .cache/
+.metro-cache/
 
 memory/test_credentials.md
 
