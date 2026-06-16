@@ -1,6 +1,14 @@
 """
 Download all WAR Google Sheets as xlsx and import into MongoDB.
 Run from repo root: python download_and_import_wars.py
+
+Required env vars:
+    MONGO_URL  - MongoDB connection string
+                 e.g. mongodb+srv://linnzi_db_user:<password>@vantagelife.r5atbyt.mongodb.net/
+
+Windows PowerShell:
+    $env:MONGO_URL = "mongodb+srv://linnzi_db_user:<password>@vantagelife.r5atbyt.mongodb.net/"
+    python download_and_import_wars.py
 """
 import os
 import sys
@@ -8,10 +16,16 @@ import time
 import subprocess
 import urllib.request
 import urllib.error
+from pathlib import Path
 
-REPO = r"C:\Users\linnz\OneDrive\Documents\Vantage_Life2.1"
-DOWNLOADS = os.path.join(REPO, "downloads")
-MONGO_URL = "mongodb+srv://linnzi_db_user:Wy7fahxb9Gfp9xh2@vantagelife.r5atbyt.mongodb.net/"
+REPO = Path(__file__).resolve().parent
+DOWNLOADS = REPO / "downloads"
+MONGO_URL = os.environ.get("MONGO_URL", "")
+
+if not MONGO_URL:
+    print("ERROR: MONGO_URL environment variable is required.")
+    print("  PowerShell: $env:MONGO_URL = \"mongodb+srv://linnzi_db_user:<password>@vantagelife.r5atbyt.mongodb.net/\"")
+    sys.exit(1)
 
 # All weeks: week_start_date -> {office: sheet_id}
 # Week 5/6 already imported — include anyway (import script skips duplicates)
@@ -138,13 +152,12 @@ def download_sheet(sheet_id: str, dest_path: str) -> bool:
 
 def import_xlsx(xlsx_path: str, week_start: str) -> bool:
     """Run the import script for one xlsx file. Returns True on success."""
-    script = os.path.join(REPO, "backend", "import_xlsx_war.py")
+    script = str(REPO / "backend" / "import_xlsx_war.py")
     env = os.environ.copy()
     env["WEEK_START"] = week_start
-    env["MONGO_URL"] = MONGO_URL
     result = subprocess.run(
-        ["python", script, xlsx_path],
-        cwd=REPO,
+        [sys.executable, script, xlsx_path],
+        cwd=str(REPO),
         env=env,
         capture_output=True,
         text=True,
@@ -160,7 +173,7 @@ def import_xlsx(xlsx_path: str, week_start: str) -> bool:
 
 
 def main():
-    os.makedirs(DOWNLOADS, exist_ok=True)
+    DOWNLOADS.mkdir(exist_ok=True)
     total = failed_dl = failed_import = 0
 
     for week_start, offices in WEEKS:
@@ -171,7 +184,7 @@ def main():
             total += 1
             safe_date = week_start.replace("-", "_")
             filename = f"{office}_WAR_{safe_date}.xlsx"
-            dest = os.path.join(DOWNLOADS, filename)
+            dest = str(DOWNLOADS / filename)
 
             print(f"\n[{office}]")
             if not download_sheet(sheet_id, dest):

@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-  "buildCommand": "cd frontend && npx expo export --platform web",
-=======
   "buildCommand": "cd frontend && yarn install && npx expo export --platform web",
->>>>>>> 0d4fdc7ecc548cafa0e5057bf25d0119cf6420f5
   "outputDirectory": "frontend/dist",
   "framework": null,
   "rewrites": [

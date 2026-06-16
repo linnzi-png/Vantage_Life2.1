@@ -38,13 +38,10 @@ def download_drive_file(file_id: str, dest: Path):
     url = f"https://docs.google.com/spreadsheets/d/{file_id}/export?format=xlsx"
     r = requests.get(url, timeout=60)
     r.raise_for_status()
-<<<<<<< HEAD
-=======
     if "text/html" in r.headers.get("Content-Type", ""):
         raise ValueError(
             "Downloaded file is HTML — likely a Google login or permission page, not an XLSX spreadsheet."
         )
->>>>>>> 0d4fdc7ecc548cafa0e5057bf25d0119cf6420f5
     dest.write_bytes(r.content)
 
 
@@ -60,11 +57,7 @@ def import_week(week_start: str, xlsx_path: Path) -> bool:
     )
     print(result.stdout)
     if result.returncode != 0:
-<<<<<<< HEAD
-        print(f"  ERROR: {result.stderr[:300]}")
-=======
         print(f"  ERROR:\n{result.stderr}")
->>>>>>> 0d4fdc7ecc548cafa0e5057bf25d0119cf6420f5
         return False
     return True
 
