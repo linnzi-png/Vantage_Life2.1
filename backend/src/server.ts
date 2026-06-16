@@ -196,12 +196,13 @@ async function upsertUserAndSession(input: {
   agentId?: string | null;
 }) {
   const role = input.role || "level_1";
-  let user: AnyDoc | null = await db.collection("users").findOne({ email: input.email }, { projection: { _id: 0 } });
+  const email = input.email.toLowerCase().trim();
+  let user: AnyDoc | null = await db.collection("users").findOne({ email }, { projection: { _id: 0 } });
 
   if (!user) {
     user = {
       user_id: `user_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
-      email: input.email,
+      email,
       name: input.name,
       picture: input.picture || "",
       role,
@@ -867,9 +868,15 @@ api.get(
       .sort({ submitted_at: -1 })
       .limit(50)
       .toArray();
+    const tickerAgentIds = [...new Set((entries as AnyDoc[]).map((e: AnyDoc) => e.agent_id as string))];
+    const tickerAgents: AnyDoc[] = await db
+      .collection("agent_profiles")
+      .find({ agent_id: { $in: tickerAgentIds } }, { projection: { _id: 0, agent_id: 1, name: 1, office: 1 } })
+      .toArray();
+    const tickerAgentMap = new Map<string, AnyDoc>(tickerAgents.map((a: AnyDoc) => [a.agent_id as string, a]));
     const items = [];
     for (const entry of entries) {
-      const agent = await db.collection("agent_profiles").findOne({ agent_id: entry.agent_id }, { projection: { _id: 0 } });
+      const agent = tickerAgentMap.get(entry.agent_id);
       if (!agent) continue;
       items.push({
         agent_name: agent.name,
@@ -898,10 +905,19 @@ api.get(
         { $sort: { gross_alp: -1 } },
       ])
       .toArray();
+    const wallAgentIds = (rows as AnyDoc[]).map((r: AnyDoc) => r._id as string);
+    const wallAgents: AnyDoc[] = await db
+      .collection("agent_profiles")
+      .find(
+        { agent_id: { $in: wallAgentIds } },
+        { projection: { _id: 0, agent_id: 1, name: 1, office: 1, is_rookie: 1 } },
+      )
+      .toArray();
+    const wallAgentMap = new Map<string, AnyDoc>(wallAgents.map((a: AnyDoc) => [a.agent_id as string, a]));
     const vets: AnyDoc[] = [];
     const rookies: AnyDoc[] = [];
     for (const row of rows) {
-      const agent = await db.collection("agent_profiles").findOne({ agent_id: row._id }, { projection: { _id: 0 } });
+      const agent = wallAgentMap.get(row._id);
       if (!agent) continue;
       const item = {
         agent_id: agent.agent_id,
