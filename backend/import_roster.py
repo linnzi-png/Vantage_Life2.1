@@ -27,15 +27,15 @@ MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017/")
 DB_NAME   = os.environ.get("MONGO_DB", "vantagelife")
 OFFICE    = "MJ RGA"
 
-# ── ROSTER ────────────────────────────────────────────────────────────────────────
+# ── ROSTER ─────────────────────────────────────────────────────────────────────────────────────
 # (name, phone_digits, email, io_role, app_role, direct_upline_name_or_None)
 # Ordered top-down so every upline exists before the agents below it.
 ROSTER = [
-    # ── Top of hierarchy ──────────────────────────────────────────────────────
+    # ── Top of hierarchy ─────────────────────────────────────────────────────────────────────────────────────
     ("ALJAHMI, MOHAMED",      "3135550101", "mj@aopremier.com",                 "RGA",        "level_4", None),
-    # ── MGA ────────────────────────────────────────────────────────────────────
+    # ── MGA ───────────────────────────────────────────────────────────────────────────────
     ("ALWATAN, MONTZER",      "3139609390", "Monty@AOpremier.com",              "MGA",        "level_3", "ALJAHMI, MOHAMED"),
-    # ── GAs ────────────────────────────────────────────────────────────────────
+    # ── GAs ───────────────────────────────────────────────────────────────────────────────
     ("COOK, CONNOR",          "2163186495", "ccook.ao@gmail.com",               "GA",         "level_2", "ALJAHMI, MOHAMED"),
     ("SOLIS, JEANNIELIZA",    "9157407465", "jennysolis1624@gmail.com",         "GA",         "level_2", "ALJAHMI, MOHAMED"),
     ("MUSA, ALI",             "3132660109", "ali@aopremier.com",                "GA",         "level_2", "ALJAHMI, MOHAMED"),
@@ -45,7 +45,7 @@ ROSTER = [
     ("QARADAGHI, SNOOR",      "3137990462", "Snoor.qaradaghi@gmail.com",        "SA",         "level_1", "MUSA, ALI"),
     ("SITTO, LANDY",          "5867448002", "landy.sitto.ali@gmail.com",        "SA",         "level_1", "MUSA, ALI"),
     ("MURSHED, ALESKANDAR",   "3132401920", "alex.murshed@gmail.com",           "SA",         "level_1", "LONG, HENRY"),
-    # ── Agents / Builders / inTraining ────────────────────────────────────
+    # ── Agents / Builders / inTraining ────────────────────────────────────────────────────────────────────────────
     ("Aljahmi, Essa",         "3138985711", "EALJAHMI618@gmail.com",            "Builder",    "level_1", "MUSA, ALI"),
     ("ALJAILANI, GABRIEL",    "7343669060", "galjailani@gmail.com",             "Agent",      "level_1", "ELTANOUKHI, ALI"),
     ("ALJANABY, MSTAFA",      "3132600857", "mstafaaljanaby3@gmail.com",        "Agent",      "level_1", "QARADAGHI, SNOOR"),
@@ -91,15 +91,23 @@ ROSTER = [
 # ────────────────────────────────────────────────────────────────────────────
 
 
-def find_agent(db, name: str):
+def find_agent_by_name(db, name: str):
     return db.agent_profiles.find_one(
         {"name": {"$regex": f"^{re.escape(name.strip())}$", "$options": "i"}},
         {"_id": 0}
     )
 
 
+def find_agent_by_email(db, email: str):
+    return db.agent_profiles.find_one(
+        {"email": email.strip().lower()},
+        {"_id": 0}
+    )
+
+
 def upsert_agent(db, name, phone, email, io_role, app_role, upline_id) -> str:
-    existing = find_agent(db, name)
+    # Try name first (exact match), then fall back to email to avoid WAR-name duplicates
+    existing = find_agent_by_name(db, name) or find_agent_by_email(db, email)
     if existing:
         db.agent_profiles.update_one(
             {"agent_id": existing["agent_id"]},
@@ -139,22 +147,22 @@ def main():
     db = client[DB_NAME]
     print(f"Connected to '{DB_NAME}'\n")
 
-    # name → agent_id cache (populated as we go, top-down)
+    # name → agent_id cache (populated as we go, top-down; keys are UPPER for robustness)
     id_map: dict[str, str] = {}
 
     for name, phone, email, io_role, app_role, upline_name in ROSTER:
         upline_id = None
         if upline_name:
-            upline_id = id_map.get(upline_name)
+            upline_id = id_map.get(upline_name.strip().upper())
             if upline_id is None:
                 # Fall back to a DB lookup so batched/partial imports still link correctly
-                upline_agent = find_agent(db, upline_name)
+                upline_agent = find_agent_by_name(db, upline_name)
                 if upline_agent:
                     upline_id = upline_agent.get("agent_id")
                 else:
                     print(f"  [WARN] upline '{upline_name}' not found in DB or id_map for {name} — check order")
         agent_id = upsert_agent(db, name, phone, email, io_role, app_role, upline_id)
-        id_map[name] = agent_id
+        id_map[name.strip().upper()] = agent_id
 
     print(f"\nDone. {len(ROSTER)} agents processed.")
     print("Hierarchy is live — uplines can now see their full downline in the app.")
