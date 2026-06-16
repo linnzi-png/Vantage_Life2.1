@@ -68,21 +68,26 @@ def main():
     )
     print(f"production_entries: deleted {r.deleted_count} seeded entries")
 
-    # 5. Collect agent_ids still referenced by real entries, plus their uplines
-    #    and any profile already linked from a users record to prevent dangling refs.
+    # 5. Collect agent_ids to keep: real producers + live-submission producers +
+    #    their uplines + user-linked profiles
     real_agent_ids = set(
         db.production_entries.distinct("agent_id", {"source": {"$in": list(REAL_SOURCES)}})
     )
+    # Live app submissions have no source field — their agents must be kept too
+    live_agent_ids = set(
+        db.production_entries.distinct("agent_id", {"source": {"$exists": False}})
+    )
+    all_producer_ids = real_agent_ids | live_agent_ids
     active_uplines = set(
-        db.agent_profiles.distinct("upline_id", {"agent_id": {"$in": list(real_agent_ids)}})
+        db.agent_profiles.distinct("upline_id", {"agent_id": {"$in": list(all_producer_ids)}})
     )
     user_linked_ids = set(
         a for a in db.users.distinct("agent_id") if a
     )
-    agents_to_keep = real_agent_ids.union(active_uplines).union(user_linked_ids) - {None}
+    agents_to_keep = all_producer_ids.union(active_uplines).union(user_linked_ids) - {None}
     print(f"\nProfiles to keep: {len(agents_to_keep)} "
-          f"({len(real_agent_ids)} producers, {len(active_uplines)} uplines, "
-          f"{len(user_linked_ids)} user-linked)")
+          f"({len(real_agent_ids)} WAR producers, {len(live_agent_ids)} live producers, "
+          f"{len(active_uplines)} uplines, {len(user_linked_ids)} user-linked)")
 
     # 6. Drop agent_profiles not in that set
     r = db.agent_profiles.delete_many({"agent_id": {"$nin": list(agents_to_keep)}})
