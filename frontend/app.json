@@ -1,24 +1,22 @@
 {
   "expo": {
-    "name": "VantageLife",
-    "slug": "vantagelife",
+    "name": "frontend",
+    "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "vantagelife",
-    "userInterfaceStyle": "dark",
+    "scheme": "frontend",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "bundleIdentifier": "com.aopremiere.vantagelife",
-      "supportsTablet": false,
-      "buildNumber": "1"
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aopremiere.vantagelife"
     },
     "android": {
       "package": "com.aopremiere.vantagelife",
-      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#0D0D0D"
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true
     },
@@ -32,10 +30,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-image.png",
+          "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#0D0D0D"
+          "backgroundColor": "#000"
         }
       ],
       "expo-web-browser"
