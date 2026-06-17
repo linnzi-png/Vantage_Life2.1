@@ -114,11 +114,7 @@ export default function PulseScreen() {
       const s = await api<{ streak: number }>('/api/pulse/me/streak');
       setStreak(s.streak);
     } catch { /* not linked */ }
-<<<<<<< HEAD
   }, []);
-=======
-  };
->>>>>>> 24255a84b0429362da9be8a4c5d415f6e2b4a352
 
   useEffect(() => {
     setInBuffer(isLateNightBuffer());
@@ -306,13 +302,8 @@ export default function PulseScreen() {
             </View>
           )}
 
-<<<<<<< HEAD
           <Text style={[styles.kicker, { marginTop: 18 }]}>TODAY'S ENTRIES</Text>
           {entries.filter((e) => !e.is_adjustment).length === 0 ? (
-=======
-          <Text style={[styles.kicker, { marginTop: 18 }]}>{"TODAY'S ENTRIES"}</Text>
-          {(today?.entries || []).filter((e: any) => !e.is_adjustment).length === 0 ? (
->>>>>>> 24255a84b0429362da9be8a4c5d415f6e2b4a352
             <Text style={styles.empty}>No pulses logged for today yet.</Text>
           ) : (
             entries.filter((e) => !e.is_adjustment).map((e) => (
