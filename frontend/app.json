@@ -41,7 +41,8 @@
           "backgroundColor": "#000"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/withWorkletsFix"
     ],
     "experiments": {
       "typedRoutes": true
