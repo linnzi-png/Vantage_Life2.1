@@ -42,7 +42,7 @@ const INNER_CODE = `
 `;
 
 // Fallback: standalone block used only if the generated Podfile has no
-// post_install block at all (should not happen with Expo SDK 55).
+// post_install block at all (should not happen with Expo SDK 56).
 const STANDALONE_HOOK = `
 
 ${MARKER}
