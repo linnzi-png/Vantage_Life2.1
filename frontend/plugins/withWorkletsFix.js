@@ -10,6 +10,11 @@
 // Fix: inject into the existing post_install block to add that path explicitly.
 // We inject INTO the existing block (not append a new one) so that the
 // react_native_post_install call in Expo's generated Podfile still runs.
+//
+// Template literal escaping note:
+//   \${...} in a JS template literal → literal ${...} in the output string
+//   (prevents JS from trying to interpolate PODS_XCFRAMEWORKS_BUILD_DIR)
+//   #{...} is Ruby interpolation syntax — JS ignores it (not ${...})
 
 const { withDangerousMod } = require('@expo/config-plugins');
 const fs = require('fs');
@@ -19,10 +24,9 @@ const MARKER = '# worklets-xcframework-framework-search-path-fix';
 const POST_INSTALL_OPENER = 'post_install do |installer|';
 
 // Ruby code injected INTO the existing post_install block.
-// ${PODS_XCFRAMEWORKS_BUILD_DIR} is the CocoaPods variable for the directory
-// where [CP] Copy XCFrameworks extracts xcframework slices.
-// Escaping: \\" => \" in output (Ruby escaped double-quote inside double-quoted string)
-//           \${ => ${ in output (prevents JS template literal interpolation)
+// \${PODS_XCFRAMEWORKS_BUILD_DIR} — the \$ prevents JS template interpolation;
+// the Podfile receives the literal text ${PODS_XCFRAMEWORKS_BUILD_DIR} which
+// Xcode expands at build time to the xcframework intermediates directory.
 const INNER_CODE = `
   ${MARKER}
   installer.pods_project.targets.each do |target|
@@ -32,7 +36,7 @@ const INNER_CODE = `
       existing = existing.join(' ') if existing.is_a?(Array)
       next if existing.include?('XCFRAMEWORKS_BUILD_DIR')
       build_config.build_settings['FRAMEWORK_SEARCH_PATHS'] =
-        "#{existing} \\"${PODS_XCFRAMEWORKS_BUILD_DIR}/RNWorklets\\""
+        "#{existing} \${PODS_XCFRAMEWORKS_BUILD_DIR}/RNWorklets"
     end
   end
 `;
@@ -50,7 +54,7 @@ post_install do |installer|
       existing = existing.join(' ') if existing.is_a?(Array)
       next if existing.include?('XCFRAMEWORKS_BUILD_DIR')
       build_config.build_settings['FRAMEWORK_SEARCH_PATHS'] =
-        "#{existing} \\"${PODS_XCFRAMEWORKS_BUILD_DIR}/RNWorklets\\""
+        "#{existing} \${PODS_XCFRAMEWORKS_BUILD_DIR}/RNWorklets"
     end
   end
 end
