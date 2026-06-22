@@ -196,12 +196,13 @@ async function upsertUserAndSession(input: {
   agentId?: string | null;
 }) {
   const role = input.role || "level_1";
-  let user: AnyDoc | null = await db.collection("users").findOne({ email: input.email }, { projection: { _id: 0 } });
+  const email = input.email.toLowerCase().trim();
+  let user: AnyDoc | null = await db.collection("users").findOne({ email }, { projection: { _id: 0 } });
 
   if (!user) {
     user = {
       user_id: `user_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
-      email: input.email,
+      email,
       name: input.name,
       picture: input.picture || "",
       role,
@@ -335,14 +336,15 @@ async function maybeTriggerShoutouts(agent: AnyDoc, entry: AnyDoc) {
 
   let streak = 0;
   const d = nowDetroit();
+  const oldestStreakDay = salesDayFor(d.minus({ days: 29 }));
+  const streakEntries = await db
+    .collection("production_entries")
+    .find({ agent_id: agent.agent_id, sales_day: { $gte: oldestStreakDay }, submitted_on_time: true })
+    .toArray();
+  const onTimeDays = new Set(streakEntries.map((e: AnyDoc) => e.sales_day));
   for (let i = 0; i < 30; i += 1) {
     const sdi = salesDayFor(d.minus({ days: i }));
-    const onTime = await db.collection("production_entries").findOne({
-      agent_id: agent.agent_id,
-      sales_day: sdi,
-      submitted_on_time: true,
-    });
-    if (onTime) streak += 1;
+    if (onTimeDays.has(sdi)) streak += 1;
     else break;
   }
   if (streak >= 5) {
@@ -743,6 +745,9 @@ api.post(
     if (!r.ok) throw new HttpError(401, "Invalid session_id");
     const data = (await r.json()) as AnyDoc;
     const email = data.email;
+    if (!email || typeof email !== "string") {
+      throw new HttpError(401, "Invalid session data: email is required");
+    }
     const name = data.name || email;
     const sessionToken = data.session_token || `st_${randomUUID().replaceAll("-", "")}`;
     const user = await upsertUserAndSession({
@@ -1033,14 +1038,15 @@ api.get(
     if (!user.agent_id) return res.json({ streak: 0 });
     let streak = 0;
     const d = nowDetroit();
+    const oldestStreakDay = salesDayFor(d.minus({ days: 29 }));
+    const streakEntries = await db
+      .collection("production_entries")
+      .find({ agent_id: user.agent_id, sales_day: { $gte: oldestStreakDay }, submitted_on_time: true })
+      .toArray();
+    const onTimeDays = new Set(streakEntries.map((e: AnyDoc) => e.sales_day));
     for (let i = 0; i < 30; i += 1) {
       const salesDay = salesDayFor(d.minus({ days: i }));
-      const onTime = await db.collection("production_entries").findOne({
-        agent_id: user.agent_id,
-        sales_day: salesDay,
-        submitted_on_time: true,
-      });
-      if (onTime) streak += 1;
+      if (onTimeDays.has(salesDay)) streak += 1;
       else break;
     }
     return res.json({ streak });
