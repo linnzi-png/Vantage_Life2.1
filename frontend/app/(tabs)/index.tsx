@@ -9,6 +9,7 @@ import PlatinumWall from '../../src/components/PlatinumWall';
 import OfficeTabs, { OfficeRow } from '../../src/components/OfficeTabs';
 import GateBanner from '../../src/components/GateBanner';
 import Ticker, { TickerItem } from '../../src/components/Ticker';
+import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 
 interface Summary {
   total_alp: number; total_net_alp: number; total_sits: number; total_sales: number;
@@ -23,6 +24,7 @@ export default function DashboardScreen() {
   const [rookies, setRookies] = useState<any[]>([]);
   const [offices, setOffices] = useState<OfficeRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -97,7 +99,7 @@ export default function DashboardScreen() {
               />
             </View>
 
-            <PlatinumWall vets={vets} rookies={rookies} />
+            <PlatinumWall vets={vets} rookies={rookies} onPress={(item) => setContactAgent({ name: item.name, role: item.role || 'level_1', phone: item.phone, email: item.email, office: item.office })} />
 
             <OfficeTabs offices={offices} />
 
@@ -107,6 +109,7 @@ export default function DashboardScreen() {
       </ScrollView>
 
       <Ticker items={ticker} />
+      <AgentContactSheet agent={contactAgent} onClose={() => setContactAgent(null)} />
     </SafeAreaView>
   );
 }

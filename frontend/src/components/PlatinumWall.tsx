@@ -1,24 +1,24 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../lib/auth';
 
-interface Item { agent_id: string; name: string; office: string; gross_alp: number; sales: number; is_rookie?: boolean; }
+interface Item { agent_id: string; name: string; office: string; gross_alp: number; sales: number; is_rookie?: boolean; phone?: string; email?: string; role?: string; }
 
-export default function PlatinumWall({ vets, rookies }: { vets: Item[]; rookies: Item[] }) {
+export default function PlatinumWall({ vets, rookies, onPress }: { vets: Item[]; rookies: Item[]; onPress?: (item: Item) => void }) {
   return (
     <View style={styles.wrap}>
       <Text style={styles.title}>PLATINUM WALL</Text>
       <View style={styles.row}>
-        <Panel title="TOP 3 VETS" color={COLORS.gold} icon="ribbon" items={vets} testID="platinum-vets" />
+        <Panel title="TOP 3 VETS" color={COLORS.gold} icon="ribbon" items={vets} testID="platinum-vets" onPress={onPress} />
         <View style={{ width: 8 }} />
-        <Panel title="TOP 3 ROOKIES" color={COLORS.orange} icon="rocket" items={rookies} testID="platinum-rookies" />
+        <Panel title="TOP 3 ROOKIES" color={COLORS.orange} icon="rocket" items={rookies} testID="platinum-rookies" onPress={onPress} />
       </View>
     </View>
   );
 }
 
-function Panel({ title, color, icon, items, testID }: any) {
+function Panel({ title, color, icon, items, testID, onPress }: any) {
   return (
     <View style={[styles.panel, { borderTopColor: color }]} testID={testID}>
       <View style={styles.panelHeader}>
@@ -26,14 +26,14 @@ function Panel({ title, color, icon, items, testID }: any) {
         <Text style={[styles.panelTitle, { color }]}>{title}</Text>
       </View>
       {items?.length ? items.map((it: Item, i: number) => (
-        <View key={it.agent_id} style={styles.item}>
+        <TouchableOpacity key={it.agent_id} style={styles.item} onPress={() => onPress?.(it)} activeOpacity={0.7}>
           <Text style={[styles.rank, { color }]}>{i + 1}</Text>
           <View style={{ flex: 1, marginLeft: 8 }}>
             <Text style={styles.name} numberOfLines={1}>{it.name}</Text>
             <Text style={styles.meta}>{it.office} · {it.sales} sales</Text>
           </View>
           <Text style={styles.alp}>${Math.round(it.gross_alp).toLocaleString()}</Text>
-        </View>
+        </TouchableOpacity>
       )) : (
         <Text style={styles.empty}>No data yet today.</Text>
       )}

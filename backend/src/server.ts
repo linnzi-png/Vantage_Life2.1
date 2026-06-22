@@ -196,13 +196,12 @@ async function upsertUserAndSession(input: {
   agentId?: string | null;
 }) {
   const role = input.role || "level_1";
-  const email = input.email.toLowerCase().trim();
-  let user: AnyDoc | null = await db.collection("users").findOne({ email }, { projection: { _id: 0 } });
+  let user: AnyDoc | null = await db.collection("users").findOne({ email: input.email }, { projection: { _id: 0 } });
 
   if (!user) {
     user = {
       user_id: `user_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
-      email,
+      email: input.email,
       name: input.name,
       picture: input.picture || "",
       role,
@@ -868,10 +867,10 @@ api.get(
       .sort({ submitted_at: -1 })
       .limit(50)
       .toArray();
-    const tickerAgentIds = [...new Set((entries as AnyDoc[]).map((e: AnyDoc) => e.agent_id as string))];
+    const tickerAgentIds = [...new Set(entries.map((e: AnyDoc) => e.agent_id).filter(Boolean))];
     const tickerAgents: AnyDoc[] = await db
       .collection("agent_profiles")
-      .find({ agent_id: { $in: tickerAgentIds } }, { projection: { _id: 0, agent_id: 1, name: 1, office: 1 } })
+      .find({ agent_id: { $in: tickerAgentIds } }, { projection: { _id: 0, agent_id: 1, name: 1, office: 1, role: 1, phone: 1, email: 1 } })
       .toArray();
     const tickerAgentMap = new Map<string, AnyDoc>(tickerAgents.map((a: AnyDoc) => [a.agent_id as string, a]));
     const items = [];
@@ -879,11 +878,15 @@ api.get(
       const agent = tickerAgentMap.get(entry.agent_id);
       if (!agent) continue;
       items.push({
+        agent_id: entry.agent_id,
         agent_name: agent.name,
         alp: Number(entry.gross_alp || 0),
         market: agent.office || "",
         reps: Number(entry.refs_obtained || 0),
         ts: entry.submitted_at instanceof Date ? entry.submitted_at.toISOString() : entry.submitted_at,
+        phone: agent.phone || "",
+        email: agent.email || "",
+        role: agent.role || "",
       });
     }
     res.json({ items });
@@ -905,13 +908,10 @@ api.get(
         { $sort: { gross_alp: -1 } },
       ])
       .toArray();
-    const wallAgentIds = (rows as AnyDoc[]).map((r: AnyDoc) => r._id as string);
+    const wallAgentIds = rows.map((r: AnyDoc) => r._id).filter(Boolean);
     const wallAgents: AnyDoc[] = await db
       .collection("agent_profiles")
-      .find(
-        { agent_id: { $in: wallAgentIds } },
-        { projection: { _id: 0, agent_id: 1, name: 1, office: 1, is_rookie: 1 } },
-      )
+      .find({ agent_id: { $in: wallAgentIds } }, { projection: { _id: 0, agent_id: 1, name: 1, office: 1, is_rookie: 1, role: 1, phone: 1, email: 1 } })
       .toArray();
     const wallAgentMap = new Map<string, AnyDoc>(wallAgents.map((a: AnyDoc) => [a.agent_id as string, a]));
     const vets: AnyDoc[] = [];
@@ -926,6 +926,9 @@ api.get(
         gross_alp: Number(row.gross_alp || 0),
         sales: Number(row.sales || 0),
         is_rookie: Boolean(agent.is_rookie),
+        role: agent.role || "",
+        phone: agent.phone || "",
+        email: agent.email || "",
       };
       if (agent.is_rookie) {
         if (rookies.length < 3) rookies.push(item);
@@ -1045,25 +1048,6 @@ api.get(
 );
 
 api.get(
-  "/my-upline",
-  requireAuth,
-  asyncHandler(async (req, res) => {
-    const user = req.user!;
-    if (!user.agent_id) return res.json({ upline: null });
-    const agent = await db.collection("agent_profiles").findOne(
-      { agent_id: user.agent_id },
-      { projection: { _id: 0, upline_id: 1 } },
-    );
-    if (!agent?.upline_id) return res.json({ upline: null });
-    const upline = await db.collection("agent_profiles").findOne(
-      { agent_id: agent.upline_id },
-      { projection: { _id: 0, agent_id: 1, name: 1, role: 1, io_role: 1, phone: 1, email: 1, office: 1 } },
-    );
-    return res.json({ upline: upline ? omitId(upline) : null });
-  }),
-);
-
-api.get(
   "/team",
   requireLevel(2),
   asyncHandler(async (req, res) => {
@@ -1112,9 +1096,6 @@ api.get(
         name: agent.name,
         office: agent.office,
         role: agent.role,
-        io_role: agent.io_role || "",
-        phone: agent.phone || "",
-        email: agent.email || "",
         is_rookie: Boolean(agent.is_rookie),
         gross_alp: Number(row.gross_alp || 0),
         net_alp: Number(row.net_alp || 0),
@@ -1133,9 +1114,6 @@ api.get(
         name: agent.name,
         office: agent.office,
         role: agent.role,
-        io_role: agent.io_role || "",
-        phone: agent.phone || "",
-        email: agent.email || "",
         is_rookie: Boolean(agent.is_rookie),
         gross_alp: 0,
         net_alp: 0,
@@ -1169,7 +1147,17 @@ api.get(
       }
       return false;
     });
-    res.json(serializeDates({ shoutouts: out }));
+    const shoutoutAgentIds = [...new Set(out.map((s: AnyDoc) => s.agent_id).filter(Boolean))];
+    const shoutoutContacts: AnyDoc[] = await db
+      .collection("agent_profiles")
+      .find({ agent_id: { $in: shoutoutAgentIds } }, { projection: { _id: 0, agent_id: 1, role: 1, phone: 1, email: 1 } })
+      .toArray();
+    const shoutoutContactMap = new Map<string, AnyDoc>(shoutoutContacts.map((a: AnyDoc) => [a.agent_id as string, a]));
+    const enriched = out.map((s: AnyDoc) => {
+      const contact = shoutoutContactMap.get(s.agent_id);
+      return { ...s, phone: contact?.phone || "", email: contact?.email || "", role: contact?.role || "" };
+    });
+    res.json(serializeDates({ shoutouts: enriched }));
   }),
 );
 
