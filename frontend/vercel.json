@@ -1,6 +1,5 @@
 {
-  "installCommand": "yarn install",
-  "buildCommand": "npx expo export --platform web",
+  "buildCommand": "METRO_CACHE_ROOT=/tmp/metro-cache npx expo export --platform web",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
