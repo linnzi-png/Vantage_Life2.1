@@ -4,8 +4,10 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth, COLORS, Role } from '../src/lib/auth';
+import { useAuth, COLORS, Role, api, setToken } from '../src/lib/auth';
 
 const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] = [
   { level: 'level_1', title: 'AGENT', subtitle: 'Personal stats + Pulse entry', tint: COLORS.primary },
@@ -31,14 +33,35 @@ export default function LoginScreen() {
     }
   };
 
-  const onGoogle = () => {
+  const onGoogle = async () => {
     setBusy('google');
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-      const redirectUrl = window.location.origin + '/';
-      window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-    } else {
-      alert('Google Sign-in is available in the web preview. Use Demo Login on native.');
+    try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+        const redirectUrl = window.location.origin + '/';
+        window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+      } else {
+        const redirectUrl = Linking.createURL('');
+        const result = await WebBrowser.openAuthSessionAsync(
+          `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`,
+          redirectUrl,
+        );
+        if (result.type === 'success') {
+          const hash = result.url.split('#')[1] ?? '';
+          const sid = hash.split('session_id=')[1]?.split('&')[0];
+          if (!sid) throw new Error('No session_id returned');
+          const j = await api<{ session_token: string }>('/api/auth/session', {
+            method: 'POST',
+            body: JSON.stringify({ session_id: sid }),
+          });
+          await setToken(j.session_token);
+          router.replace('/(tabs)');
+        } else {
+          setBusy(null);
+        }
+      }
+    } catch (e: any) {
+      alert(`Sign-in failed: ${e.message || e}`);
       setBusy(null);
     }
   };
@@ -100,7 +123,7 @@ export default function LoginScreen() {
           ))}
         </View>
 
-        <Text style={styles.footer}>By continuing you agree to AO Premiere's standards of accountability.</Text>
+        <Text style={styles.footer}>{"By continuing you agree to AO Premiere's standards of accountability."}</Text>
       </ScrollView>
     </SafeAreaView>
   );
