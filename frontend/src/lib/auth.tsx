@@ -65,7 +65,9 @@ interface AuthCtx {
   loading: boolean;
   reload: () => Promise<void>;
   signInDemo: (level: Role) => Promise<void>;
+  signInApple: (identityToken: string, givenName: string | null, familyName: string | null) => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthCtx | undefined>(undefined);
@@ -102,14 +104,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await reload();
   };
 
+  const signInApple = async (identityToken: string, givenName: string | null, familyName: string | null) => {
+    setLoading(true);
+    const r = await api<{ user: AppUser; session_token: string }>('/api/auth/apple', {
+      method: 'POST',
+      body: JSON.stringify({ identity_token: identityToken, given_name: givenName, family_name: familyName }),
+    });
+    await setToken(r.session_token);
+    setUser(r.user);
+    await reload();
+  };
+
   const signOut = async () => {
     try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
     await setToken(null);
     setUser(null); setAgent(null); setRoleLabel('');
   };
 
+  const deleteAccount = async () => {
+    await api('/api/auth/account', { method: 'DELETE' });
+    await setToken(null);
+    setUser(null); setAgent(null); setRoleLabel('');
+  };
+
   return (
-    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signOut }}>
+    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signOut, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );
