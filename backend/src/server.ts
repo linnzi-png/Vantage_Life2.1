@@ -1143,6 +1143,7 @@ api.get(
             net_alp: { $sum: "$net_alp" },
             sits: { $sum: "$sits" },
             sales: { $sum: "$sales" },
+            n1: { $sum: "$n1" },
             refs_obtained: { $sum: "$refs_obtained" },
           },
         },
@@ -1163,7 +1164,10 @@ api.get(
       if (!agent) continue;
       const sales = Number(row.sales || 0);
       const sits = Number(row.sits || 0);
-      const close = sits > 0 ? (sales / sits) * 100 : 0;
+      const n1 = Number(row.n1 || 0);
+      // N1 excluded per business rule: Close Rate = Sales / (Sits - N1)
+      const eligibleSits = sits - n1;
+      const close = eligibleSits > 0 ? (sales / eligibleSits) * 100 : 0;
       const avgDeal = sales > 0 ? Number(row.gross_alp || 0) / sales : 0;
       const alerts = [];
       if (sits >= 3 && close < 50) alerts.push("low_close_ratio");

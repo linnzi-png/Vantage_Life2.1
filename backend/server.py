@@ -579,6 +579,7 @@ async def team_view(user: Dict[str, Any] = Depends(require_level(2))):
             "net_alp": {"$sum": "$net_alp"},
             "sits": {"$sum": "$sits"},
             "sales": {"$sum": "$sales"},
+            "n1": {"$sum": "$n1"},
             "refs_obtained": {"$sum": "$refs_obtained"},
         }},
         {"$sort": {"gross_alp": -1}},
@@ -595,7 +596,10 @@ async def team_view(user: Dict[str, Any] = Depends(require_level(2))):
             continue
         sales = int(r["sales"])
         sits = int(r["sits"])
-        close = (sales / sits * 100) if sits > 0 else 0
+        n1 = int(r.get("n1", 0))
+        # N1 excluded per business rule: Close Rate = Sales / (Sits - N1)
+        eligible_sits = sits - n1
+        close = (sales / eligible_sits * 100) if eligible_sits > 0 else 0
         avg_deal = (float(r["gross_alp"]) / sales) if sales > 0 else 0
         alerts = []
         if sits >= 3 and close < 50:
