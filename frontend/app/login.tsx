@@ -24,7 +24,7 @@ export default function LoginScreen() {
     setBusy(level);
     try {
       await signInDemo(level);
-      router.replace('/(tabs)');
+      router.replace('/');
     } catch (e: any) {
       alert(`Login failed: ${e.message || e}`);
     } finally {
@@ -46,7 +46,7 @@ export default function LoginScreen() {
         credential.fullName?.givenName ?? null,
         credential.fullName?.familyName ?? null,
       );
-      router.replace('/(tabs)');
+      router.replace('/');
     } catch (e: any) {
       if (e.code !== 'ERR_REQUEST_CANCELED') {
         alert(`Apple Sign-In failed: ${e.message || e}`);

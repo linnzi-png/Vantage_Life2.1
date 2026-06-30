@@ -38,6 +38,7 @@ LEVELS = {
     "level_2": "GA",
     "level_3": "MGA",
     "level_4": "RGA",
+    "pending": "Pending Approval",
 }
 EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 APPLE_BUNDLE_ID = "com.aopremiere.vantagelife"
@@ -155,10 +156,18 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     return user
 
 
+async def require_agent(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Authenticated identity is not enough — block anyone not linked to a real
+    AO Premiere agent record from reaching business data, regardless of sign-in flow."""
+    if not user.get("agent_id") or not str(user.get("role", "")).startswith("level_"):
+        raise HTTPException(status_code=403, detail="Not yet linked to an AO Premiere agent profile")
+    return user
+
+
 def require_level(min_level: int):
     """min_level: 1..4 (higher = more access). level_1 has level=1, level_4 has level=4."""
-    async def dep(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-        lvl = int(user.get("role", "level_1").split("_")[1])
+    async def dep(user: Dict[str, Any] = Depends(require_agent)) -> Dict[str, Any]:
+        lvl = int(user["role"].split("_")[1])
         if lvl < min_level:
             raise HTTPException(status_code=403, detail=f"Requires level {min_level}+")
         return user
@@ -179,13 +188,14 @@ def set_session_cookie(resp: Response, token: str):
 
 
 async def upsert_user_and_session(email: str, name: str, picture: Optional[str], session_token: str) -> Dict[str, Any]:
-    # Sign-in is restricted to known AO Premiere agents — no self-service account creation,
-    # regardless of which auth flow (Google/Emergent, Apple) got the caller this far.
+    # Authentication (proving who you are via Google/Apple) always succeeds for any
+    # verified identity — App Store review must be able to complete Sign in with Apple
+    # without error. Authorization (seeing AO Premiere data) is gated separately by
+    # require_agent: anyone not on the agent roster gets role "pending" and no agent_id,
+    # so they land on a harmless pending screen instead of an error during sign-in.
     agent = await db.agent_profiles.find_one({"email": email}, {"_id": 0})
-    if not agent:
-        raise HTTPException(status_code=403, detail="No AO Premiere agent account found for this email")
-    role = agent["role"]
-    agent_id = agent["agent_id"]
+    role = agent["role"] if agent else "pending"
+    agent_id = agent["agent_id"] if agent else None
 
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user:
@@ -421,7 +431,7 @@ async def aggregate_alp(filter_q: Dict[str, Any]) -> Dict[str, float]:
 
 
 @api_router.get("/dashboard/summary")
-async def dashboard_summary(user: Dict[str, Any] = Depends(get_current_user)):
+async def dashboard_summary(user: Dict[str, Any] = Depends(require_agent)):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
     yest = previous_sales_day_str()
@@ -448,7 +458,7 @@ async def dashboard_summary(user: Dict[str, Any] = Depends(get_current_user)):
 
 
 @api_router.get("/dashboard/ticker")
-async def dashboard_ticker(user: Dict[str, Any] = Depends(get_current_user)):
+async def dashboard_ticker(user: Dict[str, Any] = Depends(require_agent)):
     """Last 60 minutes of sales activity for the marquee ticker."""
     ids = await visible_agent_ids(user)
     cutoff = now_utc() - timedelta(minutes=60)
@@ -472,7 +482,7 @@ async def dashboard_ticker(user: Dict[str, Any] = Depends(get_current_user)):
 
 
 @api_router.get("/dashboard/platinum-wall")
-async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(get_current_user)):
+async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent)):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
     q: Dict[str, Any] = {"sales_day": today}
@@ -510,7 +520,7 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(get_current_use
 
 
 @api_router.get("/dashboard/offices")
-async def dashboard_offices(user: Dict[str, Any] = Depends(get_current_user)):
+async def dashboard_offices(user: Dict[str, Any] = Depends(require_agent)):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
     out = []
@@ -538,7 +548,7 @@ async def dashboard_offices(user: Dict[str, Any] = Depends(get_current_user)):
 # =========================================================
 
 @api_router.post("/pulse")
-async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(get_current_user)):
+async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_agent)):
     if not user.get("agent_id"):
         raise HTTPException(status_code=400, detail="No linked agent profile")
     agent = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
@@ -603,7 +613,7 @@ def _ser_entry(e: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @api_router.get("/pulse/me/today")
-async def pulse_me_today(user: Dict[str, Any] = Depends(get_current_user)):
+async def pulse_me_today(user: Dict[str, Any] = Depends(require_agent)):
     if not user.get("agent_id"):
         return {"entries": [], "totals": {}, "gate": gate_state()}
     sd = current_sales_day_str()
@@ -614,7 +624,7 @@ async def pulse_me_today(user: Dict[str, Any] = Depends(get_current_user)):
 
 
 @api_router.get("/pulse/me/streak")
-async def pulse_streak(user: Dict[str, Any] = Depends(get_current_user)):
+async def pulse_streak(user: Dict[str, Any] = Depends(require_agent)):
     if not user.get("agent_id"):
         return {"streak": 0}
     streak = 0
@@ -772,7 +782,7 @@ async def maybe_trigger_shoutouts(agent: Dict[str, Any], entry: Dict[str, Any]):
 
 
 @api_router.get("/shoutouts")
-async def list_shoutouts(user: Dict[str, Any] = Depends(get_current_user)):
+async def list_shoutouts(user: Dict[str, Any] = Depends(require_agent)):
     role = user.get("role", "level_1")
     user_agent_id = user.get("agent_id")
     user_agent = None
@@ -1179,7 +1189,6 @@ async def on_startup():
             logger.info("Auto-seeded mock data on first run.")
         except Exception as e:
             logger.error(f"Auto-seed failed: {e}")
-    await _ensure_review_agent()
 
 
 async def _bootstrap_seed():
@@ -1189,29 +1198,6 @@ async def _bootstrap_seed():
         cookies = {}
         headers = {}
     await seed_data(_DummyReq(), payload=None)  # type: ignore
-
-
-async def _ensure_review_agent():
-    """Pre-authorized agent for App Store review. Sign-in is restricted to known
-    AO Premiere agents (db.agent_profiles), so Apple's reviewer needs a real
-    Apple ID registered against this email to complete Sign in with Apple."""
-    existing = await db.agent_profiles.find_one({"email": "appreview@aopremiere.com"})
-    if existing:
-        return
-    await db.agent_profiles.insert_one({
-        "agent_id": "ag_appreview01",
-        "name": "App Review Tester",
-        "license": "LIC-000000",
-        "email": "appreview@aopremiere.com",
-        "phone": "+1-000-000-0000",
-        "resident_state": "MI",
-        "office": "Dearborn",
-        "role": "level_2",
-        "upline_id": None,
-        "ga_id": None,
-        "is_rookie": False,
-        "joined_at": now_utc(),
-    })
 
 
 @app.on_event("shutdown")

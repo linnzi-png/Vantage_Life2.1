@@ -26,10 +26,11 @@ const LEVELS: Record<Role, string> = {
   level_2: "GA",
   level_3: "MGA",
   level_4: "RGA",
+  pending: "Pending Approval",
 };
 const EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data";
 
-type Role = "level_1" | "level_2" | "level_3" | "level_4";
+type Role = "level_1" | "level_2" | "level_3" | "level_4" | "pending";
 type AnyDoc = Record<string, any>;
 
 interface AuthedRequest extends Request {
@@ -183,9 +184,23 @@ const requireAuth = asyncHandler(async (req, _res, next) => {
   next();
 });
 
+// Authenticated identity is not enough — block anyone not linked to a real
+// AO Premiere agent record from reaching business data, regardless of sign-in flow.
+const requireAgent = asyncHandler(async (req, _res, next) => {
+  const user = await getCurrentUser(req);
+  if (!user.agent_id || !String(user.role || "").startsWith("level_")) {
+    throw new HttpError(403, "Not yet linked to an AO Premiere agent profile");
+  }
+  req.user = user;
+  next();
+});
+
 function requireLevel(minLevel: number) {
   return asyncHandler(async (req, _res, next) => {
     const user = await getCurrentUser(req);
+    if (!user.agent_id || !String(user.role || "").startsWith("level_")) {
+      throw new HttpError(403, "Not yet linked to an AO Premiere agent profile");
+    }
     if (levelNumber(user.role) < minLevel) throw new HttpError(403, `Requires level ${minLevel}+`);
     req.user = user;
     next();
@@ -199,12 +214,14 @@ async function upsertUserAndSession(input: {
   sessionToken: string;
 }) {
   const email = input.email.toLowerCase().trim();
-  // Sign-in is restricted to known AO Premiere agents — no self-service account creation,
-  // regardless of which auth flow (Google/Emergent, Apple) got the caller this far.
+  // Authentication (proving who you are via Google/Apple) always succeeds for any
+  // verified identity — App Store review must be able to complete Sign in with Apple
+  // without error. Authorization (seeing AO Premiere data) is gated separately by
+  // requireAgent: anyone not on the agent roster gets role "pending" and no agentId,
+  // so they land on a harmless pending screen instead of an error during sign-in.
   const agent: AnyDoc | null = await db.collection("agent_profiles").findOne({ email }, { projection: { _id: 0 } });
-  if (!agent) throw new HttpError(403, "No AO Premiere agent account found for this email");
-  const role = agent.role as Role;
-  const agentId = agent.agent_id as string;
+  const role = (agent ? agent.role : "pending") as Role;
+  const agentId: string | null = agent ? agent.agent_id : null;
 
   let user: AnyDoc | null = await db.collection("users").findOne({ email }, { projection: { _id: 0 } });
 
@@ -795,7 +812,7 @@ api.post(
   "/auth/demo-login",
   asyncHandler(async (req, res) => {
     const payload = demoLoginSchema.parse(req.body);
-    const emailMap: Record<Role, [string, string]> = {
+    const emailMap: Record<"level_1" | "level_2" | "level_3" | "level_4", [string, string]> = {
       level_1: ["demo.agent@vantagelife.dev", "Demo Agent"],
       level_2: ["demo.ga@vantagelife.dev", "Demo GA"],
       level_3: ["demo.mga@vantagelife.dev", "Demo MGA"],
@@ -892,7 +909,7 @@ api.post(
 
 api.get(
   "/dashboard/summary",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const ids = await visibleAgentIds(req.user!);
     const today = currentSalesDayStr();
@@ -921,7 +938,7 @@ api.get(
 
 api.get(
   "/dashboard/ticker",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const ids = await visibleAgentIds(req.user!);
     const q: AnyDoc = { submitted_at: { $gte: DateTime.utc().minus({ minutes: 60 }).toJSDate() }, sales: { $gt: 0 } };
@@ -956,7 +973,7 @@ api.get(
 
 api.get(
   "/dashboard/platinum-wall",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const ids = await visibleAgentIds(req.user!);
     const q: AnyDoc = { sales_day: currentSalesDayStr() };
@@ -1002,7 +1019,7 @@ api.get(
 
 api.get(
   "/dashboard/offices",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const ids = await visibleAgentIds(req.user!);
     const today = currentSalesDayStr();
@@ -1031,7 +1048,7 @@ api.get(
 
 api.post(
   "/pulse",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const payload = pulseSchema.parse(req.body);
     const user = req.user!;
@@ -1071,7 +1088,7 @@ api.post(
 
 api.get(
   "/pulse/me/today",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const user = req.user!;
     if (!user.agent_id) return res.json({ entries: [], totals: {}, gate: gateState() });
@@ -1088,7 +1105,7 @@ api.get(
 
 api.get(
   "/pulse/me/streak",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const user = req.user!;
     if (!user.agent_id) return res.json({ streak: 0 });
@@ -1110,7 +1127,7 @@ api.get(
 
 api.get(
   "/my-upline",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const user = req.user!;
     if (!user.agent_id) return res.json({ upline: null });
@@ -1220,7 +1237,7 @@ api.get(
 
 api.get(
   "/shoutouts",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const user = req.user!;
     const userAgent = user.agent_id

@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const SESSION_KEY = 'vl_session_token';
 
-export type Role = 'level_1' | 'level_2' | 'level_3' | 'level_4';
+export type Role = 'level_1' | 'level_2' | 'level_3' | 'level_4' | 'pending';
 
 export interface AppUser {
   user_id: string;
