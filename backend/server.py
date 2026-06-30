@@ -602,7 +602,7 @@ async def team_view(user: Dict[str, Any] = Depends(require_level(2))):
         close = (sales / eligible_sits * 100) if eligible_sits > 0 else 0
         avg_deal = (float(r["gross_alp"]) / sales) if sales > 0 else 0
         alerts = []
-        if sits >= 3 and close < 50:
+        if eligible_sits >= 3 and close < 50:
             alerts.append("low_close_ratio")
         if sales >= 1 and avg_deal < 1200:
             alerts.append("low_avg_deal")

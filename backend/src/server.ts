@@ -1170,7 +1170,7 @@ api.get(
       const close = eligibleSits > 0 ? (sales / eligibleSits) * 100 : 0;
       const avgDeal = sales > 0 ? Number(row.gross_alp || 0) / sales : 0;
       const alerts = [];
-      if (sits >= 3 && close < 50) alerts.push("low_close_ratio");
+      if (eligibleSits >= 3 && close < 50) alerts.push("low_close_ratio");
       if (sales >= 1 && avgDeal < 1200) alerts.push("low_avg_deal");
       team.push({
         agent_id: agent.agent_id,
