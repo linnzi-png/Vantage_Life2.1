@@ -197,11 +197,15 @@ async function upsertUserAndSession(input: {
   name: string;
   picture?: string | null;
   sessionToken: string;
-  role?: Role;
-  agentId?: string | null;
 }) {
-  const role = input.role || "level_1";
   const email = input.email.toLowerCase().trim();
+  // Sign-in is restricted to known AO Premiere agents — no self-service account creation,
+  // regardless of which auth flow (Google/Emergent, Apple) got the caller this far.
+  const agent: AnyDoc | null = await db.collection("agent_profiles").findOne({ email }, { projection: { _id: 0 } });
+  if (!agent) throw new HttpError(403, "No AO Premiere agent account found for this email");
+  const role = agent.role as Role;
+  const agentId = agent.agent_id as string;
+
   let user: AnyDoc | null = await db.collection("users").findOne({ email }, { projection: { _id: 0 } });
 
   if (!user) {
@@ -211,7 +215,7 @@ async function upsertUserAndSession(input: {
       name: input.name,
       picture: input.picture || "",
       role,
-      agent_id: input.agentId,
+      agent_id: agentId,
       created_at: nowUtc(),
     };
     await db.collection("users").insertOne(user as AnyDoc);
@@ -222,8 +226,8 @@ async function upsertUserAndSession(input: {
         $set: {
           name: input.name,
           picture: input.picture || user.picture || "",
-          role: user.role || role,
-          agent_id: user.agent_id || input.agentId,
+          role,
+          agent_id: agentId,
         },
       },
     );
@@ -781,7 +785,6 @@ api.post(
       name,
       picture: data.picture,
       sessionToken,
-      role: "level_1",
     });
     setSessionCookie(res, sessionToken);
     res.json(serializeDates({ user, session_token: sessionToken }));
@@ -881,7 +884,7 @@ api.post(
     const familyName = payload.family_name || null;
     const name = [givenName, familyName].filter(Boolean).join(' ') || appleEmail;
     const sessionToken = `st_${randomUUID().replaceAll('-', '')}`;
-    const user = await upsertUserAndSession({ email: appleEmail, name, sessionToken, role: 'level_1' });
+    const user = await upsertUserAndSession({ email: appleEmail, name, sessionToken });
     setSessionCookie(res, sessionToken);
     res.json(serializeDates({ user, session_token: sessionToken }));
   }),
@@ -1406,6 +1409,28 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   return res.status(500).json({ detail: "Internal server error" });
 });
 
+// Pre-authorized agent for App Store review. Sign-in is restricted to known
+// AO Premiere agents (agent_profiles), so Apple's reviewer needs a real
+// Apple ID registered against this email to complete Sign in with Apple.
+async function ensureReviewAgent() {
+  const existing = await db.collection("agent_profiles").findOne({ email: "appreview@aopremiere.com" });
+  if (existing) return;
+  await db.collection("agent_profiles").insertOne({
+    agent_id: "ag_appreview01",
+    name: "App Review Tester",
+    license: "LIC-000000",
+    email: "appreview@aopremiere.com",
+    phone: "+1-000-000-0000",
+    resident_state: "MI",
+    office: "Dearborn",
+    role: "level_2",
+    upline_id: null,
+    ga_id: null,
+    is_rookie: false,
+    joined_at: nowUtc(),
+  });
+}
+
 async function start() {
   await client.connect();
   db = client.db(DB_NAME);
@@ -1420,6 +1445,7 @@ async function start() {
       console.error("Auto-seed failed:", error);
     }
   }
+  await ensureReviewAgent();
 
   app.listen(PORT, "0.0.0.0", () => {
     console.info(`VantageLife API listening on ${PORT}`);

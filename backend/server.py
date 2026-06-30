@@ -14,6 +14,8 @@ import httpx
 import pytz
 from pathlib import Path
 from pydantic import BaseModel, Field
+from jose import jwt as apple_jwt
+from jose.exceptions import JOSEError
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta, date
 
@@ -38,6 +40,8 @@ LEVELS = {
     "level_4": "RGA",
 }
 EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+APPLE_BUNDLE_ID = "com.aopremiere.vantagelife"
+APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
 
 # ---------------- Helpers ----------------
 
@@ -85,6 +89,12 @@ class DemoLoginIn(BaseModel):
 
 class SessionExchangeIn(BaseModel):
     session_id: str
+
+
+class AppleLoginIn(BaseModel):
+    identity_token: str
+    given_name: Optional[str] = None
+    family_name: Optional[str] = None
 
 
 class PulseIn(BaseModel):
@@ -168,7 +178,15 @@ def set_session_cookie(resp: Response, token: str):
     )
 
 
-async def upsert_user_and_session(email: str, name: str, picture: Optional[str], session_token: str, role: str = "level_1", agent_id: Optional[str] = None) -> Dict[str, Any]:
+async def upsert_user_and_session(email: str, name: str, picture: Optional[str], session_token: str) -> Dict[str, Any]:
+    # Sign-in is restricted to known AO Premiere agents — no self-service account creation,
+    # regardless of which auth flow (Google/Emergent, Apple) got the caller this far.
+    agent = await db.agent_profiles.find_one({"email": email}, {"_id": 0})
+    if not agent:
+        raise HTTPException(status_code=403, detail="No AO Premiere agent account found for this email")
+    role = agent["role"]
+    agent_id = agent["agent_id"]
+
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
@@ -185,10 +203,10 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
         user_doc.pop("_id", None)
         user = user_doc
     else:
-        # update light fields
+        # role/agent_id always re-synced from the agent roster, the source of truth
         await db.users.update_one(
             {"user_id": user["user_id"]},
-            {"$set": {"name": name, "picture": picture or user.get("picture", ""), "role": user.get("role") or role, "agent_id": user.get("agent_id") or agent_id}},
+            {"$set": {"name": name, "picture": picture or user.get("picture", ""), "role": role, "agent_id": agent_id}},
         )
         user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
 
@@ -199,6 +217,36 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
         "expires_at": now_utc() + timedelta(days=7),
     })
     return user
+
+
+async def verify_apple_token(identity_token: str) -> Dict[str, Any]:
+    """Verify a Sign in with Apple identity token against Apple's published JWKs."""
+    try:
+        header = apple_jwt.get_unverified_header(identity_token)
+    except JOSEError:
+        raise HTTPException(status_code=401, detail="Invalid Apple identity token format")
+
+    async with httpx.AsyncClient(timeout=10.0) as cli:
+        r = await cli.get(APPLE_KEYS_URL)
+    if r.status_code != 200:
+        raise HTTPException(status_code=500, detail="Failed to fetch Apple public keys")
+    keys = r.json().get("keys", [])
+    matching_key = next((k for k in keys if k.get("kid") == header.get("kid")), None)
+    if not matching_key:
+        raise HTTPException(status_code=401, detail="No matching Apple public key found")
+
+    try:
+        payload = apple_jwt.decode(
+            identity_token,
+            matching_key,
+            algorithms=["RS256"],
+            audience=APPLE_BUNDLE_ID,
+            issuer="https://appleid.apple.com",
+        )
+    except JOSEError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Apple token: {e}")
+
+    return {"sub": payload["sub"], "email": payload.get("email")}
 
 
 # =========================================================
@@ -219,7 +267,7 @@ async def auth_session(payload: SessionExchangeIn, response: Response):
     session_token = data.get("session_token") or f"st_{uuid.uuid4().hex}"
 
     # Default role: level_1 unless allowlisted
-    user = await upsert_user_and_session(email=email, name=name, picture=picture, session_token=session_token, role="level_1")
+    user = await upsert_user_and_session(email=email, name=name, picture=picture, session_token=session_token)
     set_session_cookie(response, session_token)
     return {"user": user, "session_token": session_token}
 
@@ -287,6 +335,27 @@ async def auth_logout(request: Request, response: Response):
     tok = await get_session_token(request)
     if tok:
         await db.user_sessions.delete_one({"session_token": tok})
+    response.delete_cookie("session_token", path="/")
+    return {"ok": True}
+
+
+@api_router.post("/auth/apple")
+async def auth_apple(payload: AppleLoginIn, response: Response):
+    claims = await verify_apple_token(payload.identity_token)
+    apple_email = claims.get("email") or f"apple.{claims['sub']}@vantagelife.app"
+    name = " ".join(filter(None, [payload.given_name, payload.family_name])) or apple_email
+    session_token = f"st_{uuid.uuid4().hex}"
+    user = await upsert_user_and_session(email=apple_email, name=name, picture=None, session_token=session_token)
+    set_session_cookie(response, session_token)
+    return {"user": user, "session_token": session_token}
+
+
+@api_router.delete("/auth/account")
+async def delete_account(response: Response, user: Dict[str, Any] = Depends(get_current_user)):
+    await db.user_sessions.delete_many({"user_id": user["user_id"]})
+    if user.get("agent_id"):
+        await db.production_entries.delete_many({"agent_id": user["agent_id"]})
+    await db.users.delete_one({"user_id": user["user_id"]})
     response.delete_cookie("session_token", path="/")
     return {"ok": True}
 
@@ -1110,6 +1179,7 @@ async def on_startup():
             logger.info("Auto-seeded mock data on first run.")
         except Exception as e:
             logger.error(f"Auto-seed failed: {e}")
+    await _ensure_review_agent()
 
 
 async def _bootstrap_seed():
@@ -1119,6 +1189,29 @@ async def _bootstrap_seed():
         cookies = {}
         headers = {}
     await seed_data(_DummyReq(), payload=None)  # type: ignore
+
+
+async def _ensure_review_agent():
+    """Pre-authorized agent for App Store review. Sign-in is restricted to known
+    AO Premiere agents (db.agent_profiles), so Apple's reviewer needs a real
+    Apple ID registered against this email to complete Sign in with Apple."""
+    existing = await db.agent_profiles.find_one({"email": "appreview@aopremiere.com"})
+    if existing:
+        return
+    await db.agent_profiles.insert_one({
+        "agent_id": "ag_appreview01",
+        "name": "App Review Tester",
+        "license": "LIC-000000",
+        "email": "appreview@aopremiere.com",
+        "phone": "+1-000-000-0000",
+        "resident_state": "MI",
+        "office": "Dearborn",
+        "role": "level_2",
+        "upline_id": None,
+        "ga_id": None,
+        "is_rookie": False,
+        "joined_at": now_utc(),
+    })
 
 
 @app.on_event("shutdown")
