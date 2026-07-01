@@ -1193,7 +1193,13 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    # allow_origins=["*"] combined with credentials is unreliable on the pinned
+    # Starlette version (0.37.2, via fastapi==0.110.1): it only echoes back the
+    # request's actual origin — required by browsers whenever credentials are
+    # used — if the request already carries a Cookie header. The very first
+    # cross-origin login has no cookie yet, so it fell back to the literal "*",
+    # which browsers reject outright for credentialed requests.
+    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost(:\d+)?",
     allow_methods=["*"],
     allow_headers=["*"],
 )
