@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pymongo import MongoClient
 
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017/")
-DB_NAME = os.environ.get("MONGO_DB", "vantagelife")
+DB_NAME = os.environ.get("DB_NAME", "vantagelife")
 
 # ── ADD YOUR USERS HERE ────────────────────────────────────────────
 # (email, display_name, role, office, phone)
