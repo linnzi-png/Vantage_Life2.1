@@ -35,13 +35,19 @@ USERS = [
 VALID_ROLES = {"level_1", "level_2", "level_3", "level_4"}
 
 
-def get_or_create_agent(db, name: str, role: str, office: str, phone: str) -> str:
-    """Return existing agent_id or create a new agent_profile."""
+def get_or_create_agent(db, name: str, role: str, office: str, phone: str, email: str) -> str:
+    """Return existing agent_id or create a new agent_profile.
+
+    email is required here (not just on the users record) because sign-in
+    re-derives role/agent_id from agent_profiles by email on every login —
+    without it, the very next Google sign-in would reset this user back to
+    role "pending".
+    """
     existing = db.agent_profiles.find_one({"name": name}, {"_id": 0})
     if existing:
         db.agent_profiles.update_one(
             {"name": name},
-            {"$set": {"office": office, "role": role, "phone": phone}},
+            {"$set": {"office": office, "role": role, "phone": phone, "email": email}},
         )
         return existing["agent_id"]
     agent_id = f"agent_{uuid.uuid4().hex[:10]}"
@@ -51,6 +57,7 @@ def get_or_create_agent(db, name: str, role: str, office: str, phone: str) -> st
         "office": office,
         "role": role,
         "phone": phone,
+        "email": email,
         "upline_id": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
@@ -76,7 +83,7 @@ def main():
             continue
 
         # Ensure agent profile exists and get its ID
-        agent_id = get_or_create_agent(db, name, role, office, phone)
+        agent_id = get_or_create_agent(db, name, role, office, phone, email)
 
         existing = db.users.find_one({"email": email}, {"_id": 0})
         if existing:

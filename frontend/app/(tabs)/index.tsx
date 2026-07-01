@@ -48,6 +48,18 @@ export default function DashboardScreen() {
 
   const fmtMoney = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
+  if (!user?.agent_id) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.center}>
+          <Ionicons name="alert-circle" size={36} color={COLORS.orange} />
+          <Text style={styles.notLinked}>This account isn't linked to an agent profile yet.</Text>
+          <Text style={styles.notLinkedSub}>Try the Demo Login screen and pick "AGENT" to test the Pulse flow.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header} testID="dashboard-header">
@@ -121,4 +133,7 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 30 },
   sectionTitle: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 10, marginTop: 6 },
   cardsRow: { flexDirection: 'row' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  notLinked: { color: '#fff', fontWeight: '800', fontSize: 16, marginTop: 12, textAlign: 'center' },
+  notLinkedSub: { color: COLORS.textDim, marginTop: 6, textAlign: 'center' },
 });

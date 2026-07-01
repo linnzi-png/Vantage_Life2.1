@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS } from '../../src/lib/auth';
+import { api, COLORS, useAuth } from '../../src/lib/auth';
 
 interface Shoutout {
   shoutout_id: string;
@@ -24,6 +24,7 @@ const cfg: Record<string, { icon: any; color: string; title: string; bg: string 
 };
 
 export default function ShoutoutsScreen() {
+  const { user } = useAuth();
   const [items, setItems] = useState<Shoutout[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const fetchAll = async () => {
@@ -31,6 +32,18 @@ export default function ShoutoutsScreen() {
     catch {}
   };
   useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, []);
+
+  if (!user?.agent_id) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.center}>
+          <Ionicons name="alert-circle" size={36} color={COLORS.orange} />
+          <Text style={styles.notLinked}>This account isn't linked to an agent profile yet.</Text>
+          <Text style={styles.notLinkedSub}>Try the Demo Login screen and pick "AGENT" to test the Pulse flow.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -86,4 +99,7 @@ const styles = StyleSheet.create({
   dim: { color: COLORS.textDim, fontWeight: '500' },
   detail: { color: COLORS.textDim, fontSize: 12, marginTop: 4 },
   ts: { color: COLORS.textMuted, fontSize: 10, marginTop: 6 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  notLinked: { color: '#fff', fontWeight: '800', fontSize: 16, marginTop: 12, textAlign: 'center' },
+  notLinkedSub: { color: COLORS.textDim, marginTop: 6, textAlign: 'center' },
 });
