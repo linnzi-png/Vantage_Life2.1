@@ -26,10 +26,11 @@ const LEVELS: Record<Role, string> = {
   level_2: "GA",
   level_3: "MGA",
   level_4: "RGA",
+  pending: "Pending Approval",
 };
 const EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data";
 
-type Role = "level_1" | "level_2" | "level_3" | "level_4";
+type Role = "level_1" | "level_2" | "level_3" | "level_4" | "pending";
 type AnyDoc = Record<string, any>;
 
 interface AuthedRequest extends Request {
@@ -53,6 +54,11 @@ const asyncHandler =
 
 const demoLoginSchema = z.object({ level: z.enum(["level_1", "level_2", "level_3", "level_4"]) });
 const sessionExchangeSchema = z.object({ session_id: z.string().min(1) });
+const appleLoginSchema = z.object({
+  identity_token: z.string().min(1),
+  given_name: z.string().nullable().optional(),
+  family_name: z.string().nullable().optional(),
+});
 const pulseSchema = z.object({
   sets: z.coerce.number().int().default(0),
   sits: z.coerce.number().int().default(0),
@@ -178,9 +184,23 @@ const requireAuth = asyncHandler(async (req, _res, next) => {
   next();
 });
 
+// Authenticated identity is not enough — block anyone not linked to a real
+// AO Premiere agent record from reaching business data, regardless of sign-in flow.
+const requireAgent = asyncHandler(async (req, _res, next) => {
+  const user = await getCurrentUser(req);
+  if (!user.agent_id || !String(user.role || "").startsWith("level_")) {
+    throw new HttpError(403, "Not yet linked to an AO Premiere agent profile");
+  }
+  req.user = user;
+  next();
+});
+
 function requireLevel(minLevel: number) {
   return asyncHandler(async (req, _res, next) => {
     const user = await getCurrentUser(req);
+    if (!user.agent_id || !String(user.role || "").startsWith("level_")) {
+      throw new HttpError(403, "Not yet linked to an AO Premiere agent profile");
+    }
     if (levelNumber(user.role) < minLevel) throw new HttpError(403, `Requires level ${minLevel}+`);
     req.user = user;
     next();
@@ -192,11 +212,16 @@ async function upsertUserAndSession(input: {
   name: string;
   picture?: string | null;
   sessionToken: string;
-  role?: Role;
-  agentId?: string | null;
 }) {
-  const role = input.role || "level_1";
   const email = input.email.toLowerCase().trim();
+  // Authentication (proving who you are via Google/Apple) always succeeds for any
+  // verified identity — App Store review must be able to complete Sign in with Apple
+  // without error. Authorization (seeing AO Premiere data) is gated separately by
+  // requireAgent: anyone not on the agent roster gets role "pending" and no agentId,
+  // so they land on a harmless pending screen instead of an error during sign-in.
+  const agent: AnyDoc | null = await db.collection("agent_profiles").findOne({ email }, { projection: { _id: 0 } });
+  const role = (agent ? agent.role : "pending") as Role;
+  const agentId: string | null = agent ? agent.agent_id : null;
   let user: AnyDoc | null = await db.collection("users").findOne({ email }, { projection: { _id: 0 } });
 
   if (!user) {
@@ -206,7 +231,7 @@ async function upsertUserAndSession(input: {
       name: input.name,
       picture: input.picture || "",
       role,
-      agent_id: input.agentId,
+      agent_id: agentId,
       created_at: nowUtc(),
     };
     await db.collection("users").insertOne(user as AnyDoc);
@@ -217,8 +242,8 @@ async function upsertUserAndSession(input: {
         $set: {
           name: input.name,
           picture: input.picture || user.picture || "",
-          role: user.role || role,
-          agent_id: user.agent_id || input.agentId,
+          role,
+          agent_id: agentId,
         },
       },
     );
@@ -232,6 +257,42 @@ async function upsertUserAndSession(input: {
     expires_at: DateTime.utc().plus({ days: 7 }).toJSDate(),
   });
   return omitId(user!);
+}
+
+const APPLE_BUNDLE_ID = "com.aopremiere.vantagelife";
+const APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys";
+
+async function verifyAppleToken(identityToken: string): Promise<{ sub: string; email: string | null }> {
+  const parts = identityToken.split(".");
+  if (parts.length !== 3) throw new HttpError(401, "Invalid Apple identity token format");
+  const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8")) as { kid: string };
+  const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as {
+    iss: string;
+    aud: string;
+    exp: number;
+    sub: string;
+    email?: string;
+  };
+  if (payload.iss !== "https://appleid.apple.com") throw new HttpError(401, "Invalid Apple token issuer");
+  if (payload.aud !== APPLE_BUNDLE_ID) throw new HttpError(401, "Invalid Apple token audience");
+  if (payload.exp < Math.floor(Date.now() / 1000)) throw new HttpError(401, "Apple token expired");
+  const keysRes = await fetch(APPLE_KEYS_URL, { signal: AbortSignal.timeout(10000) });
+  if (!keysRes.ok) throw new HttpError(500, "Failed to fetch Apple public keys");
+  const { keys } = (await keysRes.json()) as { keys: (JsonWebKey & { kid: string })[] };
+  const matchingKey = keys.find((k) => k.kid === header.kid);
+  if (!matchingKey) throw new HttpError(401, "No matching Apple public key found");
+  const cryptoKey = await crypto.subtle.importKey(
+    "jwk",
+    matchingKey,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+  const signingInput = `${parts[0]}.${parts[1]}`;
+  const signature = Buffer.from(parts[2], "base64url");
+  const valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", cryptoKey, signature, Buffer.from(signingInput));
+  if (!valid) throw new HttpError(401, "Invalid Apple token signature");
+  return { sub: payload.sub, email: payload.email ?? null };
 }
 
 async function visibleAgentIds(user: AnyDoc): Promise<string[] | null> {
@@ -751,7 +812,6 @@ api.post(
       name,
       picture: data.picture,
       sessionToken,
-      role: "level_1",
     });
     setSessionCookie(res, sessionToken);
     res.json(serializeDates({ user, session_token: sessionToken }));
@@ -762,7 +822,7 @@ api.post(
   "/auth/demo-login",
   asyncHandler(async (req, res) => {
     const payload = demoLoginSchema.parse(req.body);
-    const emailMap: Record<Role, [string, string]> = {
+    const emailMap: Record<"level_1" | "level_2" | "level_3" | "level_4", [string, string]> = {
       level_1: ["demo.agent@vantagelife.dev", "Demo Agent"],
       level_2: ["demo.ga@vantagelife.dev", "Demo GA"],
       level_3: ["demo.mga@vantagelife.dev", "Demo MGA"],
@@ -826,9 +886,40 @@ api.post(
   }),
 );
 
+api.post(
+  "/auth/apple",
+  asyncHandler(async (req, res) => {
+    const payload = appleLoginSchema.parse(req.body);
+    const { sub, email } = await verifyAppleToken(payload.identity_token);
+    const appleEmail = email || `apple.${sub}@vantagelife.app`;
+    const givenName = payload.given_name || null;
+    const familyName = payload.family_name || null;
+    const name = [givenName, familyName].filter(Boolean).join(" ") || appleEmail;
+    const sessionToken = `st_${randomUUID().replaceAll("-", "")}`;
+    const user = await upsertUserAndSession({ email: appleEmail, name, sessionToken });
+    setSessionCookie(res, sessionToken);
+    res.json(serializeDates({ user, session_token: sessionToken }));
+  }),
+);
+
+api.delete(
+  "/auth/account",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const user = req.user!;
+    await db.collection("user_sessions").deleteMany({ user_id: user.user_id });
+    if (user.agent_id) {
+      await db.collection("production_entries").deleteMany({ agent_id: user.agent_id });
+    }
+    await db.collection("users").deleteOne({ user_id: user.user_id });
+    res.clearCookie("session_token", { path: "/" });
+    res.json({ ok: true });
+  }),
+);
+
 api.get(
   "/dashboard/summary",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const ids = await visibleAgentIds(req.user!);
     const today = currentSalesDayStr();
@@ -857,7 +948,7 @@ api.get(
 
 api.get(
   "/dashboard/ticker",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const ids = await visibleAgentIds(req.user!);
     const q: AnyDoc = { submitted_at: { $gte: DateTime.utc().minus({ minutes: 60 }).toJSDate() }, sales: { $gt: 0 } };
@@ -892,7 +983,7 @@ api.get(
 
 api.get(
   "/dashboard/platinum-wall",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const ids = await visibleAgentIds(req.user!);
     const q: AnyDoc = { sales_day: currentSalesDayStr() };
@@ -938,7 +1029,7 @@ api.get(
 
 api.get(
   "/dashboard/offices",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const ids = await visibleAgentIds(req.user!);
     const today = currentSalesDayStr();
@@ -967,7 +1058,7 @@ api.get(
 
 api.post(
   "/pulse",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const payload = pulseSchema.parse(req.body);
     const user = req.user!;
@@ -1007,7 +1098,7 @@ api.post(
 
 api.get(
   "/pulse/me/today",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const user = req.user!;
     if (!user.agent_id) return res.json({ entries: [], totals: {}, gate: gateState() });
@@ -1024,7 +1115,7 @@ api.get(
 
 api.get(
   "/pulse/me/streak",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const user = req.user!;
     if (!user.agent_id) return res.json({ streak: 0 });
@@ -1046,7 +1137,7 @@ api.get(
 
 api.get(
   "/my-upline",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const user = req.user!;
     if (!user.agent_id) return res.json({ upline: null });
@@ -1082,6 +1173,7 @@ api.get(
             net_alp: { $sum: "$net_alp" },
             sits: { $sum: "$sits" },
             sales: { $sum: "$sales" },
+            n1: { $sum: "$n1" },
             refs_obtained: { $sum: "$refs_obtained" },
           },
         },
@@ -1102,10 +1194,13 @@ api.get(
       if (!agent) continue;
       const sales = Number(row.sales || 0);
       const sits = Number(row.sits || 0);
-      const close = sits > 0 ? (sales / sits) * 100 : 0;
+      const n1 = Number(row.n1 || 0);
+      // N1 excluded per business rule: Close Rate = Sales / (Sits - N1)
+      const eligibleSits = sits - n1;
+      const close = eligibleSits > 0 ? (sales / eligibleSits) * 100 : 0;
       const avgDeal = sales > 0 ? Number(row.gross_alp || 0) / sales : 0;
       const alerts = [];
-      if (sits >= 3 && close < 50) alerts.push("low_close_ratio");
+      if (eligibleSits >= 3 && close < 50) alerts.push("low_close_ratio");
       if (sales >= 1 && avgDeal < 1200) alerts.push("low_avg_deal");
       team.push({
         agent_id: agent.agent_id,
@@ -1152,7 +1247,7 @@ api.get(
 
 api.get(
   "/shoutouts",
-  requireAuth,
+  requireAgent,
   asyncHandler(async (req, res) => {
     const user = req.user!;
     const userAgent = user.agent_id

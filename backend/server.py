@@ -14,6 +14,8 @@ import httpx
 import pytz
 from pathlib import Path
 from pydantic import BaseModel, Field
+from jose import jwt as apple_jwt
+from jose.exceptions import JOSEError
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta, date
 
@@ -36,8 +38,11 @@ LEVELS = {
     "level_2": "GA",
     "level_3": "MGA",
     "level_4": "RGA",
+    "pending": "Pending Approval",
 }
 EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+APPLE_BUNDLE_ID = "com.aopremiere.vantagelife"
+APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
 
 # ---------------- Helpers ----------------
 
@@ -85,6 +90,12 @@ class DemoLoginIn(BaseModel):
 
 class SessionExchangeIn(BaseModel):
     session_id: str
+
+
+class AppleLoginIn(BaseModel):
+    identity_token: str
+    given_name: Optional[str] = None
+    family_name: Optional[str] = None
 
 
 class PulseIn(BaseModel):
@@ -145,10 +156,18 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     return user
 
 
+async def require_agent(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Authenticated identity is not enough — block anyone not linked to a real
+    AO Premiere agent record from reaching business data, regardless of sign-in flow."""
+    if not user.get("agent_id") or not str(user.get("role", "")).startswith("level_"):
+        raise HTTPException(status_code=403, detail="Not yet linked to an AO Premiere agent profile")
+    return user
+
+
 def require_level(min_level: int):
     """min_level: 1..4 (higher = more access). level_1 has level=1, level_4 has level=4."""
-    async def dep(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-        lvl = int(user.get("role", "level_1").split("_")[1])
+    async def dep(user: Dict[str, Any] = Depends(require_agent)) -> Dict[str, Any]:
+        lvl = int(user["role"].split("_")[1])
         if lvl < min_level:
             raise HTTPException(status_code=403, detail=f"Requires level {min_level}+")
         return user
@@ -168,8 +187,17 @@ def set_session_cookie(resp: Response, token: str):
     )
 
 
-async def upsert_user_and_session(email: str, name: str, picture: Optional[str], session_token: str, role: str = "level_1", agent_id: Optional[str] = None) -> Dict[str, Any]:
+async def upsert_user_and_session(email: str, name: str, picture: Optional[str], session_token: str) -> Dict[str, Any]:
     email = email.lower().strip()
+    # Authentication (proving who you are via Google/Apple) always succeeds for any
+    # verified identity — App Store review must be able to complete Sign in with Apple
+    # without error. Authorization (seeing AO Premiere data) is gated separately by
+    # require_agent: anyone not on the agent roster gets role "pending" and no agent_id,
+    # so they land on a harmless pending screen instead of an error during sign-in.
+    agent = await db.agent_profiles.find_one({"email": email}, {"_id": 0})
+    role = agent["role"] if agent else "pending"
+    agent_id = agent["agent_id"] if agent else None
+
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
@@ -186,10 +214,10 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
         user_doc.pop("_id", None)
         user = user_doc
     else:
-        # update light fields
+        # role/agent_id always re-synced from the agent roster, the source of truth
         await db.users.update_one(
             {"user_id": user["user_id"]},
-            {"$set": {"name": name, "picture": picture or user.get("picture", ""), "role": user.get("role") or role, "agent_id": user.get("agent_id") or agent_id}},
+            {"$set": {"name": name, "picture": picture or user.get("picture", ""), "role": role, "agent_id": agent_id}},
         )
         user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
 
@@ -200,6 +228,36 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
         "expires_at": now_utc() + timedelta(days=7),
     })
     return user
+
+
+async def verify_apple_token(identity_token: str) -> Dict[str, Any]:
+    """Verify a Sign in with Apple identity token against Apple's published JWKs."""
+    try:
+        header = apple_jwt.get_unverified_header(identity_token)
+    except JOSEError:
+        raise HTTPException(status_code=401, detail="Invalid Apple identity token format")
+
+    async with httpx.AsyncClient(timeout=10.0) as cli:
+        r = await cli.get(APPLE_KEYS_URL)
+    if r.status_code != 200:
+        raise HTTPException(status_code=500, detail="Failed to fetch Apple public keys")
+    keys = r.json().get("keys", [])
+    matching_key = next((k for k in keys if k.get("kid") == header.get("kid")), None)
+    if not matching_key:
+        raise HTTPException(status_code=401, detail="No matching Apple public key found")
+
+    try:
+        payload = apple_jwt.decode(
+            identity_token,
+            matching_key,
+            algorithms=["RS256"],
+            audience=APPLE_BUNDLE_ID,
+            issuer="https://appleid.apple.com",
+        )
+    except JOSEError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Apple token: {e}")
+
+    return {"sub": payload["sub"], "email": payload.get("email")}
 
 
 # =========================================================
@@ -219,8 +277,7 @@ async def auth_session(payload: SessionExchangeIn, response: Response):
     picture = data.get("picture")
     session_token = data.get("session_token") or f"st_{uuid.uuid4().hex}"
 
-    # Default role: level_1 unless allowlisted
-    user = await upsert_user_and_session(email=email, name=name, picture=picture, session_token=session_token, role="level_1")
+    user = await upsert_user_and_session(email=email, name=name, picture=picture, session_token=session_token)
     set_session_cookie(response, session_token)
     return {"user": user, "session_token": session_token}
 
@@ -292,6 +349,27 @@ async def auth_logout(request: Request, response: Response):
     return {"ok": True}
 
 
+@api_router.post("/auth/apple")
+async def auth_apple(payload: AppleLoginIn, response: Response):
+    claims = await verify_apple_token(payload.identity_token)
+    apple_email = claims.get("email") or f"apple.{claims['sub']}@vantagelife.app"
+    name = " ".join(filter(None, [payload.given_name, payload.family_name])) or apple_email
+    session_token = f"st_{uuid.uuid4().hex}"
+    user = await upsert_user_and_session(email=apple_email, name=name, picture=None, session_token=session_token)
+    set_session_cookie(response, session_token)
+    return {"user": user, "session_token": session_token}
+
+
+@api_router.delete("/auth/account")
+async def delete_account(response: Response, user: Dict[str, Any] = Depends(get_current_user)):
+    await db.user_sessions.delete_many({"user_id": user["user_id"]})
+    if user.get("agent_id"):
+        await db.production_entries.delete_many({"agent_id": user["agent_id"]})
+    await db.users.delete_one({"user_id": user["user_id"]})
+    response.delete_cookie("session_token", path="/")
+    return {"ok": True}
+
+
 # =========================================================
 #                  HIERARCHY & FILTERING
 # =========================================================
@@ -353,7 +431,7 @@ async def aggregate_alp(filter_q: Dict[str, Any]) -> Dict[str, float]:
 
 
 @api_router.get("/dashboard/summary")
-async def dashboard_summary(user: Dict[str, Any] = Depends(get_current_user)):
+async def dashboard_summary(user: Dict[str, Any] = Depends(require_agent)):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
     yest = previous_sales_day_str()
@@ -380,7 +458,7 @@ async def dashboard_summary(user: Dict[str, Any] = Depends(get_current_user)):
 
 
 @api_router.get("/dashboard/ticker")
-async def dashboard_ticker(user: Dict[str, Any] = Depends(get_current_user)):
+async def dashboard_ticker(user: Dict[str, Any] = Depends(require_agent)):
     """Last 60 minutes of sales activity for the marquee ticker."""
     ids = await visible_agent_ids(user)
     cutoff = now_utc() - timedelta(minutes=60)
@@ -404,7 +482,7 @@ async def dashboard_ticker(user: Dict[str, Any] = Depends(get_current_user)):
 
 
 @api_router.get("/dashboard/platinum-wall")
-async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(get_current_user)):
+async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent)):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
     q: Dict[str, Any] = {"sales_day": today}
@@ -442,7 +520,7 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(get_current_use
 
 
 @api_router.get("/dashboard/offices")
-async def dashboard_offices(user: Dict[str, Any] = Depends(get_current_user)):
+async def dashboard_offices(user: Dict[str, Any] = Depends(require_agent)):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
     # Discover offices from the actual agent_profiles so new RGAs appear automatically
@@ -476,7 +554,7 @@ async def dashboard_offices(user: Dict[str, Any] = Depends(get_current_user)):
 # =========================================================
 
 @api_router.post("/pulse")
-async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(get_current_user)):
+async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_agent)):
     if not user.get("agent_id"):
         raise HTTPException(status_code=400, detail="No linked agent profile")
     agent = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
@@ -541,7 +619,7 @@ def _ser_entry(e: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @api_router.get("/pulse/me/today")
-async def pulse_me_today(user: Dict[str, Any] = Depends(get_current_user)):
+async def pulse_me_today(user: Dict[str, Any] = Depends(require_agent)):
     if not user.get("agent_id"):
         return {"entries": [], "totals": {}, "gate": gate_state()}
     sd = current_sales_day_str()
@@ -552,7 +630,7 @@ async def pulse_me_today(user: Dict[str, Any] = Depends(get_current_user)):
 
 
 @api_router.get("/pulse/me/streak")
-async def pulse_streak(user: Dict[str, Any] = Depends(get_current_user)):
+async def pulse_streak(user: Dict[str, Any] = Depends(require_agent)):
     if not user.get("agent_id"):
         return {"streak": 0}
     streak = 0
@@ -572,7 +650,7 @@ async def pulse_streak(user: Dict[str, Any] = Depends(get_current_user)):
 # =========================================================
 
 @api_router.get("/my-upline")
-async def my_upline(user: Dict[str, Any] = Depends(get_current_user)):
+async def my_upline(user: Dict[str, Any] = Depends(require_agent)):
     agent_id = user.get("agent_id")
     if not agent_id:
         return {"upline": None}
@@ -607,6 +685,7 @@ async def team_view(user: Dict[str, Any] = Depends(require_level(2))):
             "net_alp": {"$sum": "$net_alp"},
             "sits": {"$sum": "$sits"},
             "sales": {"$sum": "$sales"},
+            "n1": {"$sum": "$n1"},
             "refs_obtained": {"$sum": "$refs_obtained"},
         }},
         {"$sort": {"gross_alp": -1}},
@@ -623,10 +702,13 @@ async def team_view(user: Dict[str, Any] = Depends(require_level(2))):
             continue
         sales = int(r["sales"])
         sits = int(r["sits"])
-        close = (sales / sits * 100) if sits > 0 else 0
+        n1 = int(r.get("n1", 0))
+        # N1 excluded per business rule: Close Rate = Sales / (Sits - N1)
+        eligible_sits = sits - n1
+        close = (sales / eligible_sits * 100) if eligible_sits > 0 else 0
         avg_deal = (float(r["gross_alp"]) / sales) if sales > 0 else 0
         alerts = []
-        if sits >= 3 and close < 50:
+        if eligible_sits >= 3 and close < 50:
             alerts.append("low_close_ratio")
         if sales >= 1 and avg_deal < 1200:
             alerts.append("low_avg_deal")
@@ -731,7 +813,7 @@ async def maybe_trigger_shoutouts(agent: Dict[str, Any], entry: Dict[str, Any]):
 
 
 @api_router.get("/shoutouts")
-async def list_shoutouts(user: Dict[str, Any] = Depends(get_current_user)):
+async def list_shoutouts(user: Dict[str, Any] = Depends(require_agent)):
     role = user.get("role", "level_1")
     user_agent_id = user.get("agent_id")
     user_agent = None
