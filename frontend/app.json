@@ -1,16 +1,20 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "VantageLife",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "frontend",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aopremiere.vantagelife"
+      "bundleIdentifier": "com.aopremiere.vantagelife",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "buildNumber": "11"
     },
     "android": {
       "package": "com.aopremiere.vantagelife",
@@ -18,7 +22,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "edgeToEdgeEnabled": true
+      "versionCode": 7
     },
     "web": {
       "bundler": "metro",
@@ -30,13 +34,18 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#000"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/withWorkletsFix",
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

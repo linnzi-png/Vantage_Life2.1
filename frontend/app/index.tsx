@@ -10,7 +10,8 @@ export default function Index() {
 
   useEffect(() => {
     if (loading) return;
-    if (user) router.replace('/(tabs)');
+    if (user && user.role === 'pending') router.replace('/pending');
+    else if (user) router.replace('/(tabs)');
     else router.replace('/login');
   }, [user, loading]);
 

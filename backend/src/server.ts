@@ -222,6 +222,7 @@ async function upsertUserAndSession(input: {
   const agent: AnyDoc | null = await db.collection("agent_profiles").findOne({ email }, { projection: { _id: 0 } });
   const role = (agent ? agent.role : "pending") as Role;
   const agentId: string | null = agent ? agent.agent_id : null;
+
   let user: AnyDoc | null = await db.collection("users").findOne({ email }, { projection: { _id: 0 } });
 
   if (!user) {
@@ -257,42 +258,6 @@ async function upsertUserAndSession(input: {
     expires_at: DateTime.utc().plus({ days: 7 }).toJSDate(),
   });
   return omitId(user!);
-}
-
-const APPLE_BUNDLE_ID = "com.aopremiere.vantagelife";
-const APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys";
-
-async function verifyAppleToken(identityToken: string): Promise<{ sub: string; email: string | null }> {
-  const parts = identityToken.split(".");
-  if (parts.length !== 3) throw new HttpError(401, "Invalid Apple identity token format");
-  const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8")) as { kid: string };
-  const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as {
-    iss: string;
-    aud: string;
-    exp: number;
-    sub: string;
-    email?: string;
-  };
-  if (payload.iss !== "https://appleid.apple.com") throw new HttpError(401, "Invalid Apple token issuer");
-  if (payload.aud !== APPLE_BUNDLE_ID) throw new HttpError(401, "Invalid Apple token audience");
-  if (payload.exp < Math.floor(Date.now() / 1000)) throw new HttpError(401, "Apple token expired");
-  const keysRes = await fetch(APPLE_KEYS_URL, { signal: AbortSignal.timeout(10000) });
-  if (!keysRes.ok) throw new HttpError(500, "Failed to fetch Apple public keys");
-  const { keys } = (await keysRes.json()) as { keys: (JsonWebKey & { kid: string })[] };
-  const matchingKey = keys.find((k) => k.kid === header.kid);
-  if (!matchingKey) throw new HttpError(401, "No matching Apple public key found");
-  const cryptoKey = await crypto.subtle.importKey(
-    "jwk",
-    matchingKey,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["verify"],
-  );
-  const signingInput = `${parts[0]}.${parts[1]}`;
-  const signature = Buffer.from(parts[2], "base64url");
-  const valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", cryptoKey, signature, Buffer.from(signingInput));
-  if (!valid) throw new HttpError(401, "Invalid Apple token signature");
-  return { sub: payload.sub, email: payload.email ?? null };
 }
 
 async function visibleAgentIds(user: AnyDoc): Promise<string[] | null> {
@@ -785,6 +750,31 @@ async function ensureIndexes() {
   await db.collection("production_entries").createIndex("submitted_at");
 }
 
+async function verifyAppleToken(identityToken: string): Promise<{ sub: string; email: string | null }> {
+  const parts = identityToken.split('.');
+  if (parts.length !== 3) throw new HttpError(401, 'Invalid Apple identity token format');
+  const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8')) as { kid: string };
+  const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as {
+    iss: string; aud: string; exp: number; sub: string; email?: string;
+  };
+  if (payload.iss !== 'https://appleid.apple.com') throw new HttpError(401, 'Invalid Apple token issuer');
+  if (payload.aud !== 'com.aopremiere.vantagelife') throw new HttpError(401, 'Invalid Apple token audience');
+  if (payload.exp < Math.floor(Date.now() / 1000)) throw new HttpError(401, 'Apple token expired');
+  const keysRes = await fetch('https://appleid.apple.com/auth/keys', { signal: AbortSignal.timeout(10000) });
+  if (!keysRes.ok) throw new HttpError(500, 'Failed to fetch Apple public keys');
+  const { keys } = await keysRes.json() as { keys: (JsonWebKey & { kid: string })[] };
+  const matchingKey = keys.find((k) => k.kid === header.kid);
+  if (!matchingKey) throw new HttpError(401, 'No matching Apple public key found');
+  const cryptoKey = await crypto.subtle.importKey(
+    'jwk', matchingKey, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify'],
+  );
+  const signingInput = `${parts[0]}.${parts[1]}`;
+  const signature = Buffer.from(parts[2], 'base64url');
+  const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', cryptoKey, signature, Buffer.from(signingInput));
+  if (!valid) throw new HttpError(401, 'Invalid Apple token signature');
+  return { sub: payload.sub, email: payload.email ?? null };
+}
+
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
@@ -886,22 +876,6 @@ api.post(
   }),
 );
 
-api.post(
-  "/auth/apple",
-  asyncHandler(async (req, res) => {
-    const payload = appleLoginSchema.parse(req.body);
-    const { sub, email } = await verifyAppleToken(payload.identity_token);
-    const appleEmail = email || `apple.${sub}@vantagelife.app`;
-    const givenName = payload.given_name || null;
-    const familyName = payload.family_name || null;
-    const name = [givenName, familyName].filter(Boolean).join(" ") || appleEmail;
-    const sessionToken = `st_${randomUUID().replaceAll("-", "")}`;
-    const user = await upsertUserAndSession({ email: appleEmail, name, sessionToken });
-    setSessionCookie(res, sessionToken);
-    res.json(serializeDates({ user, session_token: sessionToken }));
-  }),
-);
-
 api.delete(
   "/auth/account",
   requireAuth,
@@ -914,6 +888,22 @@ api.delete(
     await db.collection("users").deleteOne({ user_id: user.user_id });
     res.clearCookie("session_token", { path: "/" });
     res.json({ ok: true });
+  }),
+);
+
+api.post(
+  "/auth/apple",
+  asyncHandler(async (req, res) => {
+    const payload = appleLoginSchema.parse(req.body);
+    const { sub, email } = await verifyAppleToken(payload.identity_token);
+    const appleEmail = email || `apple.${sub}@vantagelife.app`;
+    const givenName = payload.given_name || null;
+    const familyName = payload.family_name || null;
+    const name = [givenName, familyName].filter(Boolean).join(' ') || appleEmail;
+    const sessionToken = `st_${randomUUID().replaceAll('-', '')}`;
+    const user = await upsertUserAndSession({ email: appleEmail, name, sessionToken });
+    setSessionCookie(res, sessionToken);
+    res.json(serializeDates({ user, session_token: sessionToken }));
   }),
 );
 
@@ -1436,6 +1426,28 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   return res.status(500).json({ detail: "Internal server error" });
 });
 
+// Pre-authorized agent for App Store review. Sign-in is restricted to known
+// AO Premiere agents (agent_profiles), so Apple's reviewer needs a real
+// Apple ID registered against this email to complete Sign in with Apple.
+async function ensureReviewAgent() {
+  const existing = await db.collection("agent_profiles").findOne({ email: "appreview@aopremiere.com" });
+  if (existing) return;
+  await db.collection("agent_profiles").insertOne({
+    agent_id: "ag_appreview01",
+    name: "App Review Tester",
+    license: "LIC-000000",
+    email: "appreview@aopremiere.com",
+    phone: "+1-000-000-0000",
+    resident_state: "MI",
+    office: "Dearborn",
+    role: "level_2",
+    upline_id: null,
+    ga_id: null,
+    is_rookie: false,
+    joined_at: nowUtc(),
+  });
+}
+
 async function start() {
   await client.connect();
   db = client.db(DB_NAME);
@@ -1450,6 +1462,7 @@ async function start() {
       console.error("Auto-seed failed:", error);
     }
   }
+  await ensureReviewAgent();
 
   app.listen(PORT, "0.0.0.0", () => {
     console.info(`VantageLife API listening on ${PORT}`);

@@ -5,6 +5,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useAuth, COLORS, Role } from '../src/lib/auth';
 
 const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] = [
@@ -15,17 +16,41 @@ const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] =
 ];
 
 export default function LoginScreen() {
-  const { signInDemo } = useAuth();
+  const { signInDemo, signInApple } = useAuth();
   const router = useRouter();
-  const [busy, setBusy] = useState<Role | 'google' | null>(null);
+  const [busy, setBusy] = useState<Role | 'google' | 'apple' | null>(null);
 
   const onDemo = async (level: Role) => {
     setBusy(level);
     try {
       await signInDemo(level);
-      router.replace('/(tabs)');
+      router.replace('/');
     } catch (e: any) {
       alert(`Login failed: ${e.message || e}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onApple = async () => {
+    setBusy('apple');
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      await signInApple(
+        credential.identityToken!,
+        credential.fullName?.givenName ?? null,
+        credential.fullName?.familyName ?? null,
+      );
+      router.replace('/');
+    } catch (e: any) {
+      if (e.code !== 'ERR_REQUEST_CANCELED') {
+        alert(`Apple Sign-In failed: ${e.message || e}`);
+      }
     } finally {
       setBusy(null);
     }
@@ -70,6 +95,16 @@ export default function LoginScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        {Platform.OS === 'ios' && (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+            cornerRadius={4}
+            style={{ width: '100%', height: 48, marginTop: 8 }}
+            onPress={onApple}
+          />
+        )}
 
         <View style={styles.divider}>
           <View style={styles.divLine} />
