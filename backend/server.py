@@ -947,7 +947,16 @@ async def vault_compare(week_a: str, week_b: str, user: Dict[str, Any] = Depends
 @api_router.post("/admin/wednesday-reset")
 async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
     """Archive current week's data into historical_vault, then clear/mark active dataset."""
-    today = now_detroit().date()
+    now = now_detroit()
+    # Business rule: the weekly reset may only run on Wednesday at/after
+    # 2:00 PM America/Detroit. Without this guard the endpoint would
+    # archive-and-wipe production_entries on any day at any time.
+    if now.weekday() != 2 or now.hour < 14:
+        raise HTTPException(
+            status_code=403,
+            detail="Weekly reset is only allowed on Wednesday at or after 2:00 PM (America/Detroit).",
+        )
+    today = now.date()
     # Determine current week start (Wed-to-Wed): roll back to most recent Wednesday
     weekday = today.weekday()  # Mon=0..Sun=6; Wed=2
     days_since_wed = (weekday - 2) % 7
