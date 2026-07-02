@@ -12,6 +12,8 @@ import uuid
 import random
 import httpx
 import pytz
+
+import metrics
 from pathlib import Path
 from pydantic import BaseModel, Field
 from jose import jwt as apple_jwt
@@ -704,11 +706,11 @@ async def team_view(user: Dict[str, Any] = Depends(require_level(2))):
         sits = int(r["sits"])
         n1 = int(r.get("n1", 0))
         # N1 excluded per business rule: Close Rate = Sales / (Sits - N1)
-        eligible_sits = sits - n1
-        close = (sales / eligible_sits * 100) if eligible_sits > 0 else 0
+        es = metrics.eligible_sits(sits, n1)
+        close = metrics.close_rate(sales, sits, n1)
         avg_deal = (float(r["gross_alp"]) / sales) if sales > 0 else 0
         alerts = []
-        if eligible_sits >= 3 and close < 50:
+        if es >= 3 and close < 50:
             alerts.append("low_close_ratio")
         if sales >= 1 and avg_deal < 1200:
             alerts.append("low_avg_deal")
