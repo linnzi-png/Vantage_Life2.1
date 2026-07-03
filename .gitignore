@@ -84,3 +84,15 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
+
+# Local data & ops material — never commit (real production/PII-adjacent data)
+downloads/
+import_log.txt
+
+# Marketing / brand material lives outside this application repo
+Promotional/
+Docs & Video tutorials/
+VantageLife2.0/
+icons/
+vantagelife logos/
+ds-bundle/
