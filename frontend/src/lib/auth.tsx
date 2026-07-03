@@ -66,6 +66,7 @@ interface AuthCtx {
   reload: () => Promise<void>;
   signInDemo: (level: Role) => Promise<void>;
   signInApple: (identityToken: string, givenName: string | null, familyName: string | null) => Promise<void>;
+  signInGoogleSession: (sessionId: string) => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
@@ -115,6 +116,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await reload();
   };
 
+  const signInGoogleSession = async (sessionId: string) => {
+    // Native Google flow: the Emergent portal redirects back to the app with a
+    // session_id; exchange it exactly like the web path does.
+    setLoading(true);
+    const r = await api<{ user: AppUser; session_token: string }>('/api/auth/session', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    await setToken(r.session_token);
+    setUser(r.user);
+    await reload();
+  };
+
   const signOut = async () => {
     try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
     await setToken(null);
@@ -128,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signOut, deleteAccount }}>
+    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInGoogleSession, signOut, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

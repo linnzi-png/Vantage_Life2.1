@@ -20,6 +20,9 @@ export default function PendingScreen() {
           office to get added — once you're on the roster, signing in again will take you
           straight to your dashboard.
         </Text>
+        <Text style={styles.hint}>
+          Signed in with Apple? Sign out and try Google using the email your upline has on file.
+        </Text>
         <TouchableOpacity style={styles.btn} onPress={signOut}>
           <Text style={styles.btnTxt}>Sign Out</Text>
         </TouchableOpacity>
@@ -33,6 +36,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14 },
   title: { color: '#fff', fontSize: 22, fontWeight: '900', letterSpacing: 0.4 },
   body: { color: COLORS.textDim, fontSize: 14, textAlign: 'center', lineHeight: 21 },
+  hint: { color: COLORS.gold, fontSize: 13, textAlign: 'center', lineHeight: 19 },
   btn: { marginTop: 12, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 4, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
   btnTxt: { color: '#fff', fontWeight: '800', fontSize: 13, letterSpacing: 0.6 },
 });
