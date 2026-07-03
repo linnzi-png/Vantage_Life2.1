@@ -54,20 +54,20 @@ def main() -> None:
     except Exception as e:
         print(f"ERROR: Could not connect to MongoDB — {e}")
         client.close()
-        return
+        sys.exit(1)
     db = client[DB_NAME]
 
     agent = db.agent_profiles.find_one({"email": email}, {"_id": 0})
     if not agent:
         print(f"ERROR: no agent_profile with email '{email}'. Run create_users.py first.")
         client.close()
-        return
+        sys.exit(1)
 
     db.agent_profiles.update_one({"email": email}, {"$set": {"role": role}})
     # Keep the users record in sync and ensure it is linked to the agent_id.
     db.users.update_one(
         {"email": email},
-        {"$set": {"role": role, "agent_id": agent["agent_id"]}},
+        {"$set": {"role": role, "agent_id": agent.get("agent_id")}},
     )
 
     label = ROLE_LABELS[role]
