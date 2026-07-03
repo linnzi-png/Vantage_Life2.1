@@ -35,11 +35,14 @@ api_router = APIRouter(prefix="/api")
 
 DETROIT_TZ = pytz.timezone("America/Detroit")
 _SEED_OFFICES = ["MCM", "AMP", "Dearborn", "Heritage", "Siren"]  # used only for demo seed data
+# Display titles for the four RBAC tiers (producer track). Internal role
+# keys and access rules are unchanged — titles are display-only. Partner /
+# Senior Partner are io_role titles carried by level_3/level_4 holders.
 LEVELS = {
     "level_1": "Agent",
-    "level_2": "GA",
-    "level_3": "MGA",
-    "level_4": "RGA",
+    "level_2": "CoExecutive Producer",
+    "level_3": "Executive Producer",
+    "level_4": "Chief Executive Producer",
     "pending": "Pending Approval",
 }
 EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
@@ -509,6 +512,10 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent))
             "gross_alp": float(r["gross_alp"]),
             "sales": int(r["sales"]),
             "is_rookie": bool(agent.get("is_rookie")),
+            "role": agent.get("role", ""),
+            "io_role": agent.get("io_role", ""),
+            "phone": agent.get("phone", ""),
+            "email": agent.get("email", ""),
         }
         if agent.get("is_rookie"):
             if len(rookies) < 3:
@@ -846,7 +853,17 @@ async def list_shoutouts(user: Dict[str, Any] = Depends(require_agent)):
             # If the user IS the agent, also visible
             if user_agent_id == s.get("agent_id"):
                 out.append(s); continue
+    # Enrich with contact info so names are tappable (batch lookup, no N+1)
+    shoutout_agent_ids = list({s.get("agent_id") for s in out if s.get("agent_id")})
+    contacts = {a["agent_id"]: a async for a in db.agent_profiles.find(
+        {"agent_id": {"$in": shoutout_agent_ids}},
+        {"_id": 0, "agent_id": 1, "role": 1, "io_role": 1, "phone": 1, "email": 1})}
     for s in out:
+        c = contacts.get(s.get("agent_id"), {})
+        s["role"] = c.get("role", "")
+        s["io_role"] = c.get("io_role", "")
+        s["phone"] = c.get("phone", "")
+        s["email"] = c.get("email", "")
         if isinstance(s.get("ts"), datetime):
             s["ts"] = s["ts"].isoformat()
     return {"shoutouts": out}
@@ -1084,7 +1101,16 @@ async def vault_compare(week_a: str, week_b: str, user: Dict[str, Any] = Depends
 @api_router.post("/admin/wednesday-reset")
 async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
     """Archive current week's data into historical_vault, then clear/mark active dataset."""
-    today = now_detroit().date()
+    now = now_detroit()
+    # Business rule: the weekly reset may only run on Wednesday at/after
+    # 2:00 PM America/Detroit. Without this guard the endpoint would
+    # archive-and-wipe production_entries on any day at any time.
+    if now.weekday() != 2 or now.hour < 14:
+        raise HTTPException(
+            status_code=403,
+            detail="Weekly reset is only allowed on Wednesday at or after 2:00 PM (America/Detroit).",
+        )
+    today = now.date()
     # Determine current week start (Wed-to-Wed): roll back to most recent Wednesday
     weekday = today.weekday()  # Mon=0..Sun=6; Wed=2
     days_since_wed = (weekday - 2) % 7

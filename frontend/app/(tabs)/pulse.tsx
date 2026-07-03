@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Keyboa
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api, COLORS, useAuth, levelNum } from '../../src/lib/auth';
+import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
 import { BufferedPulse, PulsePayload, getUpcomingSalesDay, isBufferEntryEligible, isLateNightBuffer } from '../../src/lib/cycle';
 import GateBanner from '../../src/components/GateBanner';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
@@ -330,7 +330,7 @@ export default function PulseScreen() {
               testID="upline-contact-card"
             >
               <View style={styles.uplineLeft}>
-                <Text style={styles.uplineKicker}>YOUR {(upline.io_role || upline.role?.replace('level_', 'L') || '').toUpperCase()}</Text>
+                <Text style={styles.uplineKicker}>YOUR {roleTitle(upline.io_role, upline.role).toUpperCase()}</Text>
                 <Text style={styles.uplineName}>{upline.name}</Text>
                 {upline.office ? <Text style={styles.uplineOffice}>{upline.office}</Text> : null}
               </View>

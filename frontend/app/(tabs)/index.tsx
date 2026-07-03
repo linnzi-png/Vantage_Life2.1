@@ -3,9 +3,10 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS, useAuth } from '../../src/lib/auth';
+import { api, COLORS, useAuth, roleTitle } from '../../src/lib/auth';
 import StatCard from '../../src/components/StatCard';
-import PlatinumWall from '../../src/components/PlatinumWall';
+import PlatinumWall, { WallItem } from '../../src/components/PlatinumWall';
+import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 import OfficeTabs, { OfficeRow } from '../../src/components/OfficeTabs';
 import GateBanner from '../../src/components/GateBanner';
 import Ticker, { TickerItem } from '../../src/components/Ticker';
@@ -16,7 +17,7 @@ interface Summary {
 }
 
 export default function DashboardScreen() {
-  const { user, roleLabel } = useAuth();
+  const { user, agent, roleLabel } = useAuth();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [ticker, setTicker] = useState<TickerItem[]>([]);
   const [vets, setVets] = useState<any[]>([]);
@@ -24,6 +25,7 @@ export default function DashboardScreen() {
   const [platinum, setPlatinum] = useState<any[]>([]);
   const [offices, setOffices] = useState<OfficeRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -66,7 +68,7 @@ export default function DashboardScreen() {
       <View style={styles.header} testID="dashboard-header">
         <View>
           <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text></Text>
-          <Text style={styles.sub}>{user?.name} · <Text style={{ color: COLORS.primary }}>{roleLabel}</Text></Text>
+          <Text style={styles.sub}>{user?.name} · <Text style={{ color: COLORS.primary }}>{roleTitle(agent?.io_role, user?.role) || roleLabel}</Text></Text>
         </View>
         <View style={styles.dayPill}>
           <Ionicons name="calendar-outline" size={12} color={COLORS.primary} />
@@ -110,7 +112,15 @@ export default function DashboardScreen() {
               />
             </View>
 
-            <PlatinumWall vets={vets} rookies={rookies} platinum={platinum} />
+            <PlatinumWall
+              vets={vets}
+              rookies={rookies}
+              platinum={platinum}
+              onPress={(it: WallItem) => setContactAgent({
+                name: it.name, role: it.role || 'level_1', io_role: it.io_role,
+                phone: it.phone, email: it.email, office: it.office,
+              })}
+            />
 
             <OfficeTabs offices={offices} />
 
@@ -120,6 +130,7 @@ export default function DashboardScreen() {
       </ScrollView>
 
       <Ticker items={ticker} />
+      <AgentContactSheet agent={contactAgent} onClose={() => setContactAgent(null)} />
     </SafeAreaView>
   );
 }

@@ -22,9 +22,16 @@ Expo/React Native mobile app backed by a Python/FastAPI API over MongoDB.
 
 ## RBAC Hierarchy (4-tier - NEVER flatten or bypass)
 1. `level_1` Agent — enters their own metrics only
-2. `level_2` GA (General Agent) — sees their team rollup
-3. `level_3` MGA (Master General Agent) — sees GA-level rollups
-4. `level_4` RGA (Regional General Agent) — sees all MGA rollups
+2. `level_2` GA (General Agent) — sees their team rollup — displays as "CoExecutive Producer"
+3. `level_3` MGA (Master General Agent) — sees GA-level rollups — displays as "Executive Producer"
+4. `level_4` RGA (Regional General Agent) — sees all MGA rollups — displays as "Chief Executive Producer"
+
+Display titles (producer track) are separate from access tiers. `io_role`
+titles map via `roleTitle()` in `frontend/src/lib/auth.tsx`: SA → Regional
+Producer, GA → CoExecutive Producer, MGA → Executive Producer, RGA → Chief
+Executive Producer; Partner and Senior Partner are titles carried by
+level_3/level_4 holders (no exclusive access tier); Agent, Builder, and
+In Training are unchanged. RBAC is always enforced by `role`, never by title.
 
 Enforced server-side in `backend/server.py`: `require_agent()` / `require_level()`
 dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.

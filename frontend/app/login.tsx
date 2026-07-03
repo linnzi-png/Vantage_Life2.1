@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { useAuth, COLORS, Role } from '../src/lib/auth';
 
 const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] = [
@@ -16,7 +18,7 @@ const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] =
 ];
 
 export default function LoginScreen() {
-  const { signInDemo, signInApple } = useAuth();
+  const { signInDemo, signInApple, signInGoogleSession } = useAuth();
   const router = useRouter();
   const [busy, setBusy] = useState<Role | 'google' | 'apple' | null>(null);
 
@@ -56,14 +58,32 @@ export default function LoginScreen() {
     }
   };
 
-  const onGoogle = () => {
+  const onGoogle = async () => {
     setBusy('google');
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-      const redirectUrl = window.location.origin + '/';
-      window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-    } else {
-      alert('Google Sign-in is available in the web preview. Use Demo Login on native.');
+    try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+        const redirectUrl = window.location.origin + '/';
+        window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+        return;
+      }
+      // Native (iOS/Android): open the same Emergent portal in the system
+      // browser and catch the deep-link redirect back into the app.
+      const redirectUrl = Linking.createURL('');
+      const result = await WebBrowser.openAuthSessionAsync(
+        `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`,
+        redirectUrl,
+      );
+      if (result.type === 'success') {
+        const hash = result.url.split('#')[1] ?? '';
+        const sid = hash.split('session_id=')[1]?.split('&')[0];
+        if (!sid) throw new Error('No session_id returned from sign-in');
+        await signInGoogleSession(sid);
+        router.replace('/');
+      }
+    } catch (e: any) {
+      alert(`Google Sign-In failed: ${e.message || e}`);
+    } finally {
       setBusy(null);
     }
   };

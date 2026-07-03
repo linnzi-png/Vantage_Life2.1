@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS, useAuth, levelNum } from '../../src/lib/auth';
+import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
 
 interface TeamRow {
@@ -92,7 +92,7 @@ export default function TeamScreen() {
           testID="team-upline-card"
         >
           <View style={{ flex: 1 }}>
-            <Text style={styles.uplineKicker}>YOUR {(upline.io_role || upline.role?.replace('level_', 'L') || '').toUpperCase()}</Text>
+            <Text style={styles.uplineKicker}>YOUR {roleTitle(upline.io_role, upline.role).toUpperCase()}</Text>
             <Text style={styles.uplineName}>{upline.name}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -131,7 +131,7 @@ export default function TeamScreen() {
                 <Ionicons name="chevron-forward" size={12} color={COLORS.textDim} style={{ marginLeft: 'auto' }} />
               </View>
               <Text style={styles.meta}>
-                {r.office} · {r.io_role || r.role.replace('level_', 'L')}
+                {r.office} · {roleTitle(r.io_role, r.role) || r.role.replace('level_', 'L')}
                 {r.phone ? ` · ${formatPhone(r.phone)}` : ''}
               </Text>
               {r.alerts?.length ? (
