@@ -32,7 +32,8 @@ OFFICE    = "MJ RGA"
 # Ordered top-down so every upline exists before the agents below it.
 ROSTER = [
     # ── Top of hierarchy ───────────────────────────────────────────────────────────────────────────
-    ("ALJAHMI, MOHAMED",      "3135550101", "mj@aopremier.com",                 "RGA",        "level_4", None),
+    # Partner title (display only) — access stays level_4 / RGA tier
+    ("ALJAHMI, MOHAMED",      "3135550101", "mj@aopremier.com",                 "Partner",    "level_4", None),
     # ── MGA ─────────────────────────────────────────────────────────────────────────────
     ("ALWATAN, MONTZER",      "3139609390", "Monty@AOpremier.com",              "MGA",        "level_3", "ALJAHMI, MOHAMED"),
     # ── GAs ─────────────────────────────────────────────────────────────────────────────
