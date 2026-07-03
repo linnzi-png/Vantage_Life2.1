@@ -1,20 +1,26 @@
 // Premiere Shoutouts Feed
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth } from '../../src/lib/auth';
+import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 
 interface Shoutout {
   shoutout_id: string;
   type: 'players_club' | 'first_deal' | 'streak' | string;
   scope: string;
+  agent_id?: string;
   agent_name: string;
   office: string;
   sales_day?: string;
   amount?: number;
   streak?: number;
   ts: string;
+  role?: string;
+  io_role?: string;
+  phone?: string;
+  email?: string;
 }
 
 const cfg: Record<string, { icon: any; color: string; title: string; bg: string }> = {
@@ -27,6 +33,7 @@ export default function ShoutoutsScreen() {
   const { user } = useAuth();
   const [items, setItems] = useState<Shoutout[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
   const fetchAll = async () => {
     try { const r = await api<{ shoutouts: Shoutout[] }>('/api/shoutouts'); setItems(r.shoutouts); }
     catch {}
@@ -66,7 +73,16 @@ export default function ShoutoutsScreen() {
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={[styles.cardTitle, { color: c.color }]}>{c.title}</Text>
-                <Text style={styles.agent}>{s.agent_name}<Text style={styles.dim}> · {s.office}</Text></Text>
+                <TouchableOpacity
+                  onPress={() => setContactAgent({
+                    name: s.agent_name, role: s.role || 'level_1', io_role: s.io_role,
+                    phone: s.phone, email: s.email, office: s.office,
+                  })}
+                  activeOpacity={0.7}
+                  testID={`shoutout-agent-${s.shoutout_id}`}
+                >
+                  <Text style={styles.agent}>{s.agent_name}<Text style={styles.dim}> · {s.office}</Text></Text>
+                </TouchableOpacity>
                 {s.type === 'players_club' && s.amount ? (
                   <Text style={styles.detail}>${Math.round(s.amount).toLocaleString()} Gross ALP — {s.sales_day}</Text>
                 ) : null}
@@ -82,6 +98,7 @@ export default function ShoutoutsScreen() {
           );
         })}
       </ScrollView>
+      <AgentContactSheet agent={contactAgent} onClose={() => setContactAgent(null)} />
     </SafeAreaView>
   );
 }

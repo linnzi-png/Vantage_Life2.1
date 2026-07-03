@@ -5,7 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth } from '../../src/lib/auth';
 import StatCard from '../../src/components/StatCard';
-import PlatinumWall from '../../src/components/PlatinumWall';
+import PlatinumWall, { WallItem } from '../../src/components/PlatinumWall';
+import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 import OfficeTabs, { OfficeRow } from '../../src/components/OfficeTabs';
 import GateBanner from '../../src/components/GateBanner';
 import Ticker, { TickerItem } from '../../src/components/Ticker';
@@ -23,6 +24,7 @@ export default function DashboardScreen() {
   const [rookies, setRookies] = useState<any[]>([]);
   const [offices, setOffices] = useState<OfficeRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -109,7 +111,14 @@ export default function DashboardScreen() {
               />
             </View>
 
-            <PlatinumWall vets={vets} rookies={rookies} />
+            <PlatinumWall
+              vets={vets}
+              rookies={rookies}
+              onPress={(it: WallItem) => setContactAgent({
+                name: it.name, role: it.role || 'level_1', io_role: it.io_role,
+                phone: it.phone, email: it.email, office: it.office,
+              })}
+            />
 
             <OfficeTabs offices={offices} />
 
@@ -119,6 +128,7 @@ export default function DashboardScreen() {
       </ScrollView>
 
       <Ticker items={ticker} />
+      <AgentContactSheet agent={contactAgent} onClose={() => setContactAgent(null)} />
     </SafeAreaView>
   );
 }
