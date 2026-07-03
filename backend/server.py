@@ -525,7 +525,13 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent))
                 vets.append(item)
         if len(vets) >= 3 and len(rookies) >= 3:
             break
-    return {"vets": vets, "rookies": rookies}
+    # Recent Platinum Rule recognition posts (global scope, newest first)
+    platinum = [s async for s in db.shoutouts.find(
+        {"type": "platinum_rule"}, {"_id": 0}).sort("ts", -1).limit(5)]
+    for s in platinum:
+        if isinstance(s.get("ts"), datetime):
+            s["ts"] = s["ts"].isoformat()
+    return {"vets": vets, "rookies": rookies, "platinum_rule": platinum}
 
 
 @api_router.get("/dashboard/offices")
@@ -861,6 +867,137 @@ async def list_shoutouts(user: Dict[str, Any] = Depends(require_agent)):
         if isinstance(s.get("ts"), datetime):
             s["ts"] = s["ts"].isoformat()
     return {"shoutouts": out}
+
+
+# =========================================================
+#              PLATINUM RULE NOMINATIONS
+# =========================================================
+# The Platinum Rule: do more for others than they would do for themselves.
+# Any agent may nominate any other agent. Nominations surface to the
+# nominee's upline (GA+). At PLATINUM_ENDORSE_THRESHOLD endorsements the
+# nomination flags threshold_met, badging the MGA/RGA inbox; posting to
+# the Platinum Wall is a deliberate MGA/RGA (level_3+) action.
+
+PLATINUM_ENDORSE_THRESHOLD = 3
+
+
+@api_router.get("/agents/directory")
+async def agents_directory(user: Dict[str, Any] = Depends(require_agent)):
+    """Name-only roster for the nomination picker. Names/offices are already
+    org-visible via the ticker and global shoutouts; no production data here."""
+    out = [a async for a in db.agent_profiles.find(
+        {}, {"_id": 0, "agent_id": 1, "name": 1, "office": 1}).sort("name", 1)]
+    return {"agents": out}
+
+
+class NominationIn(BaseModel):
+    nominee_agent_id: str
+    reason: str = Field(min_length=10, max_length=500)
+
+
+async def _nomination_visible_to(user: Dict[str, Any], nomination: Dict[str, Any]) -> bool:
+    ids = await visible_agent_ids(user)
+    return ids is None or nomination["nominee_agent_id"] in ids
+
+
+@api_router.post("/nominations")
+async def create_nomination(payload: NominationIn, user: Dict[str, Any] = Depends(require_agent)):
+    nominee = await db.agent_profiles.find_one({"agent_id": payload.nominee_agent_id}, {"_id": 0})
+    if not nominee:
+        raise HTTPException(status_code=404, detail="Nominee not found")
+    if nominee["agent_id"] == user.get("agent_id"):
+        raise HTTPException(status_code=400, detail="You can't nominate yourself")
+    doc = {
+        "nomination_id": f"nom_{uuid.uuid4().hex[:10]}",
+        "nominee_agent_id": nominee["agent_id"],
+        "nominee_name": nominee["name"],
+        "nominee_office": nominee["office"],
+        "nominator_agent_id": user["agent_id"],
+        "nominator_name": user.get("name", ""),
+        "reason": payload.reason.strip(),
+        "status": "open",
+        "endorsements": [],
+        "created_at": now_utc(),
+    }
+    await db.nominations.insert_one(doc)
+    doc.pop("_id", None)
+    doc["created_at"] = doc["created_at"].isoformat()
+    return {"ok": True, "nomination": doc}
+
+
+@api_router.get("/nominations")
+async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = Depends(require_level(2))):
+    ids = await visible_agent_ids(user)
+    q: Dict[str, Any] = {}
+    if ids is not None:
+        q["nominee_agent_id"] = {"$in": ids}
+    if status:
+        q["status"] = status
+    out = [n async for n in db.nominations.find(q, {"_id": 0}).sort("created_at", -1).limit(200)]
+    for n in out:
+        if isinstance(n.get("created_at"), datetime):
+            n["created_at"] = n["created_at"].isoformat()
+        for e in n.get("endorsements", []):
+            if isinstance(e.get("ts"), datetime):
+                e["ts"] = e["ts"].isoformat()
+    return {"nominations": out, "threshold": PLATINUM_ENDORSE_THRESHOLD}
+
+
+@api_router.post("/nominations/{nomination_id}/endorse")
+async def endorse_nomination(nomination_id: str, user: Dict[str, Any] = Depends(require_level(2))):
+    nom = await db.nominations.find_one({"nomination_id": nomination_id}, {"_id": 0})
+    if not nom:
+        raise HTTPException(status_code=404, detail="Nomination not found")
+    if not await _nomination_visible_to(user, nom):
+        raise HTTPException(status_code=403, detail="Nominee is not in your team")
+    if nom["status"] not in ("open", "threshold_met"):
+        raise HTTPException(status_code=400, detail="Nomination is no longer open")
+    if any(e["agent_id"] == user["agent_id"] for e in nom.get("endorsements", [])):
+        raise HTTPException(status_code=400, detail="You already endorsed this nomination")
+    endorsement = {"agent_id": user["agent_id"], "name": user.get("name", ""), "ts": now_utc()}
+    endorsements = nom.get("endorsements", []) + [endorsement]
+    new_status = "threshold_met" if len(endorsements) >= PLATINUM_ENDORSE_THRESHOLD else nom["status"]
+    await db.nominations.update_one(
+        {"nomination_id": nomination_id},
+        {"$set": {"endorsements": endorsements, "status": new_status}},
+    )
+    return {"ok": True, "status": new_status, "endorsement_count": len(endorsements),
+            "threshold": PLATINUM_ENDORSE_THRESHOLD}
+
+
+@api_router.post("/nominations/{nomination_id}/post-to-wall")
+async def post_nomination_to_wall(nomination_id: str, user: Dict[str, Any] = Depends(require_level(3))):
+    nom = await db.nominations.find_one({"nomination_id": nomination_id}, {"_id": 0})
+    if not nom:
+        raise HTTPException(status_code=404, detail="Nomination not found")
+    if not await _nomination_visible_to(user, nom):
+        raise HTTPException(status_code=403, detail="Nominee is not in your team")
+    if nom["status"] != "threshold_met":
+        raise HTTPException(status_code=400, detail="Nomination has not reached the endorsement threshold")
+    nominee = await db.agent_profiles.find_one({"agent_id": nom["nominee_agent_id"]}, {"_id": 0})
+    shoutout = {
+        "shoutout_id": f"so_{uuid.uuid4().hex[:10]}",
+        "type": "platinum_rule",
+        "scope": "global",
+        "agent_id": nom["nominee_agent_id"],
+        "agent_name": nom["nominee_name"],
+        "office": nom["nominee_office"],
+        "ga_team_id": (nominee or {}).get("ga_id"),
+        "sales_day": current_sales_day_str(),
+        "reason": nom["reason"],
+        "nominator_name": nom["nominator_name"],
+        "endorsement_count": len(nom.get("endorsements", [])),
+        "posted_by": user.get("name", ""),
+        "ts": now_utc(),
+    }
+    await db.shoutouts.insert_one(shoutout)
+    await db.nominations.update_one(
+        {"nomination_id": nomination_id},
+        {"$set": {"status": "posted", "posted_at": now_utc(), "posted_by_agent_id": user["agent_id"]}},
+    )
+    shoutout.pop("_id", None)
+    shoutout["ts"] = shoutout["ts"].isoformat()
+    return {"ok": True, "shoutout": shoutout}
 
 
 # =========================================================

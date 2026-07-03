@@ -7,8 +7,14 @@ export interface WallItem {
   agent_id: string; name: string; office: string; gross_alp: number; sales: number;
   is_rookie?: boolean; role?: string; io_role?: string; phone?: string; email?: string;
 }
+export interface PlatinumRulePost { shoutout_id: string; agent_name: string; office: string; reason: string; posted_by?: string; }
 
-export default function PlatinumWall({ vets, rookies, onPress }: { vets: WallItem[]; rookies: WallItem[]; onPress?: (item: WallItem) => void }) {
+const PLATINUM = '#E5E4E2';
+
+export default function PlatinumWall(
+  { vets, rookies, platinum = [], onPress }:
+  { vets: WallItem[]; rookies: WallItem[]; platinum?: PlatinumRulePost[]; onPress?: (item: WallItem) => void },
+) {
   return (
     <View style={styles.wrap}>
       <Text style={styles.title}>PLATINUM WALL</Text>
@@ -17,6 +23,22 @@ export default function PlatinumWall({ vets, rookies, onPress }: { vets: WallIte
         <View style={{ width: 8 }} />
         <Panel title="TOP 3 ROOKIES" color={COLORS.orange} icon="rocket" items={rookies} testID="platinum-rookies" onPress={onPress} />
       </View>
+      {platinum.length ? (
+        <View style={[styles.panel, { borderTopColor: PLATINUM, marginTop: 8 }]} testID="platinum-rule-strip">
+          <View style={styles.panelHeader}>
+            <Ionicons name="medal" size={14} color={PLATINUM} />
+            <Text style={[styles.panelTitle, { color: PLATINUM }]}>PLATINUM RULE</Text>
+          </View>
+          {platinum.map((p) => (
+            <View key={p.shoutout_id} style={styles.item}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name} numberOfLines={1}>{p.agent_name} <Text style={styles.meta}>· {p.office}</Text></Text>
+                <Text style={[styles.meta, { fontStyle: 'italic' }]} numberOfLines={2}>"{p.reason}"</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }

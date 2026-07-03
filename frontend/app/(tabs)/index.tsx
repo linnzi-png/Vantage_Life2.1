@@ -22,6 +22,7 @@ export default function DashboardScreen() {
   const [ticker, setTicker] = useState<TickerItem[]>([]);
   const [vets, setVets] = useState<any[]>([]);
   const [rookies, setRookies] = useState<any[]>([]);
+  const [platinum, setPlatinum] = useState<any[]>([]);
   const [offices, setOffices] = useState<OfficeRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
@@ -31,10 +32,10 @@ export default function DashboardScreen() {
       const [s, t, p, o] = await Promise.all([
         api<Summary>('/api/dashboard/summary'),
         api<{ items: TickerItem[] }>('/api/dashboard/ticker'),
-        api<{ vets: any[]; rookies: any[] }>('/api/dashboard/platinum-wall'),
+        api<{ vets: any[]; rookies: any[]; platinum_rule?: any[] }>('/api/dashboard/platinum-wall'),
         api<{ offices: OfficeRow[] }>('/api/dashboard/offices'),
       ]);
-      setSummary(s); setTicker(t.items); setVets(p.vets); setRookies(p.rookies); setOffices(o.offices);
+      setSummary(s); setTicker(t.items); setVets(p.vets); setRookies(p.rookies); setPlatinum(p.platinum_rule || []); setOffices(o.offices);
     } catch (e) {
       console.warn('Dashboard fetch error:', e);
     }
@@ -114,6 +115,7 @@ export default function DashboardScreen() {
             <PlatinumWall
               vets={vets}
               rookies={rookies}
+              platinum={platinum}
               onPress={(it: WallItem) => setContactAgent({
                 name: it.name, role: it.role || 'level_1', io_role: it.io_role,
                 phone: it.phone, email: it.email, office: it.office,
