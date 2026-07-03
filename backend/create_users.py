@@ -28,6 +28,7 @@ DB_NAME = os.environ.get("DB_NAME", "vantagelife")
 USERS = [
     ("mj@aopremier.com",  "MJ Aljahmi", "level_4", "MJ RGA",  "3135550101"),
     ("linnzi@aoluxor.com", "Linnzi Ek", "level_4", "MJ RGA",  "3609109934"),
+    ("noetimothy1114@gmail.com", "Timothy Noe", "level_2", "Gojcaj RGA", "8589512244"),
 ]
 # ───────────────────────────────────────────────────────────────────────────
 
