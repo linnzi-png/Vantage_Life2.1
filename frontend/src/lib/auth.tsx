@@ -145,6 +145,37 @@ export function levelNum(role?: Role | null): number {
   return parseInt(role.split('_')[1] || '1', 10);
 }
 
+// Producer-track display titles for io_role codes. Titles are display-only:
+// Partner / Senior Partner holders keep their MGA- or RGA-tier access, and
+// RBAC is always enforced by `role` (level_1..4), never by title.
+const IO_ROLE_TITLES: Record<string, string> = {
+  SA: 'Regional Producer',
+  GA: 'CoExecutive Producer',
+  MGA: 'Executive Producer',
+  RGA: 'Chief Executive Producer',
+  Partner: 'Partner',
+  SeniorPartner: 'Senior Partner',
+  'Senior Partner': 'Senior Partner',
+  Agent: 'Agent',
+  Builder: 'Builder',
+  inTraining: 'In Training',
+};
+
+const TIER_TITLES: Record<string, string> = {
+  level_1: 'Agent',
+  level_2: 'CoExecutive Producer',
+  level_3: 'Executive Producer',
+  level_4: 'Chief Executive Producer',
+  pending: 'Pending Approval',
+};
+
+export function roleTitle(io_role?: string | null, role?: string | null): string {
+  if (io_role && IO_ROLE_TITLES[io_role]) return IO_ROLE_TITLES[io_role];
+  if (io_role) return io_role;
+  if (role && TIER_TITLES[role]) return TIER_TITLES[role];
+  return '';
+}
+
 export const COLORS = {
   bg: '#0D0D0D',
   surface: '#141414',

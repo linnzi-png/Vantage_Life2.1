@@ -35,11 +35,14 @@ api_router = APIRouter(prefix="/api")
 
 DETROIT_TZ = pytz.timezone("America/Detroit")
 _SEED_OFFICES = ["MCM", "AMP", "Dearborn", "Heritage", "Siren"]  # used only for demo seed data
+# Display titles for the four RBAC tiers (producer track). Internal role
+# keys and access rules are unchanged — titles are display-only. Partner /
+# Senior Partner are io_role titles carried by level_3/level_4 holders.
 LEVELS = {
     "level_1": "Agent",
-    "level_2": "GA",
-    "level_3": "MGA",
-    "level_4": "RGA",
+    "level_2": "CoExecutive Producer",
+    "level_3": "Executive Producer",
+    "level_4": "Chief Executive Producer",
     "pending": "Pending Approval",
 }
 EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"

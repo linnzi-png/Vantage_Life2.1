@@ -4,7 +4,7 @@ import {
   Linking, Platform, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../lib/auth';
+import { COLORS, roleTitle } from '../lib/auth';
 
 export interface AgentContact {
   name: string;
@@ -19,11 +19,6 @@ interface Props {
   agent: AgentContact | null;
   onClose: () => void;
 }
-
-const IO_ROLE_LABEL: Record<string, string> = {
-  RGA: 'RGA', MGA: 'MGA', GA: 'GA', SA: 'SA',
-  Agent: 'Agent', Builder: 'Builder', inTraining: 'In Training',
-};
 
 export function formatPhone(raw: string | undefined | null): string {
   if (!raw) return '';
@@ -42,7 +37,7 @@ function openLink(url: string, errorMessage: string) {
 export function AgentContactSheet({ agent, onClose }: Props) {
   if (!agent) return null;
 
-  const label = agent.io_role ? (IO_ROLE_LABEL[agent.io_role] ?? agent.io_role) : agent.role.replace('level_', 'L');
+  const label = roleTitle(agent.io_role, agent.role) || agent.role.replace('level_', 'L');
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
