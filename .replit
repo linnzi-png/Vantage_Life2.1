@@ -1,5 +1,5 @@
-modules = ["nodejs-20"]
-run = "npm install && npm run replit"
+modules = ["python-3.11"]
+run = "cd backend && pip install -r requirements.txt && uvicorn server:app --host 0.0.0.0 --port 8000"
 
 [deployment]
-run = ["sh", "-c", "npm install && npm --prefix backend install && npm --prefix backend run build && npm --prefix backend start"]
+run = ["sh", "-c", "cd backend && pip install -r requirements.txt && uvicorn server:app --host 0.0.0.0 --port $PORT"]

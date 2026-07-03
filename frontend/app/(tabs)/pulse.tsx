@@ -177,8 +177,8 @@ export default function PulseScreen() {
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.center}>
           <Ionicons name="alert-circle" size={36} color={COLORS.orange} />
-          <Text style={styles.notLinked}>This account isn't linked to an agent profile yet.</Text>
-          <Text style={styles.notLinkedSub}>Try the Demo Login screen and pick "AGENT" to test the Pulse flow.</Text>
+          <Text style={styles.notLinked}>{"This account isn't linked to an agent profile yet."}</Text>
+          <Text style={styles.notLinkedSub}>{'Try the Demo Login screen and pick "AGENT" to test the Pulse flow.'}</Text>
         </View>
       </SafeAreaView>
     );
@@ -212,11 +212,11 @@ export default function PulseScreen() {
           </View>
 
           <View style={styles.todayCard}>
-            <Text style={styles.todayLabel}>TODAY'S RUNNING TOTAL</Text>
+            <Text style={styles.todayLabel}>{"TODAY'S RUNNING TOTAL"}</Text>
             <Text style={[styles.todayAlp, isPlayersClub && { color: COLORS.gold }]}>${Math.round(totalAlp).toLocaleString()}</Text>
             <Text style={styles.todayMeta}>{today?.totals?.sales ?? 0} sales · {today?.totals?.sits ?? 0} sits</Text>
             {isPlayersClub ? (
-              <View style={styles.club}><Ionicons name="trophy" size={14} color={COLORS.gold} /><Text style={styles.clubTxt}>PLAYER'S CLUB · $10K HIT</Text></View>
+              <View style={styles.club}><Ionicons name="trophy" size={14} color={COLORS.gold} /><Text style={styles.clubTxt}>{"PLAYER'S CLUB · $10K HIT"}</Text></View>
             ) : null}
           </View>
 

@@ -1,31 +1,26 @@
 # VantageLife 2.1
 
-VantageLife is an Expo/React Native app with a TypeScript Node backend.
+Real-time sales tracking platform for AO Globe Life - Vantage. Expo/React Native
+frontend, Python/FastAPI backend over MongoDB.
 
 ## Project shape
 
-- `frontend/`: Expo app written in TypeScript.
-- `backend/`: Express + TypeScript API that serves the existing `/api` routes.
-- `.replit`: Replit run/deploy configuration.
+- `frontend/`: Expo (SDK 56) app, TypeScript, Expo Router file-based routing.
+- `backend/`: FastAPI API (`server.py`), Motor async MongoDB driver, pytest suite in `tests/`.
+- `railway.json` + `backend/Procfile` + `backend/nixpacks.toml`: Railway deployment (the live backend).
+- `vercel.json`: Vercel deployment of the Expo web export.
+- `.replit`: Replit run/deploy configuration (same Python backend).
 
-## Run in Replit
+## Environment
 
-1. Import this GitHub repo into Replit.
-2. Add these Replit Secrets:
-   - `MONGO_URL`
-   - `DB_NAME`
-   - `EXPO_PUBLIC_BACKEND_URL`
+Backend (`backend/.env`, see `backend/.env.example`):
 
-For local development, `EXPO_PUBLIC_BACKEND_URL` is usually `http://localhost:8000`.
-In Replit, set it to your backend web URL once Replit exposes port `8000`.
-3. Press Run.
+- `MONGO_URL`
+- `DB_NAME`
 
-The Run command installs root, backend, and frontend dependencies, then starts:
+Frontend:
 
-```bash
-npm --prefix backend run dev
-npm --prefix frontend run web
-```
+- `EXPO_PUBLIC_BACKEND_URL` — `http://localhost:8000` for local development.
 
 ## Local development
 
@@ -33,8 +28,8 @@ From the repo root:
 
 ```bash
 npm install
-npm run install:all
-npm run dev
+npm run install:all   # pip install backend deps + yarn install frontend deps
+npm run dev           # uvicorn (port 8000) + expo web, concurrently
 ```
 
 Backend only:
@@ -42,14 +37,22 @@ Backend only:
 ```bash
 cd backend
 cp .env.example .env
-npm install
-npm run dev
+pip install -r requirements.txt
+uvicorn server:app --reload --port 8000
 ```
 
 Frontend only:
 
 ```bash
 cd frontend
-npm install
-npm run web
+yarn install
+yarn web
+```
+
+## Checks
+
+```bash
+npm run typecheck   # frontend tsc --noEmit
+npm test            # pytest backend/tests
+npm run build       # expo web export (what Vercel runs)
 ```
