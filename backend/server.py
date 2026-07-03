@@ -518,7 +518,13 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent))
                 vets.append(item)
         if len(vets) >= 3 and len(rookies) >= 3:
             break
-    return {"vets": vets, "rookies": rookies}
+    # Recent Platinum Rule recognition posts (global scope, newest first)
+    platinum = [s async for s in db.shoutouts.find(
+        {"type": "platinum_rule"}, {"_id": 0}).sort("ts", -1).limit(5)]
+    for s in platinum:
+        if isinstance(s.get("ts"), datetime):
+            s["ts"] = s["ts"].isoformat()
+    return {"vets": vets, "rookies": rookies, "platinum_rule": platinum}
 
 
 @api_router.get("/dashboard/offices")
@@ -856,6 +862,15 @@ async def list_shoutouts(user: Dict[str, Any] = Depends(require_agent)):
 # the Platinum Wall is a deliberate MGA/RGA (level_3+) action.
 
 PLATINUM_ENDORSE_THRESHOLD = 3
+
+
+@api_router.get("/agents/directory")
+async def agents_directory(user: Dict[str, Any] = Depends(require_agent)):
+    """Name-only roster for the nomination picker. Names/offices are already
+    org-visible via the ticker and global shoutouts; no production data here."""
+    out = [a async for a in db.agent_profiles.find(
+        {}, {"_id": 0, "agent_id": 1, "name": 1, "office": 1}).sort("name", 1)]
+    return {"agents": out}
 
 
 class NominationIn(BaseModel):

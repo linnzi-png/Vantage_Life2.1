@@ -1,19 +1,22 @@
 // Premiere Shoutouts Feed
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth } from '../../src/lib/auth';
+import { NominateSheet } from '../../src/components/NominateSheet';
 
 interface Shoutout {
   shoutout_id: string;
-  type: 'players_club' | 'first_deal' | 'streak' | string;
+  type: 'players_club' | 'first_deal' | 'streak' | 'platinum_rule' | string;
   scope: string;
   agent_name: string;
   office: string;
   sales_day?: string;
   amount?: number;
   streak?: number;
+  reason?: string;
+  nominator_name?: string;
   ts: string;
 }
 
@@ -21,12 +24,14 @@ const cfg: Record<string, { icon: any; color: string; title: string; bg: string 
   players_club: { icon: 'trophy', color: COLORS.gold, title: "PLAYER'S CLUB", bg: 'rgba(255,215,0,0.08)' },
   first_deal: { icon: 'sparkles', color: COLORS.primary, title: 'WELCOME TO THE BOARD', bg: 'rgba(49,152,66,0.08)' },
   streak: { icon: 'flame', color: COLORS.orange, title: 'PERFORMANCE STREAK', bg: 'rgba(255,140,0,0.08)' },
+  platinum_rule: { icon: 'medal', color: '#E5E4E2', title: 'PLATINUM RULE', bg: 'rgba(229,228,226,0.07)' },
 };
 
 export default function ShoutoutsScreen() {
   const { user } = useAuth();
   const [items, setItems] = useState<Shoutout[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [nominateOpen, setNominateOpen] = useState(false);
   const fetchAll = async () => {
     try { const r = await api<{ shoutouts: Shoutout[] }>('/api/shoutouts'); setItems(r.shoutouts); }
     catch {}
@@ -47,9 +52,15 @@ export default function ShoutoutsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.head}>
-        <Text style={styles.kicker}>VICTORY CULTURE</Text>
-        <Text style={styles.title}>PREMIERE SHOUTOUTS</Text>
+      <View style={[styles.head, { flexDirection: 'row', alignItems: 'center' }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.kicker}>VICTORY CULTURE</Text>
+          <Text style={styles.title}>PREMIERE SHOUTOUTS</Text>
+        </View>
+        <TouchableOpacity style={styles.nominateBtn} onPress={() => setNominateOpen(true)} testID="open-nominate">
+          <Ionicons name="medal" size={14} color="#E5E4E2" />
+          <Text style={styles.nominateTxt}>NOMINATE</Text>
+        </TouchableOpacity>
       </View>
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 30 }}
@@ -76,12 +87,18 @@ export default function ShoutoutsScreen() {
                 {s.type === 'first_deal' ? (
                   <Text style={styles.detail}>Closed their first deal — visible to GA Team only.</Text>
                 ) : null}
+                {s.type === 'platinum_rule' && s.reason ? (
+                  <Text style={[styles.detail, { fontStyle: 'italic' }]}>
+                    "{s.reason}"{s.nominator_name ? ` — nominated by ${s.nominator_name}` : ''}
+                  </Text>
+                ) : null}
                 <Text style={styles.ts}>{new Date(s.ts).toLocaleString()}</Text>
               </View>
             </View>
           );
         })}
       </ScrollView>
+      <NominateSheet visible={nominateOpen} onClose={() => setNominateOpen(false)} onSubmitted={fetchAll} />
     </SafeAreaView>
   );
 }
@@ -102,4 +119,10 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   notLinked: { color: '#fff', fontWeight: '800', fontSize: 16, marginTop: 12, textAlign: 'center' },
   notLinkedSub: { color: COLORS.textDim, marginTop: 6, textAlign: 'center' },
+  nominateBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderColor: '#E5E4E2', borderRadius: 5,
+    paddingHorizontal: 10, paddingVertical: 7, backgroundColor: 'rgba(229,228,226,0.08)',
+  },
+  nominateTxt: { color: '#E5E4E2', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
 });

@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth, levelNum } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
@@ -26,18 +27,21 @@ export default function TeamScreen() {
   const [sortKey, setSortKey] = useState<keyof TeamRow>('gross_alp');
   const [selected, setSelected] = useState<TeamRow | null>(null);
   const [uplineOpen, setUplineOpen] = useState(false);
+  const [readyNoms, setReadyNoms] = useState(0);
 
   const fetchAll = async () => {
     try {
-      const [r, u] = await Promise.all([
+      const [r, u, n] = await Promise.all([
         api<{ team: TeamRow[] }>('/api/team'),
         api<{ upline: AgentContact | null }>('/api/my-upline').catch(() => ({ upline: null })),
+        api<{ nominations: any[] }>('/api/nominations?status=threshold_met').catch(() => ({ nominations: [] })),
       ]);
       setRows(r.team);
       setUpline(u.upline);
+      setReadyNoms(n.nominations.length);
     } catch {}
   };
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, []);
 
   const sorted = [...rows].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
 
@@ -64,9 +68,20 @@ export default function TeamScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.head}>
-        <Text style={styles.kicker}>HIERARCHY VIEW · LIVE</Text>
-        <Text style={styles.title}>TEAM PRODUCTION</Text>
+      <View style={[styles.head, { flexDirection: 'row', alignItems: 'center' }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.kicker}>HIERARCHY VIEW · LIVE</Text>
+          <Text style={styles.title}>TEAM PRODUCTION</Text>
+        </View>
+        <TouchableOpacity style={styles.nomBtn} onPress={() => router.push('/nominations')} testID="open-nominations">
+          <Ionicons name="medal" size={14} color="#E5E4E2" />
+          <Text style={styles.nomBtnTxt}>NOMINATIONS</Text>
+          {readyNoms > 0 ? (
+            <View style={styles.badge} testID="nominations-badge">
+              <Text style={styles.badgeTxt}>{readyNoms}</Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
       </View>
 
       {upline && levelNum(user?.role) < 4 ? (
@@ -177,4 +192,12 @@ const styles = StyleSheet.create({
   },
   uplineKicker:  { color: COLORS.primary, fontSize: 9, fontWeight: '900', letterSpacing: 1.8, marginBottom: 2 },
   uplineName:    { color: '#fff', fontWeight: '800', fontSize: 14 },
+  nomBtn:        {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderColor: '#E5E4E2', borderRadius: 5,
+    paddingHorizontal: 10, paddingVertical: 7, backgroundColor: 'rgba(229,228,226,0.08)',
+  },
+  nomBtnTxt:     { color: '#E5E4E2', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  badge:         { backgroundColor: COLORS.red, borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  badgeTxt:      { color: '#fff', fontSize: 9, fontWeight: '900' },
 });
