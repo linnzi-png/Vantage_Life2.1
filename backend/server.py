@@ -512,6 +512,10 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent))
             "gross_alp": float(r["gross_alp"]),
             "sales": int(r["sales"]),
             "is_rookie": bool(agent.get("is_rookie")),
+            "role": agent.get("role", ""),
+            "io_role": agent.get("io_role", ""),
+            "phone": agent.get("phone", ""),
+            "email": agent.get("email", ""),
         }
         if agent.get("is_rookie"):
             if len(rookies) < 3:
@@ -843,7 +847,17 @@ async def list_shoutouts(user: Dict[str, Any] = Depends(require_agent)):
             # If the user IS the agent, also visible
             if user_agent_id == s.get("agent_id"):
                 out.append(s); continue
+    # Enrich with contact info so names are tappable (batch lookup, no N+1)
+    shoutout_agent_ids = list({s.get("agent_id") for s in out if s.get("agent_id")})
+    contacts = {a["agent_id"]: a async for a in db.agent_profiles.find(
+        {"agent_id": {"$in": shoutout_agent_ids}},
+        {"_id": 0, "agent_id": 1, "role": 1, "io_role": 1, "phone": 1, "email": 1})}
     for s in out:
+        c = contacts.get(s.get("agent_id"), {})
+        s["role"] = c.get("role", "")
+        s["io_role"] = c.get("io_role", "")
+        s["phone"] = c.get("phone", "")
+        s["email"] = c.get("email", "")
         if isinstance(s.get("ts"), datetime):
             s["ts"] = s["ts"].isoformat()
     return {"shoutouts": out}
