@@ -3,7 +3,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS, useAuth } from '../../src/lib/auth';
+import { api, COLORS, useAuth, roleTitle } from '../../src/lib/auth';
 import StatCard from '../../src/components/StatCard';
 import PlatinumWall from '../../src/components/PlatinumWall';
 import OfficeTabs, { OfficeRow } from '../../src/components/OfficeTabs';
@@ -16,7 +16,7 @@ interface Summary {
 }
 
 export default function DashboardScreen() {
-  const { user, roleLabel } = useAuth();
+  const { user, agent, roleLabel } = useAuth();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [ticker, setTicker] = useState<TickerItem[]>([]);
   const [vets, setVets] = useState<any[]>([]);
@@ -65,7 +65,7 @@ export default function DashboardScreen() {
       <View style={styles.header} testID="dashboard-header">
         <View>
           <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text></Text>
-          <Text style={styles.sub}>{user?.name} · <Text style={{ color: COLORS.primary }}>{roleLabel}</Text></Text>
+          <Text style={styles.sub}>{user?.name} · <Text style={{ color: COLORS.primary }}>{roleTitle(agent?.io_role, user?.role) || roleLabel}</Text></Text>
         </View>
         <View style={styles.dayPill}>
           <Ionicons name="calendar-outline" size={12} color={COLORS.primary} />

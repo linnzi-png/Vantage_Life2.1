@@ -21,6 +21,7 @@ export interface AppAgent {
   name: string;
   office: string;
   role: Role;
+  io_role?: string;
   is_rookie?: boolean;
   ga_id?: string | null;
 }
