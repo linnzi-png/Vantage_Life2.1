@@ -6,12 +6,13 @@ upline_id hierarchy links so every tier can see its downline.
 Role mapping (IO → app):
   RGA           → level_4
   MGA           → level_3
-  GA            → level_2
-  SA / Agent / Builder / inTraining → level_1
+  GA / SA       → level_2
+  Agent / Builder / inTraining → level_1
 
-NOTE: SAs are mapped to level_1 (agent-tier).  They enter their own
-Pulse but cannot view team dashboards.  To promote a SA to GA-tier
-access, update their record via create_users.py with role "level_2".
+NOTE: SAs are mapped to level_2 (GA-tier access).  They keep the SA
+display title ("Regional Producer") but can view their own team rollup
+and endorse Platinum Rule nominations, same as GAs.  RBAC scoping stays
+position-based (upline_id BFS), so a SA only sees their own downline.
 
 Run from repo root:
     pip install pymongo dnspython
@@ -40,12 +41,12 @@ ROSTER = [
     ("COOK, CONNOR",          "2163186495", "ccook.ao@gmail.com",               "GA",         "level_2", "ALJAHMI, MOHAMED"),
     ("SOLIS, JEANNIELIZA",    "9157407465", "jennysolis1624@gmail.com",         "GA",         "level_2", "ALJAHMI, MOHAMED"),
     ("MUSA, ALI",             "3132660109", "ali@aopremier.com",                "GA",         "level_2", "ALJAHMI, MOHAMED"),
-    # ── SAs (level_1 — team leads; promote to level_2 for GA-tier access) ─
-    ("ELTANOUKHI, ALI",       "3136705561", "aeltanoukhi@gmail.com",            "SA",         "level_1", "MUSA, ALI"),
-    ("LONG, HENRY",           "7346292467", "Henry@aopremier.com",              "SA",         "level_1", "MUSA, ALI"),
-    ("QARADAGHI, SNOOR",      "3137990462", "Snoor.qaradaghi@gmail.com",        "SA",         "level_1", "MUSA, ALI"),
-    ("SITTO, LANDY",          "5867448002", "landy.sitto.ali@gmail.com",        "SA",         "level_1", "MUSA, ALI"),
-    ("MURSHED, ALESKANDAR",   "3132401920", "alex.murshed@gmail.com",           "SA",         "level_1", "LONG, HENRY"),
+    # ── SAs (level_2 — GA-tier access: team rollup + nomination endorsement; SA display title kept) ─
+    ("ELTANOUKHI, ALI",       "3136705561", "aeltanoukhi@gmail.com",            "SA",         "level_2", "MUSA, ALI"),
+    ("LONG, HENRY",           "7346292467", "Henry@aopremier.com",              "SA",         "level_2", "MUSA, ALI"),
+    ("QARADAGHI, SNOOR",      "3137990462", "Snoor.qaradaghi@gmail.com",        "SA",         "level_2", "MUSA, ALI"),
+    ("SITTO, LANDY",          "5867448002", "landy.sitto.ali@gmail.com",        "SA",         "level_2", "MUSA, ALI"),
+    ("MURSHED, ALESKANDAR",   "3132401920", "alex.murshed@gmail.com",           "SA",         "level_2", "LONG, HENRY"),
     # ── Agents / Builders / inTraining ────────────────────────────────────────────────
     ("Aljahmi, Essa",         "3138985711", "EALJAHMI618@gmail.com",            "Builder",    "level_1", "MUSA, ALI"),
     ("ALJAILANI, GABRIEL",    "7343669060", "galjailani@gmail.com",             "Agent",      "level_1", "ELTANOUKHI, ALI"),
