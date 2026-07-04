@@ -34,13 +34,13 @@ OFFICE    = "MJ RGA"
 ROSTER = [
     # ── Top of hierarchy ───────────────────────────────────────────────────────────────────────────
     # Partner title (display only) — access stays level_4 / RGA tier
-    ("ALJAHMI, MOHAMED",      "3135550101", "mj@aopremier.com",                 "Partner",    "level_4", None),
+    ("MJ Aljahmi",      "3135550101", "mj@aopremier.com",                 "Partner",    "level_4", None),
     # ── MGA ─────────────────────────────────────────────────────────────────────────────
-    ("ALWATAN, MONTZER",      "3139609390", "Monty@AOpremier.com",              "MGA",        "level_3", "ALJAHMI, MOHAMED"),
+    ("ALWATAN, MONTZER",      "3139609390", "Monty@AOpremier.com",              "MGA",        "level_3", "MJ Aljahmi"),
     # ── GAs ─────────────────────────────────────────────────────────────────────────────
-    ("COOK, CONNOR",          "2163186495", "ccook.ao@gmail.com",               "GA",         "level_2", "ALJAHMI, MOHAMED"),
-    ("SOLIS, JEANNIELIZA",    "9157407465", "jennysolis1624@gmail.com",         "GA",         "level_2", "ALJAHMI, MOHAMED"),
-    ("MUSA, ALI",             "3132660109", "ali@aopremier.com",                "GA",         "level_2", "ALJAHMI, MOHAMED"),
+    ("COOK, CONNOR",          "2163186495", "ccook.ao@gmail.com",               "GA",         "level_2", "MJ Aljahmi"),
+    ("SOLIS, JEANNIELIZA",    "9157407465", "jennysolis1624@gmail.com",         "GA",         "level_2", "MJ Aljahmi"),
+    ("MUSA, ALI",             "3132660109", "ali@aopremier.com",                "GA",         "level_2", "MJ Aljahmi"),
     # ── SAs (level_2 — GA-tier access: team rollup + nomination endorsement; SA display title kept) ─
     ("ELTANOUKHI, ALI",       "3136705561", "aeltanoukhi@gmail.com",            "SA",         "level_2", "MUSA, ALI"),
     ("LONG, HENRY",           "7346292467", "Henry@aopremier.com",              "SA",         "level_2", "MUSA, ALI"),
@@ -59,7 +59,7 @@ ROSTER = [
     ("BOSTIC, MATTHEW",       "6142704381", "mattbostic.ao@gmail.com",          "Agent",      "level_1", "QARADAGHI, SNOOR"),
     ("Boussi, Ali",           "3136459783", "abouss2003@gmail.com",             "Builder",    "level_1", "MURSHED, ALESKANDAR"),
     ("BRINDLEY, DOUGLASS",    "6146496866", "douglassbrindley@gmail.com",       "Agent",      "level_1", "QARADAGHI, SNOOR"),
-    ("CAZARES, HAZEL",        "9152580680", "HAZEL.CAZARES@GMAIL.COM",          "Builder",    "level_1", "ALJAHMI, MOHAMED"),
+    ("CAZARES, HAZEL",        "9152580680", "HAZEL.CAZARES@GMAIL.COM",          "Builder",    "level_1", "MJ Aljahmi"),
     ("DEMARAS, CHRISTINE",    "9142757388", "cdemarasao@gmail.com",             "Agent",      "level_1", "ELTANOUKHI, ALI"),
     ("GHASHAM, HUSEIN",       "8328070761", "ghashuss@gmail.com",               "Agent",      "level_1", "QARADAGHI, SNOOR"),
     ("Grant, Tyler",          "8338013939", "TylerGrant@Cmail.live",            "Builder",    "level_1", "ELTANOUKHI, ALI"),
@@ -72,7 +72,7 @@ ROSTER = [
     ("LISER, NOELLE",         "2406547683", "Noelleliser@gmail.com",            "Agent",      "level_1", "ELTANOUKHI, ALI"),
     ("MAWRI, AHMED",          "3133923787", "adam.globelifeao@GMAIL.COM",       "Agent",      "level_1", "LONG, HENRY"),
     ("McFadden, Gavin",       "4709362340", "gavmcfd@gmail.com",                "inTraining", "level_1", "QARADAGHI, SNOOR"),
-    ("Mills, Carla",          "8332368340", "carlamills@cmail.live",            "inTraining", "level_1", "ALJAHMI, MOHAMED"),
+    ("Mills, Carla",          "8332368340", "carlamills@cmail.live",            "inTraining", "level_1", "MJ Aljahmi"),
     ("MUSAED, BASEL",         "3135302424", "baselmusaed3@gmail.com",           "Agent",      "level_1", "QARADAGHI, SNOOR"),
     ("OTHMAN, WALEEDJASHOLIH","3132581609", "willothman.ao@gmail.com",          "Agent",      "level_1", "QARADAGHI, SNOOR"),
     ("PRIEBE, CAMRON",        "2482085440", "camron.priebe00@outlook.com",      "Agent",      "level_1", "QARADAGHI, SNOOR"),
@@ -84,11 +84,11 @@ ROSTER = [
     ("SMITH, JERMAINE",       "4103400824", "Jdsmith625@gmail.com",             "Agent",      "level_1", "QARADAGHI, SNOOR"),
     ("SNIDER, LISA",          "7703626273", "lisanicole1110@icloud.com",        "Builder",    "level_1", "MUSA, ALI"),
     ("STIKELEATHER, STEVEN",  "8037579435", "kylestikeleather@gmail.com",       "Agent",      "level_1", "LONG, HENRY"),
-    ("Tamer, Hadeel",         "3137488888", "hadeelnedaltamer@gmail.com",       "Builder",    "level_1", "ALJAHMI, MOHAMED"),
+    ("Tamer, Hadeel",         "3137488888", "hadeelnedaltamer@gmail.com",       "Builder",    "level_1", "MJ Aljahmi"),
     ("TAYLOR, ALINA",         "6893230060", "Alinanunn@yahoo.com",              "Agent",      "level_1", "QARADAGHI, SNOOR"),
     ("Thanos, Melissa",       "6024637828", "melissathanos475@icloud.com",      "Builder",    "level_1", "QARADAGHI, SNOOR"),
     ("TRENTINI, ALMA",        "7372026696", "alma.cuello.ro@gmail.com",         "Agent",      "level_1", "ELTANOUKHI, ALI"),
-    ("YOUSSEF, ADAM",         "3133385847", "Adamyoussef366@gmail.com",         "Agent",      "level_1", "ALJAHMI, MOHAMED"),
+    ("YOUSSEF, ADAM",         "3133385847", "Adamyoussef366@gmail.com",         "Agent",      "level_1", "MJ Aljahmi"),
 ]
 # ────────────────────────────────────────────────────────────────────────────
 
