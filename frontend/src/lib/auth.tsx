@@ -14,6 +14,8 @@ export interface AppUser {
   picture?: string;
   role: Role;
   agent_id?: string | null;
+  is_admin?: boolean;
+  can_switch_role?: boolean;
 }
 
 export interface AppAgent {
@@ -70,6 +72,7 @@ interface AuthCtx {
   signInGoogleSession: (sessionId: string) => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
+  switchRole: (role: Role) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthCtx | undefined>(undefined);
@@ -142,8 +145,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null); setAgent(null); setRoleLabel('');
   };
 
+  const switchRole = async (role: Role) => {
+    // Self-service tier switcher (break-testers with the can_switch_role flag).
+    // Reload after: /api/auth/me carries the admin-flag overlay and fresh agent.
+    await api('/api/me/role', { method: 'POST', body: JSON.stringify({ role }) });
+    await reload();
+  };
+
   return (
-    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInGoogleSession, signOut, deleteAccount }}>
+    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInGoogleSession, signOut, deleteAccount, switchRole }}>
       {children}
     </AuthContext.Provider>
   );

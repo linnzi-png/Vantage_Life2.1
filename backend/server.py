@@ -8,6 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import re
 import uuid
 import random
 import httpx
@@ -46,6 +47,13 @@ LEVELS = {
     "pending": "Pending Approval",
 }
 EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+# Bootstrap admins: always admins even without an is_admin flag on their users doc.
+# Additional admins are granted the is_admin flag from the in-app Admin screen.
+ADMIN_EMAILS = {
+    e.strip().lower()
+    for e in os.environ.get("ADMIN_EMAILS", "linnzi@aoluxor.com,mj@aopremier.com").split(",")
+    if e.strip()
+}
 APPLE_BUNDLE_ID = "com.aopremiere.vantagelife"
 APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
 
@@ -169,6 +177,19 @@ async def require_agent(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
     return user
 
 
+def user_is_admin(user: Dict[str, Any]) -> bool:
+    return bool(user.get("is_admin")) or str(user.get("email", "")).lower() in ADMIN_EMAILS
+
+
+async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Admin panel access: bootstrap ADMIN_EMAILS or users granted the is_admin flag.
+    Deliberately built on get_current_user (not require_agent) so an admin can
+    manage the roster even before their own agent link exists."""
+    if not user_is_admin(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
 def require_level(min_level: int):
     """min_level: 1..4 (higher = more access). level_1 has level=1, level_4 has level=4."""
     async def dep(user: Dict[str, Any] = Depends(require_agent)) -> Dict[str, Any]:
@@ -289,7 +310,12 @@ async def auth_session(payload: SessionExchangeIn, response: Response):
 
 @api_router.post("/auth/demo-login")
 async def demo_login(payload: DemoLoginIn, response: Response):
-    """Quick demo login that maps to one of 4 RBAC levels (no Google needed)."""
+    """Quick demo login that maps to one of 4 RBAC levels (no Google needed).
+
+    RELEASE GATE (per Linnzi, 2026-07-03): stays OPEN through TestFlight and
+    App Store review. Once the app is approved and released to the App Store,
+    disable or auth-gate this endpoint — it is unauthenticated and maps onto
+    the first REAL agent of each role, so demo writes attribute to real people."""
     if payload.level not in LEVELS:
         raise HTTPException(status_code=400, detail="Invalid level")
     role_label = LEVELS[payload.level]
@@ -342,6 +368,10 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
     agent = None
     if user.get("agent_id"):
         agent = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
+    # Overlay computed admin status so bootstrap admins (ADMIN_EMAILS) see the
+    # Admin entry point even without an is_admin flag on their users doc.
+    user["is_admin"] = user_is_admin(user)
+    user["can_switch_role"] = bool(user.get("can_switch_role"))
     return {"user": user, "agent": agent, "role_label": LEVELS.get(user.get("role", "level_1"), "Agent")}
 
 
@@ -1350,6 +1380,154 @@ async def seed_data(request: Request, payload: Optional[Dict[str, Any]] = Body(d
         })
 
     return {"ok": True, "seeded": True, "agents": len(agents), "entries": len(entries)}
+
+
+# =========================================================
+#                       ADMIN PANEL
+# =========================================================
+# In-app replacement for the create_users.py / import_roster.py terminal
+# scripts: role changes, onboarding, and permission grants behind require_admin.
+# CRITICAL INVARIANT: sign-in re-derives role/agent_id from agent_profiles by
+# email on every login, so every role write below updates agent_profiles (the
+# source of truth) AND the users doc (so the change is visible immediately,
+# without waiting for the next sign-in).
+
+VALID_ROLES = {"level_1", "level_2", "level_3", "level_4"}
+
+
+class AdminSetRoleIn(BaseModel):
+    agent_id: str
+    role: str  # level_1..level_4
+
+
+class AdminAddPersonIn(BaseModel):
+    name: str
+    email: str
+    phone: str = ""
+    office: str = "MJ RGA"
+    role: str  # level_1..level_4
+    io_role: Optional[str] = None  # display title: SA, GA, MGA, RGA, Partner, ...
+    upline_agent_id: Optional[str] = None
+
+
+class AdminSetFlagsIn(BaseModel):
+    email: str
+    is_admin: Optional[bool] = None
+    can_switch_role: Optional[bool] = None
+
+
+class SelfRoleIn(BaseModel):
+    role: str  # level_1..level_4
+
+
+@api_router.get("/admin/people")
+async def admin_people(user: Dict[str, Any] = Depends(require_admin)):
+    """Full roster with login-link status and permission flags, for the Admin screen."""
+    agents = [a async for a in db.agent_profiles.find(
+        {}, {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "phone": 1,
+             "office": 1, "role": 1, "io_role": 1, "upline_id": 1},
+    ).sort("name", 1)]
+    flags_by_email: Dict[str, Dict[str, Any]] = {}
+    async for u in db.users.find({}, {"_id": 0, "email": 1, "is_admin": 1, "can_switch_role": 1}):
+        flags_by_email[str(u.get("email", "")).lower()] = u
+    for a in agents:
+        u = flags_by_email.get(str(a.get("email", "")).lower())
+        a["has_login"] = u is not None
+        a["is_admin"] = bool(u and u.get("is_admin")) or str(a.get("email", "")).lower() in ADMIN_EMAILS
+        a["can_switch_role"] = bool(u and u.get("can_switch_role"))
+    return {"people": agents}
+
+
+@api_router.post("/admin/set-role")
+async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends(require_admin)):
+    if payload.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    agent = await db.agent_profiles.find_one({"agent_id": payload.agent_id}, {"_id": 0})
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    await db.agent_profiles.update_one(
+        {"agent_id": payload.agent_id},
+        {"$set": {"role": payload.role, "updated_at": now_utc()}},
+    )
+    # Sync any linked login so the change takes effect without a re-login.
+    email = str(agent.get("email", "")).lower()
+    if email:
+        await db.users.update_many({"email": email}, {"$set": {"role": payload.role, "agent_id": payload.agent_id}})
+    return {"ok": True, "agent_id": payload.agent_id, "role": payload.role}
+
+
+@api_router.post("/admin/add-person")
+async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Depends(require_admin)):
+    """Onboard a person: creates their agent_profile keyed by email so their very
+    first Google/Apple sign-in links to the right role automatically."""
+    if payload.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    email = payload.email.lower().strip()
+    name = payload.name.strip()
+    if not email or "@" not in email or not name:
+        raise HTTPException(status_code=400, detail="Name and a valid email are required")
+    if payload.upline_agent_id:
+        upline = await db.agent_profiles.find_one({"agent_id": payload.upline_agent_id}, {"_id": 0, "agent_id": 1})
+        if not upline:
+            raise HTTPException(status_code=404, detail="Upline agent not found")
+    existing = await db.agent_profiles.find_one({"email": email}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=409, detail=f"{existing.get('name', 'Someone')} already has this email on the roster")
+    profile = {
+        "agent_id": f"agent_{uuid.uuid4().hex[:10]}",
+        "name": name,
+        "email": email,
+        "phone": re.sub(r"\D", "", payload.phone or ""),
+        "office": payload.office.strip() or "MJ RGA",
+        "role": payload.role,
+        "upline_id": payload.upline_agent_id,
+        "created_at": now_utc(),
+    }
+    if payload.io_role:
+        profile["io_role"] = payload.io_role.strip()
+    await db.agent_profiles.insert_one(profile)
+    profile.pop("_id", None)
+    # If they signed in before being rostered they hold a "pending" users doc — link it now.
+    await db.users.update_many({"email": email}, {"$set": {"role": payload.role, "agent_id": profile["agent_id"]}})
+    return {"ok": True, "agent": profile}
+
+
+@api_router.post("/admin/set-flags")
+async def admin_set_flags(payload: AdminSetFlagsIn, user: Dict[str, Any] = Depends(require_admin)):
+    """Grant/revoke the is_admin and can_switch_role flags on a login account."""
+    email = payload.email.lower().strip()
+    updates: Dict[str, Any] = {}
+    if payload.is_admin is not None:
+        updates["is_admin"] = payload.is_admin
+    if payload.can_switch_role is not None:
+        updates["can_switch_role"] = payload.can_switch_role
+    if not updates:
+        raise HTTPException(status_code=400, detail="No flags provided")
+    result = await db.users.update_many({"email": email}, {"$set": updates})
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="No login found for that email — have them sign in once, then grant the flag.",
+        )
+    return {"ok": True, "email": email, **updates}
+
+
+@api_router.post("/me/role")
+async def self_set_role(payload: SelfRoleIn, user: Dict[str, Any] = Depends(require_agent)):
+    """Self-service tier switcher for designated break-testers (can_switch_role flag).
+    Changes the caller's OWN real account only — writes both users.role and their
+    agent_profiles.role so the change survives the login re-derivation."""
+    if not user.get("can_switch_role"):
+        raise HTTPException(status_code=403, detail="Role switching is not enabled for this account")
+    if payload.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    await db.agent_profiles.update_one(
+        {"agent_id": user["agent_id"]},
+        {"$set": {"role": payload.role, "updated_at": now_utc()}},
+    )
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"role": payload.role}})
+    fresh = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    return {"ok": True, "user": fresh, "role_label": LEVELS.get(payload.role, payload.role)}
 
 
 # Mount router & app

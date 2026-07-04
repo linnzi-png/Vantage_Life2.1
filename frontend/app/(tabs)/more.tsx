@@ -4,18 +4,39 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useAuth, COLORS, levelNum } from '../../src/lib/auth';
+import { useAuth, COLORS, levelNum, Role } from '../../src/lib/auth';
+
+const SWITCH_TIERS: { role: Role; label: string }[] = [
+  { role: 'level_1', label: 'L1' },
+  { role: 'level_2', label: 'L2' },
+  { role: 'level_3', label: 'L3' },
+  { role: 'level_4', label: 'L4' },
+];
 
 export default function MoreScreen() {
   const router = useRouter();
-  const { user, agent, roleLabel, signOut, deleteAccount } = useAuth();
+  const { user, agent, roleLabel, signOut, deleteAccount, switchRole } = useAuth();
   const lvl = levelNum(user?.role);
+  const [switching, setSwitching] = React.useState(false);
 
   const items: { id: string; icon: any; label: string; onPress: () => void; show: boolean }[] = [
+    { id: 'admin', icon: 'shield-checkmark', label: 'Admin Panel', onPress: () => router.push('/admin'), show: !!user?.is_admin },
     { id: 'manager', icon: 'construct', label: 'Manager Command Panel', onPress: () => router.push('/manager'), show: lvl >= 4 },
     { id: 'audit', icon: 'list', label: 'Audit Log', onPress: () => router.push('/audit'), show: lvl >= 4 },
     { id: 'vault', icon: 'archive', label: 'Historical Vault', onPress: () => router.push('/vault'), show: lvl >= 4 },
   ];
+
+  const onSwitch = async (role: Role) => {
+    if (switching || user?.role === role) return;
+    setSwitching(true);
+    try {
+      await switchRole(role);
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Role switch failed');
+    } finally {
+      setSwitching(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -44,6 +65,30 @@ export default function MoreScreen() {
                   <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
                 </TouchableOpacity>
               ))}
+            </View>
+          </>
+        ) : null}
+
+        {user?.can_switch_role ? (
+          <>
+            <Text style={[styles.kicker, { marginTop: 16 }]}>VIEW AS TIER (BREAK-TEST)</Text>
+            <View style={styles.switchCard} testID="role-switcher">
+              <Text style={styles.switchNote}>
+                Changes your real account tier so you can test what each level sees. Switch back when done.
+              </Text>
+              <View style={styles.switchRow}>
+                {SWITCH_TIERS.map((t) => (
+                  <TouchableOpacity
+                    key={t.role}
+                    style={[styles.switchBtn, user?.role === t.role && styles.switchBtnOn, switching && { opacity: 0.5 }]}
+                    disabled={switching}
+                    onPress={() => onSwitch(t.role)}
+                    testID={`role-switch-${t.role}`}
+                  >
+                    <Text style={[styles.switchTxt, user?.role === t.role && styles.switchTxtOn]}>{t.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </>
         ) : null}
@@ -121,4 +166,11 @@ const styles = StyleSheet.create({
   logout: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6 },
   logoutTxt: { color: COLORS.red, fontWeight: '800' },
   footer: { color: COLORS.textMuted, fontSize: 10, textAlign: 'center', marginTop: 24 },
+  switchCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3, borderLeftColor: COLORS.yellow, borderRadius: 6, padding: 12 },
+  switchNote: { color: COLORS.textDim, fontSize: 11, marginBottom: 10 },
+  switchRow: { flexDirection: 'row', gap: 6 },
+  switchBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface2 },
+  switchBtnOn: { backgroundColor: COLORS.yellow, borderColor: COLORS.yellow },
+  switchTxt: { color: COLORS.textDim, fontWeight: '900', fontSize: 12 },
+  switchTxtOn: { color: '#000' },
 });
