@@ -104,7 +104,7 @@ export default function TeamScreen() {
         </TouchableOpacity>
       ) : null}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortBar}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ minHeight: 44 }} contentContainerStyle={styles.sortBar}>
         {sortBtn('gross_alp', 'Gross ALP')}
         {sortBtn('net_alp', 'Net ALP')}
         {sortBtn('sales', 'Sales')}
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
   head:          { paddingHorizontal: 16, paddingVertical: 12 },
   kicker:        { color: COLORS.primary, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
   title:         { color: '#fff', fontSize: 22, fontWeight: '900' },
-  sortBar:       { gap: 6, paddingHorizontal: 16, paddingBottom: 8 },
+  sortBar:       { gap: 6, paddingHorizontal: 16, paddingVertical: 8 },
   sortBtn:       { paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border, borderRadius: 4, backgroundColor: COLORS.surface },
   sortBtnActive: { borderColor: COLORS.primary, backgroundColor: 'rgba(49,152,66,0.12)' },
   sortTxt:       { color: COLORS.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
