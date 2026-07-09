@@ -476,13 +476,30 @@ async def aggregate_alp(filter_q: Dict[str, Any]) -> Dict[str, float]:
     return {"gross_alp": float(d.get("gross_alp", 0) or 0), "net_alp": float(d.get("net_alp", 0) or 0), "sits": int(d.get("sits", 0) or 0), "sales": int(d.get("sales", 0) or 0)}
 
 
+def resolve_history_day(sales_day: Optional[str]) -> str:
+    """Validate an optional read-only history day. Returns the current sales
+    day when absent. History may not be in the future; the sales-day boundary
+    itself (6 AM Detroit) stays defined solely by sales_day_for()."""
+    today = current_sales_day_str()
+    if not sales_day:
+        return today
+    try:
+        requested = date.fromisoformat(sales_day)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="sales_day must be YYYY-MM-DD")
+    if requested > date.fromisoformat(today):
+        raise HTTPException(status_code=400, detail="sales_day cannot be in the future")
+    return requested.isoformat()
+
+
 @api_router.get("/dashboard/summary")
-async def dashboard_summary(user: Dict[str, Any] = Depends(require_agent)):
+async def dashboard_summary(sales_day: Optional[str] = None, user: Dict[str, Any] = Depends(require_agent)):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
-    yest = previous_sales_day_str()
-    base = {"sales_day": today}
-    base_y = {"sales_day": yest}
+    day = resolve_history_day(sales_day)
+    prev = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
+    base = {"sales_day": day}
+    base_y = {"sales_day": prev}
     if ids is not None:
         base["agent_id"] = {"$in": ids}
         base_y["agent_id"] = {"$in": ids}
@@ -492,14 +509,16 @@ async def dashboard_summary(user: Dict[str, Any] = Depends(require_agent)):
     if yest_agg["gross_alp"] > 0:
         delta_pct = ((today_agg["gross_alp"] - yest_agg["gross_alp"]) / yest_agg["gross_alp"]) * 100.0
     return {
-        "sales_day": today,
+        "sales_day": day,
         "total_alp": today_agg["gross_alp"],
         "total_net_alp": today_agg["net_alp"],
         "total_sits": today_agg["sits"],
         "total_sales": today_agg["sales"],
         "delta_pct_vs_yesterday": round(delta_pct, 1),
-        "gate": gate_state(),
+        # The gate describes the live entry window; it has no meaning for history.
+        "gate": gate_state() if day == today else None,
         "is_full_agency": ids is None,
+        "is_history": day != today,
     }
 
 
@@ -576,9 +595,9 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent))
 
 
 @api_router.get("/dashboard/offices")
-async def dashboard_offices(user: Dict[str, Any] = Depends(require_agent)):
+async def dashboard_offices(sales_day: Optional[str] = None, user: Dict[str, Any] = Depends(require_agent)):
     ids = await visible_agent_ids(user)
-    today = current_sales_day_str()
+    today = resolve_history_day(sales_day)
     # Discover offices from the actual agent_profiles so new RGAs appear automatically
     office_filter: Dict[str, Any] = {}
     if ids is not None:

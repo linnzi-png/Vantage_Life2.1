@@ -37,6 +37,10 @@ Executive Producer; Partner and Senior Partner are titles carried by
 level_3/level_4 holders (no exclusive access tier); Agent, Builder, and
 In Training are unchanged. RBAC is always enforced by `role`, never by title.
 
+SA is a level_2 title: SAs and GAs have identical permissions across the
+app (per owner, 2026-07-09; the prod roster carries every SA at level_2).
+Never model SA as a special case in code — the tier does the work.
+
 Enforced server-side in `backend/server.py`: `require_agent()` / `require_level()`
 dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 

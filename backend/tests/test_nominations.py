@@ -88,6 +88,23 @@ async def test_level_1_cannot_endorse(client, seeded_db):
     assert (await client.post(f"/api/nominations/{nom_id}/endorse", headers=auth(ag))).status_code == 403
 
 
+async def test_sa_can_list_and_endorse_but_not_post(client, seeded_db):
+    """SA is a level_2 TITLE - SAs and GAs have identical permissions
+    (matches the prod roster). An SA lists and endorses nominations in their
+    downline; posting to the wall stays level_3+."""
+    nom_id, _ = await nominate(client, seeded_db)  # nominee AG_1 is in SA_1's downline
+    sa = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
+
+    got = (await client.get("/api/nominations", headers=auth(sa))).json()["nominations"]
+    assert [n["nomination_id"] for n in got] == [nom_id]
+
+    r = await client.post(f"/api/nominations/{nom_id}/endorse", headers=auth(sa))
+    assert r.status_code == 200 and r.json()["endorsement_count"] == 1
+
+    await endorse_to_threshold(client, seeded_db, nom_id)
+    assert (await client.post(f"/api/nominations/{nom_id}/post-to-wall", headers=auth(sa))).status_code == 403
+
+
 async def test_sibling_ga_cannot_endorse_outside_team(client, seeded_db):
     nom_id, _ = await nominate(client, seeded_db, nominee="AG_1")
     ga2 = await make_session(seeded_db, role="level_2", agent_id="GA_2", email="ga2b@test.dev")

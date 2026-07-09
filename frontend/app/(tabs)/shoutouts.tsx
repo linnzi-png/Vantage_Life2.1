@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth } from '../../src/lib/auth';
 import { NominateSheet } from '../../src/components/NominateSheet';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
+import { SearchBar } from '../../src/components/SearchBar';
 
 interface Shoutout {
   shoutout_id: string;
@@ -39,6 +40,14 @@ export default function ShoutoutsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [nominateOpen, setNominateOpen] = useState(false);
   const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? items.filter((s) => {
+        const title = cfg[s.type]?.title ?? s.type;
+        return `${s.agent_name} ${s.office} ${title} ${s.reason ?? ''} ${s.nominator_name ?? ''}`.toLowerCase().includes(q);
+      })
+    : items;
   const fetchAll = async () => {
     try { const r = await api<{ shoutouts: Shoutout[] }>('/api/shoutouts'); setItems(r.shoutouts); }
     catch {}
@@ -69,13 +78,14 @@ export default function ShoutoutsScreen() {
           <Text style={styles.nominateTxt}>NOMINATE</Text>
         </TouchableOpacity>
       </View>
+      <SearchBar value={query} onChange={setQuery} placeholder="Search name, office, award, reason" testID="shoutouts-search" />
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 30 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
       >
-        {items.length === 0 ? (
-          <Text style={styles.empty}>No shoutouts yet — go close one.</Text>
-        ) : items.map((s) => {
+        {visible.length === 0 ? (
+          <Text style={styles.empty}>{q ? 'No matches for your search.' : 'No shoutouts yet — go close one.'}</Text>
+        ) : visible.map((s) => {
           const c = cfg[s.type] || { icon: 'megaphone', color: COLORS.text, title: s.type.toUpperCase(), bg: 'transparent' };
           return (
             <View key={s.shoutout_id} style={[styles.card, { borderTopColor: c.color, backgroundColor: c.bg }]} testID={`shoutout-${s.shoutout_id}`}>
