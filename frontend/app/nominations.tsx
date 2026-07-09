@@ -1,6 +1,5 @@
-// Platinum Rule nominations inbox — SA/GA/MGA/RGA endorse; MGA/RGA post to
-// the Platinum Wall. SA is a title-based exception approved by the owner
-// (2026-07-09); the server enforces the same rule in require_endorser.
+// Platinum Rule nominations inbox — level_2+ endorse (SA is a level_2 title,
+// so SA/GA/MGA/RGA); MGA/RGA post to the Platinum Wall.
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,9 +20,9 @@ interface Nomination {
 }
 
 export default function NominationsScreen() {
-  const { user, agent } = useAuth();
+  const { user } = useAuth();
   const lvl = levelNum(user?.role);
-  const canEndorse = lvl >= 2 || (agent?.io_role ?? '').toUpperCase() === 'SA';
+  const canEndorse = lvl >= 2;
   const [items, setItems] = useState<Nomination[]>([]);
   const [threshold, setThreshold] = useState(3);
   const [refreshing, setRefreshing] = useState(false);

@@ -211,21 +211,6 @@ def require_level(min_level: int):
     return dep
 
 
-async def require_endorser(user: Dict[str, Any] = Depends(require_agent)) -> Dict[str, Any]:
-    """Platinum Rule endorsement gate: GA/MGA/RGA (level_2+), plus level_1
-    agents holding the SA title. Owner-approved exception (2026-07-09) to the
-    role-not-title rule, scoped to the nominations inbox only — the SA title
-    is read fresh from agent_profiles so a title change applies immediately."""
-    lvl = int(user["role"].split("_")[1])
-    if lvl >= 2:
-        return user
-    prof = await db.agent_profiles.find_one(
-        {"agent_id": user["agent_id"]}, {"_id": 0, "io_role": 1})
-    if prof and str(prof.get("io_role", "")).strip().upper() == "SA":
-        return user
-    raise HTTPException(status_code=403, detail="Endorsing requires SA, GA, MGA, or RGA")
-
-
 def set_session_cookie(resp: Response, token: str):
     # 7 days; secure + samesite none for cross-domain preview
     resp.set_cookie(
@@ -970,18 +955,8 @@ class NominationIn(BaseModel):
     reason: str = Field(min_length=10, max_length=500)
 
 
-async def _nomination_scope_ids(user: Dict[str, Any]) -> Optional[list]:
-    """Nomination-inbox visibility. Same as visible_agent_ids, except an
-    SA-titled level_1 (who only reaches here via require_endorser) scopes
-    over their downline like a GA does — for nominations ONLY. General data
-    visibility (dashboard, team, pulse) is unchanged for SAs."""
-    if int(user["role"].split("_")[1]) == 1:
-        return await visible_agent_ids({"role": "level_2", "agent_id": user["agent_id"]})
-    return await visible_agent_ids(user)
-
-
 async def _nomination_visible_to(user: Dict[str, Any], nomination: Dict[str, Any]) -> bool:
-    ids = await _nomination_scope_ids(user)
+    ids = await visible_agent_ids(user)
     return ids is None or nomination["nominee_agent_id"] in ids
 
 
@@ -1011,8 +986,8 @@ async def create_nomination(payload: NominationIn, user: Dict[str, Any] = Depend
 
 
 @api_router.get("/nominations")
-async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = Depends(require_endorser)):
-    ids = await _nomination_scope_ids(user)
+async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = Depends(require_level(2))):
+    ids = await visible_agent_ids(user)
     q: Dict[str, Any] = {}
     if ids is not None:
         q["nominee_agent_id"] = {"$in": ids}
@@ -1029,7 +1004,7 @@ async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = 
 
 
 @api_router.post("/nominations/{nomination_id}/endorse")
-async def endorse_nomination(nomination_id: str, user: Dict[str, Any] = Depends(require_endorser)):
+async def endorse_nomination(nomination_id: str, user: Dict[str, Any] = Depends(require_level(2))):
     nom = await db.nominations.find_one({"nomination_id": nomination_id}, {"_id": 0})
     if not nom:
         raise HTTPException(status_code=404, detail="Nomination not found")

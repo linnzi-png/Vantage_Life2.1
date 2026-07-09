@@ -37,11 +37,9 @@ Executive Producer; Partner and Senior Partner are titles carried by
 level_3/level_4 holders (no exclusive access tier); Agent, Builder, and
 In Training are unchanged. RBAC is always enforced by `role`, never by title.
 
-One owner-approved exception (2026-07-09): Platinum Rule nomination
-endorsement is open to SA-titled level_1 agents in addition to level_2+
-(`require_endorser()` in `backend/server.py`). Scoped to the nominations
-inbox only — an SA's general data visibility is unchanged, and posting to
-the wall stays level_3+. Do not widen this exception without instruction.
+SA is a level_2 title: SAs and GAs have identical permissions across the
+app (per owner, 2026-07-09; the prod roster carries every SA at level_2).
+Never model SA as a special case in code — the tier does the work.
 
 Enforced server-side in `backend/server.py`: `require_agent()` / `require_level()`
 dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.

@@ -21,9 +21,7 @@ export default function MoreScreen() {
 
   const items: { id: string; icon: any; label: string; onPress: () => void; show: boolean }[] = [
     { id: 'admin', icon: 'shield-checkmark', label: 'Admin Panel', onPress: () => router.push('/admin'), show: !!user?.is_admin },
-    // SA-titled agents can endorse nominations but have no Team tab, so the
-    // inbox needs an entry point here; also handy for GA+.
-    { id: 'nominations', icon: 'medal', label: 'Platinum Nominations', onPress: () => router.push('/nominations'), show: lvl >= 2 || (agent?.io_role ?? '').toUpperCase() === 'SA' },
+    { id: 'nominations', icon: 'medal', label: 'Platinum Nominations', onPress: () => router.push('/nominations'), show: lvl >= 2 },
     { id: 'manager', icon: 'construct', label: 'Manager Command Panel', onPress: () => router.push('/manager'), show: lvl >= 4 },
     { id: 'audit', icon: 'list', label: 'Audit Log', onPress: () => router.push('/audit'), show: lvl >= 4 },
     { id: 'vault', icon: 'archive', label: 'Historical Vault', onPress: () => router.push('/vault'), show: lvl >= 4 },
