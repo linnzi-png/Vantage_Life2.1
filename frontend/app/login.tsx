@@ -95,7 +95,7 @@ export default function LoginScreen() {
           <View style={styles.brandMark}><Text style={styles.markTxt}>V</Text></View>
           <View>
             <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text> 2.1</Text>
-            <Text style={styles.tagline}>Real-Time Impact Culture · AO Premiere</Text>
+            <Text style={styles.tagline}>Real-Time Impact Culture · AO Premier</Text>
           </View>
         </View>
 
@@ -155,7 +155,7 @@ export default function LoginScreen() {
           ))}
         </View>
 
-        <Text style={styles.footer}>{"By continuing you agree to AO Premiere's standards of accountability."}</Text>
+        <Text style={styles.footer}>{"By continuing you agree to AO Premier's standards of accountability."}</Text>
       </ScrollView>
     </SafeAreaView>
   );

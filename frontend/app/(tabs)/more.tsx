@@ -142,7 +142,7 @@ export default function MoreScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footer}>VantageLife 2.0 · AO Premiere · America/Detroit</Text>
+        <Text style={styles.footer}>VantageLife 2.0 · AO Premier · America/Detroit</Text>
       </ScrollView>
     </SafeAreaView>
   );
