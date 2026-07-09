@@ -1,6 +1,6 @@
 // Nightly Pulse Entry — mobile-first stepper
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, InputAccessoryView, Keyboard, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,8 +19,8 @@ const STEPS: { key: keyof PulseForm; label: string; hint: string; type?: 'int' |
   { key: 'refs_obtained', label: 'Referrals Collected', hint: 'Referrals you collected today.', type: 'int' },
   { key: 'ref_sits', label: 'Referral Sits', hint: 'Sits run from referrals.', type: 'int' },
   { key: 'ref_sales', label: 'Referral Sales', hint: 'Sales closed from referrals.', type: 'int' },
-  { key: 'pos_sits', label: 'POS Sits', hint: 'Point-of-Sale sits.', type: 'int' },
-  { key: 'pos_sales', label: 'POS Sales', hint: 'Point-of-Sale sales.', type: 'int' },
+  { key: 'pos_sits', label: 'POS Sits', hint: 'Policy Owner Service sits.', type: 'int' },
+  { key: 'pos_sales', label: 'POS Sales', hint: 'Policy Owner Service sales.', type: 'int' },
   { key: 'vet_sits', label: 'Response Card / Veteran Sits', hint: 'Sits from response cards or Veteran leads.', type: 'int' },
   { key: 'vet_sales', label: 'Response Card / Veteran Sales', hint: 'Sales from response cards or Veteran leads.', type: 'int' },
   { key: 'gross_alp', label: 'Total ALP for the Day (Gross ALP)', hint: 'Annual Life Premium for the day.', type: 'money' },
@@ -33,12 +33,17 @@ interface PulseForm {
   gross_alp: string;
 }
 
+// Fields start empty (placeholder shows 0) so the keypad types straight in
+// with no leading "0"; blank parses to 0 in buildPayload.
 const empty: PulseForm = {
-  sets: '0', sits: '0', sales: '0', ots_sits: '0', ots_sales: '0',
-  n1: '0', refs_obtained: '0', ref_sits: '0', ref_sales: '0',
-  pos_sits: '0', pos_sales: '0', vet_sits: '0', vet_sales: '0',
-  gross_alp: '0',
+  sets: '', sits: '', sales: '', ots_sits: '', ots_sales: '',
+  n1: '', refs_obtained: '', ref_sits: '', ref_sales: '',
+  pos_sits: '', pos_sales: '', vet_sits: '', vet_sales: '',
+  gross_alp: '',
 };
+
+// Anchors the keyboard-docked NEXT bar (iOS) to the pulse TextInput.
+const PULSE_ACCESSORY_ID = 'pulse-next-accessory-bar';
 
 const BUFFER_KEY = 'vl_pulse_buffer';
 
@@ -139,6 +144,27 @@ export default function PulseScreen() {
   const cur = STEPS[step];
   const done = step >= STEPS.length;
 
+  const scrollRef = useRef<ScrollView | null>(null);
+  const stepCardY = useRef(0);
+
+  // Pin the step card to a uniform position whenever the step changes or the
+  // keyboard opens, so the label + input are never hidden behind the keypad.
+  const scrollToStepCard = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: Math.max(stepCardY.current - 8, 0), animated: true });
+  }, []);
+  useEffect(() => {
+    if (!done) scrollToStepCard();
+  }, [step, done, scrollToStepCard]);
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', scrollToStepCard);
+    return () => sub.remove();
+  }, [scrollToStepCard]);
+
+  const goNext = useCallback(() => {
+    if (step === STEPS.length - 1) Keyboard.dismiss();
+    setStep((s) => Math.min(s + 1, STEPS.length));
+  }, [step]);
+
   const onSubmit = async () => {
     setSubmitting(true);
     try {
@@ -153,7 +179,7 @@ export default function PulseScreen() {
         setStep(0);
       } else {
         await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
-        Alert.alert('Pulse logged', `${form.sales} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
+        Alert.alert('Pulse logged', `${form.sales || '0'} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
         setForm(empty);
         setStep(0);
         await refresh();
@@ -199,7 +225,7 @@ export default function PulseScreen() {
       ) : null}
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.headRow}>
             <View>
               <Text style={styles.kicker}>NIGHTLY PULSE</Text>
@@ -233,7 +259,11 @@ export default function PulseScreen() {
               </TouchableOpacity>
             </View>
           ) : !done ? (
-            <View style={styles.stepCard} testID="pulse-step-card">
+            <View
+              style={styles.stepCard}
+              testID="pulse-step-card"
+              onLayout={(e) => { stepCardY.current = e.nativeEvent.layout.y; }}
+            >
               <View style={styles.progRow}>
                 {STEPS.map((_, i) => (
                   <View key={i} style={[styles.progDot, i <= step && { backgroundColor: COLORS.primary }]} />
@@ -252,6 +282,10 @@ export default function PulseScreen() {
                 placeholderTextColor={COLORS.textMuted}
                 selectTextOnFocus
                 autoFocus
+                blurOnSubmit={false}
+                returnKeyType="next"
+                onSubmitEditing={goNext}
+                inputAccessoryViewID={Platform.OS === 'ios' ? PULSE_ACCESSORY_ID : undefined}
               />
               <View style={styles.btnRow}>
                 {step > 0 ? (
@@ -262,7 +296,7 @@ export default function PulseScreen() {
                 <TouchableOpacity
                   style={[styles.btn, styles.btnPrimary]}
                   testID="pulse-next"
-                  onPress={() => setStep(step + 1)}
+                  onPress={goNext}
                 >
                   <Text style={styles.btnPrimaryTxt}>{step === STEPS.length - 1 ? 'REVIEW' : 'NEXT'}</Text>
                   <Ionicons name="arrow-forward" size={14} color="#000" />
@@ -353,6 +387,20 @@ export default function PulseScreen() {
 
       <AgentContactSheet agent={contactOpen ? upline : null} onClose={() => setContactOpen(false)} />
       </KeyboardAvoidingView>
+
+      {/* iOS numeric keypad has no return key, so dock NEXT directly above it —
+          the step advances without ever scrolling or leaving the keypad. */}
+      {Platform.OS === 'ios' && !done && !queued ? (
+        <InputAccessoryView nativeID={PULSE_ACCESSORY_ID}>
+          <View style={styles.accessoryBar}>
+            <Text style={styles.accessoryStep} numberOfLines={1}>STEP {step + 1} OF {STEPS.length}</Text>
+            <TouchableOpacity style={styles.accessoryBtn} onPress={goNext} testID="pulse-next-docked">
+              <Text style={styles.btnPrimaryTxt}>{step === STEPS.length - 1 ? 'REVIEW' : 'NEXT'}</Text>
+              <Ionicons name="arrow-forward" size={14} color="#000" />
+            </TouchableOpacity>
+          </View>
+        </InputAccessoryView>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -387,6 +435,16 @@ const styles = StyleSheet.create({
     marginTop: 14, borderRadius: 4,
   },
   btnRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  accessoryBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+    backgroundColor: COLORS.surface, borderTopWidth: 1, borderTopColor: COLORS.border,
+    paddingHorizontal: 16, paddingVertical: 8,
+  },
+  accessoryStep: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 1.2, flexShrink: 1 },
+  accessoryBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: COLORS.primary, paddingHorizontal: 22, paddingVertical: 10, borderRadius: 4,
+  },
   btn: { flex: 1, paddingVertical: 13, borderRadius: 4, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
   btnPrimary: { backgroundColor: COLORS.primary },
   btnPrimaryTxt: { color: '#000', fontWeight: '900', letterSpacing: 1 },
