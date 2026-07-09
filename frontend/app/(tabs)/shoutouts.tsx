@@ -1,4 +1,4 @@
-// Premiere Shoutouts Feed
+// Premier Shoutouts Feed
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -62,7 +62,7 @@ export default function ShoutoutsScreen() {
       <View style={[styles.head, { flexDirection: 'row', alignItems: 'center' }]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.kicker}>VICTORY CULTURE</Text>
-          <Text style={styles.title}>PREMIERE SHOUTOUTS</Text>
+          <Text style={styles.title}>PREMIER SHOUTOUTS</Text>
         </View>
         <TouchableOpacity style={styles.nominateBtn} onPress={() => setNominateOpen(true)} testID="open-nominate">
           <Ionicons name="medal" size={14} color="#E5E4E2" />
