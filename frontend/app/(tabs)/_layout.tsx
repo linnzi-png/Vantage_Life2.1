@@ -35,6 +35,7 @@ export default function TabsLayout() {
         name="team"
         options={{
           title: 'TEAM',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
           href: lvl >= 2 ? undefined : null,
         }}

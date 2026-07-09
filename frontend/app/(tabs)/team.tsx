@@ -61,6 +61,7 @@ export default function TeamScreen() {
       onPress={() => setSortKey(key)}
       style={[styles.sortBtn, sortKey === key && styles.sortBtnActive]}
       testID={`team-sort-${key}`}
+      hitSlop={{ top: 9, bottom: 9, left: 0, right: 0 }}
     >
       <Text style={[styles.sortTxt, sortKey === key && styles.sortTxtActive]}>{label}</Text>
     </TouchableOpacity>
@@ -167,7 +168,7 @@ const styles = StyleSheet.create({
   kicker:        { color: COLORS.primary, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
   title:         { color: '#fff', fontSize: 22, fontWeight: '900' },
   sortBar:       { gap: 6, paddingHorizontal: 16, paddingBottom: 8 },
-  sortBtn:       { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border, borderRadius: 4, backgroundColor: COLORS.surface },
+  sortBtn:       { paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border, borderRadius: 4, backgroundColor: COLORS.surface },
   sortBtnActive: { borderColor: COLORS.primary, backgroundColor: 'rgba(49,152,66,0.12)' },
   sortTxt:       { color: COLORS.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
   sortTxtActive: { color: COLORS.primary },
