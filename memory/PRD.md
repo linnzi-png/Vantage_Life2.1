@@ -1,6 +1,6 @@
 # VantageLife 2.0 — Product Requirements Document
 
-**Org:** AO Premiere — 174-person sales force
+**Org:** AO Premier — 174-person sales force
 **Vision:** Real-Time Impact Culture
 **Stack:** React Native (Expo SDK 56) + FastAPI + MongoDB
 **TZ:** America/Detroit (all gates)
@@ -32,7 +32,7 @@ Emergent Google OAuth (web) + Demo Login bypass (`/api/auth/demo-login`) for the
 ## 5. Nightly Pulse Entry (Agent)
 14-step stepper form, exact order: sets, sits, sales, OTS sits, OTS sales, N1, referrals, ref sits, ref sales, POS sits, POS sales, vet sits, vet sales, gross ALP. Auto-tagged `submitted_on_time` if before 9 PM.
 
-## 6. Premiere Shoutouts
+## 6. Premier Shoutouts
 - **Player's Club** (Gold Crown): $10,000+ Gross ALP in a single Sales Day (6 AM → 6 AM). Global scope.
 - **Performance Streak** (Fire emoji): 5+ consecutive days of on-time Pulses. Global scope.
 - **First Deal** (Welcome to the Board): an agent's first-ever sale — **GA-Team scope only** (visible to immediate GA + Level 4).

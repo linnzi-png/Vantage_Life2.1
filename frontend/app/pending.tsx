@@ -1,4 +1,4 @@
-// Shown when an authenticated identity (Google/Apple) has no matching AO Premiere
+// Shown when an authenticated identity (Google/Apple) has no matching AO Premier
 // agent record yet. Sign-in succeeds either way — this screen is the gate that
 // keeps non-agents from ever reaching real business data.
 import React from 'react';
@@ -16,7 +16,7 @@ export default function PendingScreen() {
         <Ionicons name="time-outline" size={48} color={COLORS.gold} />
         <Text style={styles.title}>Account Pending</Text>
         <Text style={styles.body}>
-          {user?.email} isn't linked to an AO Premiere agent profile yet. Reach out to your
+          {user?.email} isn't linked to an AO Premier agent profile yet. Reach out to your
           office to get added — once you're on the roster, signing in again will take you
           straight to your dashboard.
         </Text>

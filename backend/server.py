@@ -1,5 +1,5 @@
 """VantageLife 2.0 — FastAPI Backend
-AO Premiere — Real-Time Impact Culture
+AO Premier — Real-Time Impact Culture
 """
 from fastapi import FastAPI, APIRouter, Request, HTTPException, Response, Depends, Body
 from fastapi.responses import JSONResponse
@@ -171,9 +171,9 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
 
 async def require_agent(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """Authenticated identity is not enough — block anyone not linked to a real
-    AO Premiere agent record from reaching business data, regardless of sign-in flow."""
+    AO Premier agent record from reaching business data, regardless of sign-in flow."""
     if not user.get("agent_id") or not str(user.get("role", "")).startswith("level_"):
-        raise HTTPException(status_code=403, detail="Not yet linked to an AO Premiere agent profile")
+        raise HTTPException(status_code=403, detail="Not yet linked to an AO Premier agent profile")
     return user
 
 
@@ -217,7 +217,7 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
     email = email.lower().strip()
     # Authentication (proving who you are via Google/Apple) always succeeds for any
     # verified identity — App Store review must be able to complete Sign in with Apple
-    # without error. Authorization (seeing AO Premiere data) is gated separately by
+    # without error. Authorization (seeing AO Premier data) is gated separately by
     # require_agent: anyone not on the agent roster gets role "pending" and no agent_id,
     # so they land on a harmless pending screen instead of an error during sign-in.
     agent = await db.agent_profiles.find_one({"email": email}, {"_id": 0})

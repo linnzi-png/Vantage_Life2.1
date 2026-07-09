@@ -1,8 +1,12 @@
-# CLAUDE.md - VantageLife 2.1 (AO Premiere)
+# CLAUDE.md - VantageLife 2.1 (AO Premier)
 
 ## Project Overview
 Real-time sales tracking and victory culture platform for AO Globe Life - Vantage.
 Expo/React Native mobile app backed by a Python/FastAPI API over MongoDB.
+
+Brand spelling: always "Premier" (AO Premier, Premier Shoutouts) — never
+"Premiere". Exception: legacy identifiers keep the old spelling and must not
+change (`com.aopremiere.vantagelife` bundle ID, `@aopremiere.com` demo emails).
 
 ## Tech Stack
 - Frontend: Expo (SDK 56) / React Native, TypeScript, file-based routing via Expo Router
