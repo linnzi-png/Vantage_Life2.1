@@ -10,13 +10,13 @@ async def test_level_1_sees_only_self(seeded_db):
 
 async def test_level_2_sees_own_team_not_siblings(seeded_db):
     ids = await server.visible_agent_ids({"role": "level_2", "agent_id": "GA_1"})
-    assert set(ids) == {"GA_1", "AG_1"}
+    assert set(ids) == {"GA_1", "SA_1", "AG_1"}
     assert "AG_2" not in ids and "GA_2" not in ids
 
 
 async def test_level_3_sees_all_ga_rollups(seeded_db):
     ids = await server.visible_agent_ids({"role": "level_3", "agent_id": "MGA_1"})
-    assert set(ids) == {"MGA_1", "GA_1", "GA_2", "AG_1", "AG_2"}
+    assert set(ids) == {"MGA_1", "GA_1", "GA_2", "SA_1", "AG_1", "AG_2"}
 
 
 async def test_level_4_sees_everything(seeded_db):

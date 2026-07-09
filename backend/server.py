@@ -211,6 +211,21 @@ def require_level(min_level: int):
     return dep
 
 
+async def require_endorser(user: Dict[str, Any] = Depends(require_agent)) -> Dict[str, Any]:
+    """Platinum Rule endorsement gate: GA/MGA/RGA (level_2+), plus level_1
+    agents holding the SA title. Owner-approved exception (2026-07-09) to the
+    role-not-title rule, scoped to the nominations inbox only — the SA title
+    is read fresh from agent_profiles so a title change applies immediately."""
+    lvl = int(user["role"].split("_")[1])
+    if lvl >= 2:
+        return user
+    prof = await db.agent_profiles.find_one(
+        {"agent_id": user["agent_id"]}, {"_id": 0, "io_role": 1})
+    if prof and str(prof.get("io_role", "")).strip().upper() == "SA":
+        return user
+    raise HTTPException(status_code=403, detail="Endorsing requires SA, GA, MGA, or RGA")
+
+
 def set_session_cookie(resp: Response, token: str):
     # 7 days; secure + samesite none for cross-domain preview
     resp.set_cookie(
@@ -476,13 +491,30 @@ async def aggregate_alp(filter_q: Dict[str, Any]) -> Dict[str, float]:
     return {"gross_alp": float(d.get("gross_alp", 0) or 0), "net_alp": float(d.get("net_alp", 0) or 0), "sits": int(d.get("sits", 0) or 0), "sales": int(d.get("sales", 0) or 0)}
 
 
+def resolve_history_day(sales_day: Optional[str]) -> str:
+    """Validate an optional read-only history day. Returns the current sales
+    day when absent. History may not be in the future; the sales-day boundary
+    itself (6 AM Detroit) stays defined solely by sales_day_for()."""
+    today = current_sales_day_str()
+    if not sales_day:
+        return today
+    try:
+        requested = date.fromisoformat(sales_day)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="sales_day must be YYYY-MM-DD")
+    if requested > date.fromisoformat(today):
+        raise HTTPException(status_code=400, detail="sales_day cannot be in the future")
+    return requested.isoformat()
+
+
 @api_router.get("/dashboard/summary")
-async def dashboard_summary(user: Dict[str, Any] = Depends(require_agent)):
+async def dashboard_summary(sales_day: Optional[str] = None, user: Dict[str, Any] = Depends(require_agent)):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
-    yest = previous_sales_day_str()
-    base = {"sales_day": today}
-    base_y = {"sales_day": yest}
+    day = resolve_history_day(sales_day)
+    prev = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
+    base = {"sales_day": day}
+    base_y = {"sales_day": prev}
     if ids is not None:
         base["agent_id"] = {"$in": ids}
         base_y["agent_id"] = {"$in": ids}
@@ -492,14 +524,16 @@ async def dashboard_summary(user: Dict[str, Any] = Depends(require_agent)):
     if yest_agg["gross_alp"] > 0:
         delta_pct = ((today_agg["gross_alp"] - yest_agg["gross_alp"]) / yest_agg["gross_alp"]) * 100.0
     return {
-        "sales_day": today,
+        "sales_day": day,
         "total_alp": today_agg["gross_alp"],
         "total_net_alp": today_agg["net_alp"],
         "total_sits": today_agg["sits"],
         "total_sales": today_agg["sales"],
         "delta_pct_vs_yesterday": round(delta_pct, 1),
-        "gate": gate_state(),
+        # The gate describes the live entry window; it has no meaning for history.
+        "gate": gate_state() if day == today else None,
         "is_full_agency": ids is None,
+        "is_history": day != today,
     }
 
 
@@ -576,9 +610,9 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent))
 
 
 @api_router.get("/dashboard/offices")
-async def dashboard_offices(user: Dict[str, Any] = Depends(require_agent)):
+async def dashboard_offices(sales_day: Optional[str] = None, user: Dict[str, Any] = Depends(require_agent)):
     ids = await visible_agent_ids(user)
-    today = current_sales_day_str()
+    today = resolve_history_day(sales_day)
     # Discover offices from the actual agent_profiles so new RGAs appear automatically
     office_filter: Dict[str, Any] = {}
     if ids is not None:
@@ -936,8 +970,18 @@ class NominationIn(BaseModel):
     reason: str = Field(min_length=10, max_length=500)
 
 
+async def _nomination_scope_ids(user: Dict[str, Any]) -> Optional[list]:
+    """Nomination-inbox visibility. Same as visible_agent_ids, except an
+    SA-titled level_1 (who only reaches here via require_endorser) scopes
+    over their downline like a GA does — for nominations ONLY. General data
+    visibility (dashboard, team, pulse) is unchanged for SAs."""
+    if int(user["role"].split("_")[1]) == 1:
+        return await visible_agent_ids({"role": "level_2", "agent_id": user["agent_id"]})
+    return await visible_agent_ids(user)
+
+
 async def _nomination_visible_to(user: Dict[str, Any], nomination: Dict[str, Any]) -> bool:
-    ids = await visible_agent_ids(user)
+    ids = await _nomination_scope_ids(user)
     return ids is None or nomination["nominee_agent_id"] in ids
 
 
@@ -967,8 +1011,8 @@ async def create_nomination(payload: NominationIn, user: Dict[str, Any] = Depend
 
 
 @api_router.get("/nominations")
-async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = Depends(require_level(2))):
-    ids = await visible_agent_ids(user)
+async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = Depends(require_endorser)):
+    ids = await _nomination_scope_ids(user)
     q: Dict[str, Any] = {}
     if ids is not None:
         q["nominee_agent_id"] = {"$in": ids}
@@ -985,7 +1029,7 @@ async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = 
 
 
 @api_router.post("/nominations/{nomination_id}/endorse")
-async def endorse_nomination(nomination_id: str, user: Dict[str, Any] = Depends(require_level(2))):
+async def endorse_nomination(nomination_id: str, user: Dict[str, Any] = Depends(require_endorser)):
     nom = await db.nominations.find_one({"nomination_id": nomination_id}, {"_id": 0})
     if not nom:
         raise HTTPException(status_code=404, detail="Nomination not found")

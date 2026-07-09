@@ -1,10 +1,13 @@
-// Platinum Rule nominations inbox — GA+ endorse; MGA/RGA post to the Platinum Wall.
+// Platinum Rule nominations inbox — SA/GA/MGA/RGA endorse; MGA/RGA post to
+// the Platinum Wall. SA is a title-based exception approved by the owner
+// (2026-07-09); the server enforces the same rule in require_endorser.
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth, levelNum } from '../src/lib/auth';
+import { SearchBar } from '../src/components/SearchBar';
 
 interface Endorsement { agent_id: string; name: string; ts: string; }
 interface Nomination {
@@ -18,12 +21,14 @@ interface Nomination {
 }
 
 export default function NominationsScreen() {
-  const { user } = useAuth();
+  const { user, agent } = useAuth();
   const lvl = levelNum(user?.role);
+  const canEndorse = lvl >= 2 || (agent?.io_role ?? '').toUpperCase() === 'SA';
   const [items, setItems] = useState<Nomination[]>([]);
   const [threshold, setThreshold] = useState(3);
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   const fetchAll = useCallback(async () => {
     try {
@@ -76,19 +81,23 @@ export default function NominationsScreen() {
     );
   };
 
-  if (lvl < 2) {
+  if (!canEndorse) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <Stack.Screen options={{ title: 'NOMINATIONS' }} />
         <View style={styles.center}>
           <Ionicons name="lock-closed" size={32} color={COLORS.textDim} />
-          <Text style={styles.emptyTxt}>The nominations inbox is for GA, MGA, and RGA roles.</Text>
+          <Text style={styles.emptyTxt}>The nominations inbox is for SA, GA, MGA, and RGA roles.</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   const iEndorsed = (n: Nomination) => n.endorsements.some((e) => e.agent_id === user?.agent_id);
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? items.filter((n) => `${n.nominee_name} ${n.nominee_office} ${n.nominator_name} ${n.reason}`.toLowerCase().includes(q))
+    : items;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -98,13 +107,14 @@ export default function NominationsScreen() {
         <Text style={styles.title}>NOMINATIONS</Text>
         <Text style={styles.sub}>{threshold} endorsements from leadership flag a nomination for the wall.</Text>
       </View>
+      <SearchBar value={query} onChange={setQuery} placeholder="Search nominee, office, reason" testID="nominations-search" />
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
       >
-        {items.length === 0 ? (
-          <Text style={styles.emptyTxt}>No nominations for your team yet.</Text>
-        ) : items.map((n) => {
+        {visible.length === 0 ? (
+          <Text style={styles.emptyTxt}>{q ? 'No matches for your search.' : 'No nominations for your team yet.'}</Text>
+        ) : visible.map((n) => {
           const count = n.endorsements.length;
           const ready = n.status === 'threshold_met';
           const posted = n.status === 'posted';

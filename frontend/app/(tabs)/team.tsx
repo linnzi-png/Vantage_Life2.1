@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
+import { SearchBar } from '../../src/components/SearchBar';
 
 interface TeamRow {
   agent_id: string; name: string; office: string; role: string; io_role: string;
@@ -43,7 +44,12 @@ export default function TeamScreen() {
   };
   useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, []);
 
+  const [query, setQuery] = useState('');
   const sorted = [...rows].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? sorted.filter((r) => `${r.name} ${r.office} ${roleTitle(r.io_role, r.role)}`.toLowerCase().includes(q))
+    : sorted;
 
   if (levelNum(user?.role) < 2) {
     return (
@@ -118,13 +124,14 @@ export default function TeamScreen() {
         {sortBtn('close_ratio', 'Close %')}
         {sortBtn('avg_deal', 'Avg Deal')}
       </View>
+      <SearchBar value={query} onChange={setQuery} placeholder="Search name, office, title" testID="team-search" />
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
       >
-        {sorted.length === 0 ? (
-          <Text style={styles.emptyTxt}>No team data yet.</Text>
-        ) : sorted.map((r) => (
+        {visible.length === 0 ? (
+          <Text style={styles.emptyTxt}>{q ? 'No matches for your search.' : 'No team data yet.'}</Text>
+        ) : visible.map((r) => (
           <TouchableOpacity
             key={r.agent_id}
             style={styles.row}
