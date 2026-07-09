@@ -67,6 +67,17 @@ def now_detroit() -> datetime:
     return datetime.now(DETROIT_TZ)
 
 
+def iso_utc(d: datetime) -> str:
+    """Serialize a stored datetime with an explicit UTC offset.
+
+    Mongo returns datetimes naive (UTC without tzinfo); a bare isoformat()
+    then has no offset marker and clients parse it as device-local time,
+    shifting every displayed timestamp by the UTC offset."""
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    return d.isoformat()
+
+
 def sales_day_for(dt_local: datetime) -> str:
     """Sales day rolls 6 AM → 6 AM in Detroit time. Pulse Gate at 9 PM, Hard Lock at 6 AM."""
     if dt_local.hour < 6:
@@ -511,7 +522,7 @@ async def dashboard_ticker(user: Dict[str, Any] = Depends(require_agent)):
             "alp": float(e.get("gross_alp", 0)),
             "market": agent.get("office", ""),
             "reps": int(e.get("refs_obtained", 0)),
-            "ts": e["submitted_at"].isoformat() if isinstance(e["submitted_at"], datetime) else e["submitted_at"],
+            "ts": iso_utc(e["submitted_at"]) if isinstance(e["submitted_at"], datetime) else e["submitted_at"],
         })
     return {"items": items}
 
@@ -560,7 +571,7 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent))
         {"type": "platinum_rule"}, {"_id": 0}).sort("ts", -1).limit(5)]
     for s in platinum:
         if isinstance(s.get("ts"), datetime):
-            s["ts"] = s["ts"].isoformat()
+            s["ts"] = iso_utc(s["ts"])
     return {"vets": vets, "rookies": rookies, "platinum_rule": platinum}
 
 
@@ -659,7 +670,7 @@ def _ser_entry(e: Dict[str, Any]) -> Dict[str, Any]:
     e = dict(e)
     e.pop("_id", None)
     if isinstance(e.get("submitted_at"), datetime):
-        e["submitted_at"] = e["submitted_at"].isoformat()
+        e["submitted_at"] = iso_utc(e["submitted_at"])
     return e
 
 
@@ -895,7 +906,7 @@ async def list_shoutouts(user: Dict[str, Any] = Depends(require_agent)):
         s["phone"] = c.get("phone", "")
         s["email"] = c.get("email", "")
         if isinstance(s.get("ts"), datetime):
-            s["ts"] = s["ts"].isoformat()
+            s["ts"] = iso_utc(s["ts"])
     return {"shoutouts": out}
 
 
@@ -951,7 +962,7 @@ async def create_nomination(payload: NominationIn, user: Dict[str, Any] = Depend
     }
     await db.nominations.insert_one(doc)
     doc.pop("_id", None)
-    doc["created_at"] = doc["created_at"].isoformat()
+    doc["created_at"] = iso_utc(doc["created_at"])
     return {"ok": True, "nomination": doc}
 
 
@@ -966,10 +977,10 @@ async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = 
     out = [n async for n in db.nominations.find(q, {"_id": 0}).sort("created_at", -1).limit(200)]
     for n in out:
         if isinstance(n.get("created_at"), datetime):
-            n["created_at"] = n["created_at"].isoformat()
+            n["created_at"] = iso_utc(n["created_at"])
         for e in n.get("endorsements", []):
             if isinstance(e.get("ts"), datetime):
-                e["ts"] = e["ts"].isoformat()
+                e["ts"] = iso_utc(e["ts"])
     return {"nominations": out, "threshold": PLATINUM_ENDORSE_THRESHOLD}
 
 
@@ -1026,7 +1037,7 @@ async def post_nomination_to_wall(nomination_id: str, user: Dict[str, Any] = Dep
         {"$set": {"status": "posted", "posted_at": now_utc(), "posted_by_agent_id": user["agent_id"]}},
     )
     shoutout.pop("_id", None)
-    shoutout["ts"] = shoutout["ts"].isoformat()
+    shoutout["ts"] = iso_utc(shoutout["ts"])
     return {"ok": True, "shoutout": shoutout}
 
 
@@ -1080,7 +1091,7 @@ async def manager_erase(payload: EraseIn, user: Dict[str, Any] = Depends(require
     }
     await db.audit_log.insert_one(audit)
     audit.pop("_id", None)
-    audit["ts"] = audit["ts"].isoformat()
+    audit["ts"] = iso_utc(audit["ts"])
     return {"ok": True, "audit": audit, "delta": delta}
 
 
@@ -1090,7 +1101,7 @@ async def manager_audit(user: Dict[str, Any] = Depends(require_level(4))):
     items = []
     async for a in cur:
         if isinstance(a.get("ts"), datetime):
-            a["ts"] = a["ts"].isoformat()
+            a["ts"] = iso_utc(a["ts"])
         items.append(a)
     return {"items": items}
 
@@ -1105,7 +1116,7 @@ async def vault_weeks(user: Dict[str, Any] = Depends(require_level(4))):
     items = [d async for d in cur]
     for it in items:
         if isinstance(it.get("archived_at"), datetime):
-            it["archived_at"] = it["archived_at"].isoformat()
+            it["archived_at"] = iso_utc(it["archived_at"])
     return {"weeks": items}
 
 
@@ -1124,7 +1135,7 @@ async def vault_compare(week_a: str, week_b: str, user: Dict[str, Any] = Depends
         delta[m] = {"a": av, "b": bv, "delta": bv - av, "pct": round(pct, 1)}
     for w in (a, b):
         if isinstance(w.get("archived_at"), datetime):
-            w["archived_at"] = w["archived_at"].isoformat()
+            w["archived_at"] = iso_utc(w["archived_at"])
     return {"a": a, "b": b, "delta": delta}
 
 
@@ -1181,7 +1192,7 @@ async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
     # Reset by clearing production entries (in real app you'd flag instead of delete)
     await db.production_entries.delete_many({})
     snapshot.pop("_id", None)
-    snapshot["archived_at"] = snapshot["archived_at"].isoformat()
+    snapshot["archived_at"] = iso_utc(snapshot["archived_at"])
     return {"ok": True, "snapshot": snapshot}
 
 
