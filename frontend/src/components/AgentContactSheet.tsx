@@ -67,7 +67,17 @@ export function AgentContactSheet({ agent, onClose }: Props) {
             </View>
             <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
           </TouchableOpacity>
-        ) : null}
+        ) : (
+          <View style={[styles.contactRow, styles.contactRowMissing]}>
+            <View style={styles.iconWrap}>
+              <Ionicons name="call" size={18} color={COLORS.textMuted} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.contactLabel}>CALL / TEXT</Text>
+              <Text style={styles.contactMissing}>No phone on file</Text>
+            </View>
+          </View>
+        )}
 
         {agent.phone ? (
           <TouchableOpacity
@@ -101,7 +111,17 @@ export function AgentContactSheet({ agent, onClose }: Props) {
             </View>
             <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
           </TouchableOpacity>
-        ) : null}
+        ) : (
+          <View style={[styles.contactRow, styles.contactRowMissing]}>
+            <View style={styles.iconWrap}>
+              <Ionicons name="mail" size={18} color={COLORS.textMuted} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.contactLabel}>EMAIL</Text>
+              <Text style={styles.contactMissing}>No email on file</Text>
+            </View>
+          </View>
+        )}
 
         <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
           <Text style={styles.closeTxt}>CLOSE</Text>
@@ -202,6 +222,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  contactRowMissing: {
+    opacity: 0.55,
+  },
+  contactMissing: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontStyle: 'italic',
   },
   closeBtn: {
     marginTop: 8,

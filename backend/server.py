@@ -994,7 +994,19 @@ async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = 
     if status:
         q["status"] = status
     out = [n async for n in db.nominations.find(q, {"_id": 0}).sort("created_at", -1).limit(200)]
+    # Attach nominee contact/role so the app can open the agent contact card
+    # straight from the inbox. Same audience as /api/team (the nominee's
+    # upline, level_2+), which already exposes these fields.
+    nominee_ids = list({n["nominee_agent_id"] for n in out})
+    profiles = {p["agent_id"]: p async for p in db.agent_profiles.find(
+        {"agent_id": {"$in": nominee_ids}},
+        {"_id": 0, "agent_id": 1, "role": 1, "io_role": 1, "phone": 1, "email": 1})}
     for n in out:
+        p = profiles.get(n["nominee_agent_id"], {})
+        n["nominee_role"] = p.get("role", "level_1")
+        n["nominee_io_role"] = p.get("io_role") or ""
+        n["nominee_phone"] = p.get("phone") or ""
+        n["nominee_email"] = p.get("email") or ""
         if isinstance(n.get("created_at"), datetime):
             n["created_at"] = iso_utc(n["created_at"])
         for e in n.get("endorsements", []):

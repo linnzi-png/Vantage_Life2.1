@@ -61,6 +61,17 @@ async def test_list_requires_ga_and_is_scoped(client, seeded_db):
     assert len((await client.get("/api/nominations", headers=auth(rga))).json()["nominations"]) == 1
 
 
+async def test_list_includes_nominee_contact_fields(client, seeded_db):
+    """The inbox enriches each nomination with the nominee's contact/role so
+    the app can open the agent contact card in place."""
+    await nominate(client, seeded_db)  # nominee AG_1
+    ga1 = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    n = (await client.get("/api/nominations", headers=auth(ga1))).json()["nominations"][0]
+    assert n["nominee_role"] == "level_1"
+    assert n["nominee_email"] == "ag1@test.dev"
+    assert n["nominee_phone"] == ""  # absent in roster -> empty string, never missing key
+
+
 async def test_endorse_dedup_and_threshold_flip(client, seeded_db):
     nom_id, _ = await nominate(client, seeded_db)
     ga1 = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
