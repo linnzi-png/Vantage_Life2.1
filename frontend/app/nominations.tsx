@@ -7,11 +7,14 @@ import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth, levelNum } from '../src/lib/auth';
 import { SearchBar } from '../src/components/SearchBar';
+import { AgentContactSheet, AgentContact } from '../src/components/AgentContactSheet';
 
 interface Endorsement { agent_id: string; name: string; ts: string; }
 interface Nomination {
   nomination_id: string;
   nominee_name: string; nominee_office: string;
+  nominee_role: string; nominee_io_role: string;
+  nominee_phone: string; nominee_email: string;
   nominator_name: string;
   reason: string;
   status: 'open' | 'threshold_met' | 'posted' | string;
@@ -28,6 +31,7 @@ export default function NominationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -124,7 +128,16 @@ export default function NominationsScreen() {
               testID={`nomination-${n.nomination_id}`}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={styles.nominee}>{n.nominee_name}</Text>
+                <TouchableOpacity
+                  onPress={() => setContactAgent({
+                    name: n.nominee_name, role: n.nominee_role || 'level_1', io_role: n.nominee_io_role,
+                    phone: n.nominee_phone, email: n.nominee_email, office: n.nominee_office,
+                  })}
+                  activeOpacity={0.7}
+                  testID={`nominee-contact-${n.nomination_id}`}
+                >
+                  <Text style={styles.nominee}>{n.nominee_name}</Text>
+                </TouchableOpacity>
                 <Text style={styles.office}> · {n.nominee_office}</Text>
                 <View style={{ marginLeft: 'auto' }}>
                   {posted ? (
@@ -174,6 +187,7 @@ export default function NominationsScreen() {
           );
         })}
       </ScrollView>
+      <AgentContactSheet agent={contactAgent} onClose={() => setContactAgent(null)} />
     </SafeAreaView>
   );
 }
