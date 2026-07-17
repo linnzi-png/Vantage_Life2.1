@@ -1450,6 +1450,16 @@ class AdminAddPersonIn(BaseModel):
     role: str  # level_1..level_4
     io_role: Optional[str] = None  # display title: SA, GA, MGA, RGA, Partner, ...
     upline_agent_id: Optional[str] = None
+    # Tenure drives the Platinum Wall vet/rookie split and the Team "R" badge.
+    # Optional in the schema ONLY so a missing value gets a clear 400 message the
+    # form can surface (a bare 422 detail is a list, which the frontend api()
+    # helper can't render). Tenure is never defaulted or inferred.
+    is_rookie: Optional[bool] = None
+
+
+class AdminSetTenureIn(BaseModel):
+    agent_id: str
+    is_rookie: bool  # True = Rookie, False = Veteran; required — always an explicit choice
 
 
 class AdminSetFlagsIn(BaseModel):
@@ -1467,7 +1477,7 @@ async def admin_people(user: Dict[str, Any] = Depends(require_admin)):
     """Full roster with login-link status and permission flags, for the Admin screen."""
     agents = [a async for a in db.agent_profiles.find(
         {}, {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "phone": 1,
-             "office": 1, "role": 1, "io_role": 1, "upline_id": 1},
+             "office": 1, "role": 1, "io_role": 1, "upline_id": 1, "is_rookie": 1},
     ).sort("name", 1)]
     flags_by_email: Dict[str, Dict[str, Any]] = {}
     async for u in db.users.find({}, {"_id": 0, "email": 1, "is_admin": 1, "can_switch_role": 1}):
@@ -1504,10 +1514,16 @@ async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Dep
     first Google/Apple sign-in links to the right role automatically."""
     if payload.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
+    if payload.is_rookie is None:
+        raise HTTPException(status_code=400, detail="Tenure is required — choose Veteran or Rookie")
     email = payload.email.lower().strip()
     name = payload.name.strip()
     if not email or "@" not in email or not name:
         raise HTTPException(status_code=400, detail="Name and a valid email are required")
+    if payload.role != "level_4" and not payload.upline_agent_id:
+        # Team rollups walk agent_profiles.upline_id (visible_agent_ids BFS) — an
+        # agent created without an upline is invisible in every GA/MGA team view.
+        raise HTTPException(status_code=400, detail="Upline is required for everyone below RGA tier")
     if payload.upline_agent_id:
         upline = await db.agent_profiles.find_one({"agent_id": payload.upline_agent_id}, {"_id": 0, "agent_id": 1})
         if not upline:
@@ -1515,6 +1531,7 @@ async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Dep
     existing = await db.agent_profiles.find_one({"email": email}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=409, detail=f"{existing.get('name', 'Someone')} already has this email on the roster")
+    now = now_utc()
     profile = {
         "agent_id": f"agent_{uuid.uuid4().hex[:10]}",
         "name": name,
@@ -1523,7 +1540,9 @@ async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Dep
         "office": payload.office.strip() or "MJ RGA",
         "role": payload.role,
         "upline_id": payload.upline_agent_id,
-        "created_at": now_utc(),
+        "is_rookie": payload.is_rookie,
+        "created_at": now,
+        "joined_at": now,
     }
     if payload.io_role:
         profile["io_role"] = payload.io_role.strip()
@@ -1531,7 +1550,46 @@ async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Dep
     profile.pop("_id", None)
     # If they signed in before being rostered they hold a "pending" users doc — link it now.
     await db.users.update_many({"email": email}, {"$set": {"role": payload.role, "agent_id": profile["agent_id"]}})
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now,
+        "action": "add_agent",
+        "agent_id": profile["agent_id"],
+        "agent_name": name,
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "role": payload.role,
+        "is_rookie": payload.is_rookie,
+        "upline_id": payload.upline_agent_id,
+    })
     return {"ok": True, "agent": profile}
+
+
+@api_router.post("/admin/set-tenure")
+async def admin_set_tenure(payload: AdminSetTenureIn, user: Dict[str, Any] = Depends(require_admin)):
+    """Set Veteran/Rookie tenure on an existing agent. This is the resolution path
+    for rostered agents whose tenure was never recorded (profiles created before
+    tenure became mandatory have no is_rookie field and show as Unknown in the
+    Admin screen). One agent at a time, always an explicit choice — never bulk."""
+    agent = await db.agent_profiles.find_one({"agent_id": payload.agent_id}, {"_id": 0})
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    await db.agent_profiles.update_one(
+        {"agent_id": payload.agent_id},
+        {"$set": {"is_rookie": payload.is_rookie, "updated_at": now_utc()}},
+    )
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now_utc(),
+        "action": "set_tenure",
+        "agent_id": payload.agent_id,
+        "agent_name": agent.get("name"),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "original_value": agent.get("is_rookie"),  # None = was unknown
+        "new_value": payload.is_rookie,
+    })
+    return {"ok": True, "agent_id": payload.agent_id, "is_rookie": payload.is_rookie}
 
 
 @api_router.post("/admin/set-flags")

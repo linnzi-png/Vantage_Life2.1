@@ -20,6 +20,7 @@ interface Person {
   role: Role;
   io_role?: string;
   upline_id?: string | null;
+  is_rookie?: boolean; // absent = tenure never recorded (Unknown)
   has_login: boolean;
   is_admin: boolean;
   can_switch_role: boolean;
@@ -44,6 +45,9 @@ export default function AdminScreen() {
   const [fPhone, setFPhone] = useState('');
   const [fOffice, setFOffice] = useState('MJ RGA');
   const [fRole, setFRole] = useState<Role>('level_1');
+  // Tenure starts unchosen on purpose: submit stays disabled until the admin
+  // explicitly picks Veteran or Rookie — never preselected, never defaulted.
+  const [fRookie, setFRookie] = useState<boolean | null>(null);
   const [fIoRole, setFIoRole] = useState<string>('Agent');
   const [fUplineQuery, setFUplineQuery] = useState('');
   const [fUpline, setFUpline] = useState<Person | null>(null);
@@ -121,15 +125,26 @@ export default function AdminScreen() {
         body: JSON.stringify({
           name: fName, email: fEmail, phone: fPhone, office: fOffice,
           role: fRole, io_role: fIoRole || null, upline_agent_id: fUpline?.agent_id || null,
+          is_rookie: fRookie,
         }),
       });
-      setFName(''); setFEmail(''); setFPhone(''); setFUplineQuery(''); setFUpline(null);
+      setFName(''); setFEmail(''); setFPhone(''); setFUplineQuery(''); setFUpline(null); setFRookie(null);
       setShowAdd(false);
       await load();
     } catch (e: unknown) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Could not add person');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const setTenure = async (p: Person, isRookie: boolean) => {
+    if (p.is_rookie === isRookie) return;
+    try {
+      await api('/api/admin/set-tenure', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id, is_rookie: isRookie }) });
+      setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, is_rookie: isRookie } : x)));
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Tenure update failed');
     }
   };
 
@@ -153,6 +168,9 @@ export default function AdminScreen() {
             <TextInput style={styles.input} value={fName} onChangeText={setFName} placeholder="Full name" placeholderTextColor={COLORS.textMuted} testID="admin-add-name" />
             <Text style={styles.lab}>EMAIL</Text>
             <TextInput style={styles.input} value={fEmail} onChangeText={setFEmail} autoCapitalize="none" keyboardType="email-address" placeholder="name@example.com" placeholderTextColor={COLORS.textMuted} testID="admin-add-email" />
+            <Text style={styles.fieldNote}>
+              Must exactly match the email they will sign in with (Google or Apple) — a mismatch leaves them stuck on the pending screen.
+            </Text>
             <Text style={styles.lab}>PHONE (OPTIONAL)</Text>
             <TextInput style={styles.input} value={fPhone} onChangeText={setFPhone} keyboardType="phone-pad" placeholder="(313) 555-0100" placeholderTextColor={COLORS.textMuted} />
             <Text style={styles.lab}>OFFICE</Text>
@@ -167,6 +185,25 @@ export default function AdminScreen() {
               ))}
             </View>
 
+            <Text style={styles.lab}>TENURE — DRIVES PLATINUM WALL + ROOKIE BADGE</Text>
+            <View style={styles.tierRow}>
+              <TouchableOpacity
+                style={[styles.tierBtn, fRookie === false && styles.tierBtnOn]}
+                onPress={() => setFRookie(false)}
+                testID="admin-add-tenure-vet"
+              >
+                <Text style={[styles.tierTxt, fRookie === false && styles.tierTxtOn]}>VETERAN</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tierBtn, fRookie === true && styles.tierBtnOn]}
+                onPress={() => setFRookie(true)}
+                testID="admin-add-tenure-rookie"
+              >
+                <Text style={[styles.tierTxt, fRookie === true && styles.tierTxtOn]}>ROOKIE</Text>
+              </TouchableOpacity>
+            </View>
+            {fRookie === null ? <Text style={styles.fieldNote}>Pick one — there is no default.</Text> : null}
+
             <Text style={styles.lab}>DISPLAY TITLE (IO ROLE)</Text>
             <View style={styles.chipWrap}>
               {IO_ROLES.map((r) => (
@@ -176,7 +213,7 @@ export default function AdminScreen() {
               ))}
             </View>
 
-            <Text style={styles.lab}>UPLINE (OPTIONAL)</Text>
+            <Text style={styles.lab}>{fRole === 'level_4' ? 'UPLINE (OPTIONAL FOR RGA)' : 'UPLINE (REQUIRED)'}</Text>
             {fUpline ? (
               <View style={styles.uplinePick}>
                 <Text style={styles.uplineName}>{fUpline.name} <Text style={styles.dim}>· {TIER_SHORT[fUpline.role]}</Text></Text>
@@ -196,8 +233,8 @@ export default function AdminScreen() {
             )}
 
             <TouchableOpacity
-              style={[styles.saveBtn, (saving || !fName.trim() || !fEmail.includes('@')) && { opacity: 0.5 }]}
-              disabled={saving || !fName.trim() || !fEmail.includes('@')}
+              style={[styles.saveBtn, (saving || !fName.trim() || !fEmail.includes('@') || fRookie === null || (fRole !== 'level_4' && !fUpline)) && { opacity: 0.5 }]}
+              disabled={saving || !fName.trim() || !fEmail.includes('@') || fRookie === null || (fRole !== 'level_4' && !fUpline)}
               onPress={addPerson}
               testID="admin-add-save"
             >
@@ -231,6 +268,7 @@ export default function AdminScreen() {
                   <Text style={styles.personName}>{p.name}</Text>
                   <Text style={styles.personSub}>
                     {roleTitle(p.io_role, p.role)}{p.office ? ` · ${p.office}` : ''}
+                    {p.is_rookie === true ? ' · Rookie' : p.is_rookie === false ? ' · Veteran' : ' · Tenure unknown'}
                   </Text>
                 </View>
                 <View style={[styles.tierBadge, !p.has_login && styles.tierBadgeDim]}>
@@ -252,6 +290,24 @@ export default function AdminScreen() {
                         <Text style={[styles.tierTxt, p.role === t && styles.tierTxtOn]}>{TIER_SHORT[t]}</Text>
                       </TouchableOpacity>
                     ))}
+                  </View>
+
+                  <Text style={styles.lab}>TENURE{p.is_rookie === undefined ? ' — NOT RECORDED YET' : ''}</Text>
+                  <View style={styles.tierRow}>
+                    <TouchableOpacity
+                      style={[styles.tierBtn, p.is_rookie === false && styles.tierBtnOn]}
+                      onPress={() => setTenure(p, false)}
+                      testID={`admin-tenure-${p.agent_id}-vet`}
+                    >
+                      <Text style={[styles.tierTxt, p.is_rookie === false && styles.tierTxtOn]}>VETERAN</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.tierBtn, p.is_rookie === true && styles.tierBtnOn]}
+                      onPress={() => setTenure(p, true)}
+                      testID={`admin-tenure-${p.agent_id}-rookie`}
+                    >
+                      <Text style={[styles.tierTxt, p.is_rookie === true && styles.tierTxtOn]}>ROOKIE</Text>
+                    </TouchableOpacity>
                   </View>
 
                   <View style={styles.flagRow}>
@@ -292,6 +348,7 @@ const styles = StyleSheet.create({
   addBtnTxt: { color: '#000', fontWeight: '900', fontSize: 13 },
   card: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, padding: 14, marginTop: 10 },
   lab: { color: COLORS.textMuted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2, marginTop: 12, marginBottom: 4 },
+  fieldNote: { color: COLORS.textDim, fontSize: 11, marginTop: 4, fontStyle: 'italic' },
   input: { backgroundColor: COLORS.surface2, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, color: '#fff', paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
   tierRow: { flexDirection: 'row', gap: 6 },
   tierBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface2 },
