@@ -241,6 +241,29 @@ async def test_created_rookie_lands_in_platinum_wall_rookie_bucket(client, seede
     assert new_id not in [a["agent_id"] for a in wall["vets"]]
 
 
+async def test_unknown_tenure_excluded_from_platinum_wall(client, seeded_db):
+    # A rostered agent whose tenure was never recorded (no is_rookie field) must
+    # NOT be bucketed as a veteran — unknown is its own state, so the agent shows
+    # in neither wall list until leadership records tenure in the Admin panel.
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "AG_UNK", "name": "No Tenure", "office": "MJ RGA",
+        "role": "level_1", "upline_id": "GA_1", "email": "unk@test.dev",
+        # is_rookie deliberately absent — tenure unknown
+    })
+    # High gross so a mis-bucket would put it at the top of the vets list.
+    await seeded_db.production_entries.insert_one({
+        "entry_id": "e_unk", "agent_id": "AG_UNK", "office": "MJ RGA",
+        "sales_day": server.current_sales_day_str(),
+        "sets": 1, "sits": 2, "sales": 1, "n1": 0, "refs_obtained": 0,
+        "gross_alp": 9000, "net_alp": 9000,
+        "submitted_at": server.now_utc(), "submitted_on_time": True,
+    })
+    rga = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    wall = (await client.get("/api/dashboard/platinum-wall", headers=auth(rga))).json()
+    assert "AG_UNK" not in [a["agent_id"] for a in wall["vets"]]
+    assert "AG_UNK" not in [a["agent_id"] for a in wall["rookies"]]
+
+
 # ---------------- POST /api/admin/set-tenure ----------------
 
 async def test_set_tenure_unknown_agent_404(client, seeded_db):

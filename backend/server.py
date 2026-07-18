@@ -565,19 +565,26 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent))
         agent = await db.agent_profiles.find_one({"agent_id": r["_id"]}, {"_id": 0})
         if not agent:
             continue
+        # Tenure must be explicitly recorded to appear on the wall. A missing
+        # is_rookie field means UNKNOWN — not veteran — so unrecorded agents are
+        # excluded from both buckets (shown as "Tenure unknown" in the Admin
+        # panel) until leadership sets it, rather than defaulting into VETS.
+        tenure = agent.get("is_rookie")
+        if tenure is None:
+            continue
         item = {
             "agent_id": agent["agent_id"],
             "name": agent["name"],
             "office": agent["office"],
             "gross_alp": float(r["gross_alp"]),
             "sales": int(r["sales"]),
-            "is_rookie": bool(agent.get("is_rookie")),
+            "is_rookie": bool(tenure),
             "role": agent.get("role", ""),
             "io_role": agent.get("io_role", ""),
             "phone": agent.get("phone", ""),
             "email": agent.get("email", ""),
         }
-        if agent.get("is_rookie"):
+        if tenure:
             if len(rookies) < 3:
                 rookies.append(item)
         else:
