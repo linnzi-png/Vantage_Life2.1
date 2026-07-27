@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import asyncio
 import logging
 import re
 import uuid
@@ -35,6 +36,14 @@ app = FastAPI(title="VantageLife 2.0 API")
 api_router = APIRouter(prefix="/api")
 
 DETROIT_TZ = pytz.timezone("America/Detroit")
+# Self-service correction window: an agent may submit/adjust their own numbers
+# for up to 3 sales days back. Past that, only an upline (MGA/RGA, level_3+)
+# can correct it — see can_enter_for() and /api/manager/erase.
+MAX_SELF_BUFFER_DAYS = 3
+# When an MGA/RGA is entering on a downline agent's behalf (target_agent_id
+# set, per can_enter_for), the same buffered-flush cap the app already used
+# for everyone (unchanged from the original 7-day window).
+MAX_UPLINE_BUFFER_DAYS = 7
 _SEED_OFFICES = ["MCM", "AMP", "Dearborn", "Heritage", "Siren"]  # used only for demo seed data
 # Display titles for the four RBAC tiers (producer track). Internal role
 # keys and access rules are unchanged — titles are display-only. Partner /
@@ -95,7 +104,7 @@ def gate_state(dt_local: Optional[datetime] = None) -> Dict[str, Any]:
     if 21 <= h < 24:
         return {"state": "warning", "message": "9:00 PM Deadline Passed. Log your numbers now to avoid leadership escalation.", "color": "yellow"}
     if 0 <= h < 6:
-        return {"state": "midnight_miracle", "message": "Midnight Miracle window — entries open until 6:00 AM.", "color": "yellow"}
+        return {"state": "midnight_cutoff", "message": "Midnight Cutoff Approaching — submit your numbers now.", "color": "yellow"}
     if h == 6 and dt_local.minute < 1:
         return {"state": "open", "message": "Pulse window open.", "color": "green"}
     return {"state": "open", "message": "Pulse window open.", "color": "green"}
@@ -138,7 +147,8 @@ class PulseIn(BaseModel):
     vet_sales: int = 0
     gross_alp: float = 0.0
     market: Optional[str] = None  # selectable office override
-    sales_day: Optional[str] = None  # buffered flush only — YYYY-MM-DD; must be within last 7 days
+    sales_day: Optional[str] = None  # buffered flush only — YYYY-MM-DD; see MAX_SELF_BUFFER_DAYS / MAX_UPLINE_BUFFER_DAYS
+    target_agent_id: Optional[str] = None  # set only when an MGA/RGA is entering on behalf of a downline agent
 
 
 class EraseIn(BaseModel):
@@ -420,17 +430,11 @@ async def delete_account(response: Response, user: Dict[str, Any] = Depends(get_
 #                  HIERARCHY & FILTERING
 # =========================================================
 
-async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
-    """Return list of agent_ids visible to this user, or None for full access (level_4)."""
-    role = user.get("role", "level_1")
-    if role == "level_4":
-        return None  # full agency
-    agent_id = user.get("agent_id")
-    if not agent_id:
-        return []
-    if role == "level_1":
-        return [agent_id]
-    # Build downline via BFS over upline_id
+async def downline_agent_ids(agent_id: str) -> List[str]:
+    """BFS over agent_profiles.upline_id. Includes agent_id itself plus every
+    agent reachable downline from it. Shared by visible_agent_ids (read access,
+    level_2+) and can_enter_for (write access, level_3+) so both walk the exact
+    same hierarchy definition."""
     visible = {agent_id}
     queue = [agent_id]
     while queue:
@@ -443,6 +447,38 @@ async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
                 visible.add(aid)
                 queue.append(aid)
     return list(visible)
+
+
+async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
+    """Return list of agent_ids visible to this user, or None for full access (level_4)."""
+    role = user.get("role", "level_1")
+    if role == "level_4":
+        return None  # full agency
+    agent_id = user.get("agent_id")
+    if not agent_id:
+        return []
+    if role == "level_1":
+        return [agent_id]
+    return await downline_agent_ids(agent_id)
+
+
+async def can_enter_for(user: Dict[str, Any], target_agent_id: str) -> bool:
+    """Nightly Numbers entry permission (distinct from read-visibility above).
+    Entry starts one tier higher than viewing: only level_3+ (MGA/RGA) may
+    submit on someone else's behalf, and only for their own downline — never
+    for a sibling branch or a peer at the same level. Everyone may always
+    enter for themselves."""
+    own_agent_id = user.get("agent_id")
+    if target_agent_id == own_agent_id:
+        return True
+    role = user.get("role", "level_1")
+    if role not in ("level_3", "level_4"):
+        return False
+    if not own_agent_id:
+        return False
+    if role == "level_4":
+        return True  # full agency, same as visible_agent_ids
+    return target_agent_id in await downline_agent_ids(own_agent_id)
 
 
 # =========================================================
@@ -639,11 +675,18 @@ async def dashboard_offices(sales_day: Optional[str] = None, user: Dict[str, Any
 async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_agent)):
     if not user.get("agent_id"):
         raise HTTPException(status_code=400, detail="No linked agent profile")
-    agent = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
+
+    target_agent_id = payload.target_agent_id or user["agent_id"]
+    is_proxy_entry = target_agent_id != user["agent_id"]
+    if is_proxy_entry and not await can_enter_for(user, target_agent_id):
+        raise HTTPException(status_code=403, detail="You can only enter numbers for your own downline")
+
+    agent = await db.agent_profiles.find_one({"agent_id": target_agent_id}, {"_id": 0})
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
     now_local = now_detroit()
+    max_buffer_days = MAX_UPLINE_BUFFER_DAYS if is_proxy_entry else MAX_SELF_BUFFER_DAYS
     if payload.sales_day:
         # Buffered flush: validate the client-supplied sales_day
         try:
@@ -654,15 +697,17 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
         delta = (today_date - requested).days
         if delta < 0:
             raise HTTPException(status_code=400, detail="sales_day cannot be in the future")
-        if delta > 7:
-            raise HTTPException(status_code=400, detail="Buffered pulse expired — sales_day is more than 7 days old")
+        if delta > max_buffer_days:
+            if is_proxy_entry:
+                raise HTTPException(status_code=400, detail=f"Buffered pulse expired — sales_day is more than {max_buffer_days} days old")
+            raise HTTPException(status_code=400, detail=f"That day is outside your {max_buffer_days}-day self-edit window — ask your upline to enter this correction")
         sd = payload.sales_day
     else:
         sd = current_sales_day_str()
 
     entry = {
         "entry_id": f"pe_{uuid.uuid4().hex[:12]}",
-        "agent_id": user["agent_id"],
+        "agent_id": target_agent_id,
         "office": agent["office"],
         "sales_day": sd,
         "sets": payload.sets,
@@ -681,7 +726,14 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
         "gross_alp": payload.gross_alp,
         "net_alp": payload.gross_alp,  # net == gross until eraser modifies
         "submitted_at": now_utc(),
-        "submitted_on_time": now_local.hour < 21,  # before 9 PM
+        # Upline-entered data bypasses the 9 PM gate outright, per business rule.
+        "submitted_on_time": True if is_proxy_entry else now_local.hour < 21,
+        # entered_by is always derived from the authenticated session — never a
+        # manual form field the submitter fills in themselves.
+        "entered_by": user["user_id"],
+        "entered_by_name": user.get("name"),
+        "entered_by_role": user.get("role"),
+        "is_proxy_entry": is_proxy_entry,
     }
     await db.production_entries.insert_one(entry)
     entry.pop("_id", None)
@@ -701,30 +753,229 @@ def _ser_entry(e: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @api_router.get("/pulse/me/today")
-async def pulse_me_today(user: Dict[str, Any] = Depends(require_agent)):
+async def pulse_me_today(agent_id: Optional[str] = None, user: Dict[str, Any] = Depends(require_agent)):
     if not user.get("agent_id"):
         return {"entries": [], "totals": {}, "gate": gate_state()}
+    target_agent_id = agent_id or user["agent_id"]
+    if target_agent_id != user["agent_id"] and not await can_enter_for(user, target_agent_id):
+        raise HTTPException(status_code=403, detail="You can only view entry totals for your own downline")
     sd = current_sales_day_str()
-    cur = db.production_entries.find({"agent_id": user["agent_id"], "sales_day": sd}, {"_id": 0}).sort("submitted_at", -1)
+    cur = db.production_entries.find({"agent_id": target_agent_id, "sales_day": sd}, {"_id": 0}).sort("submitted_at", -1)
     entries = [_ser_entry(e) async for e in cur]
-    agg = await aggregate_alp({"agent_id": user["agent_id"], "sales_day": sd})
+    agg = await aggregate_alp({"agent_id": target_agent_id, "sales_day": sd})
     return {"entries": entries, "totals": agg, "gate": gate_state(), "sales_day": sd}
 
 
 @api_router.get("/pulse/me/streak")
-async def pulse_streak(user: Dict[str, Any] = Depends(require_agent)):
+async def pulse_streak(agent_id: Optional[str] = None, user: Dict[str, Any] = Depends(require_agent)):
     if not user.get("agent_id"):
         return {"streak": 0}
+    target_agent_id = agent_id or user["agent_id"]
+    if target_agent_id != user["agent_id"] and not await can_enter_for(user, target_agent_id):
+        raise HTTPException(status_code=403, detail="You can only view streak for your own downline")
     streak = 0
     d = now_detroit()
     for i in range(0, 30):
         sd = sales_day_for(d - timedelta(days=i))
-        on_time = await db.production_entries.find_one({"agent_id": user["agent_id"], "sales_day": sd, "submitted_on_time": True})
+        on_time = await db.production_entries.find_one({"agent_id": target_agent_id, "sales_day": sd, "submitted_on_time": True})
         if on_time:
             streak += 1
         else:
             break
     return {"streak": streak}
+
+
+# =========================================================
+#              PUSH NOTIFICATIONS — 9 PM ESCALATION
+# =========================================================
+# Escalation ladder, exact wording and timing per owner spec (2026-07-26).
+# "Everybody but MGA/RGA" per the earlier instruction: only level_1/level_2
+# agents are checked for their OWN missing pulse — an MGA/RGA never gets
+# escalated on themselves, though they DO appear as reach targets when their
+# downline is missing (see ancestor_reach below).
+#
+# ancestor_reach is how many steps up the agent's own upline_id chain get
+# notified alongside them at that stage; None means "every remaining
+# ancestor" (the 11:30 PM full-chain stage). The table's example used SA/GA/
+# MGA as the first three ancestors, which is simply "walk upline_id from the
+# agent" — that generalizes correctly even for agents with no SA in their
+# personal chain (e.g. reporting straight to a GA).
+ESCALATION_STAGES = [
+    {"hour": 21, "minute": 0,  "stage": "reminder",    "ancestor_reach": 0,    "message": "Don't forget to log your numbers - even if you had no sales today."},
+    {"hour": 21, "minute": 30, "stage": "overdue",     "ancestor_reach": 1,    "message": "Your 9 PM pulse is late. Submit now to keep your streak."},
+    {"hour": 22, "minute": 0,  "stage": "escalated",   "ancestor_reach": 2,    "message": "Pulse not in. Your GA is being notified - submit now."},
+    {"hour": 22, "minute": 30, "stage": "final_warn",  "ancestor_reach": 3,    "message": "Pulse not in. Your MGA is being notified. Log your numbers immediately."},
+    {"hour": 23, "minute": 0,  "stage": "last_call",   "ancestor_reach": 3,    "message": "Pulse must be submitted before midnight. Leadership has been notified."},
+    {"hour": 23, "minute": 30, "stage": "window_closing", "ancestor_reach": None, "message": "Final call! Submit your numbers now, final cutoff in 30 minutes."},
+]
+# How long after the exact mark a stage is still eligible to fire — covers a
+# scheduler tick that lands a little late. notification_log's unique index is
+# the real guard against duplicates; this window just bounds how late is
+# still "on time" for a stage instead of silently skipping it forever.
+STAGE_FIRE_WINDOW_MINUTES = 5
+
+
+class PushTokenIn(BaseModel):
+    push_token: str
+
+
+@api_router.post("/push/register")
+async def register_push_token(payload: PushTokenIn, user: Dict[str, Any] = Depends(require_agent)):
+    """Upsert this device's Expo push token against the logged-in user. One
+    token per user_id for now — a second device overwrites the first."""
+    await db.push_tokens.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"user_id": user["user_id"], "agent_id": user.get("agent_id"),
+                  "push_token": payload.push_token, "updated_at": now_utc()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.post("/push/unregister")
+async def unregister_push_token(user: Dict[str, Any] = Depends(require_agent)):
+    await db.push_tokens.delete_one({"user_id": user["user_id"]})
+    return {"ok": True}
+
+
+async def _ancestor_chain(agent_id: str) -> List[str]:
+    """Walk upline_id from agent_id up to the root. Does not include agent_id itself."""
+    chain: List[str] = []
+    current = agent_id
+    seen = {agent_id}
+    for _ in range(10):  # hierarchy is 4 tiers deep; 10 is a generous safety cap
+        doc = await db.agent_profiles.find_one({"agent_id": current}, {"_id": 0, "upline_id": 1})
+        if not doc or not doc.get("upline_id") or doc["upline_id"] in seen:
+            break
+        chain.append(doc["upline_id"])
+        seen.add(doc["upline_id"])
+        current = doc["upline_id"]
+    return chain
+
+
+async def send_expo_push(push_tokens: List[str], title: str, body: str) -> None:
+    """Send via Expo's push HTTP API. No credentials needed for the standard
+    managed workflow — just valid ExponentPushToken[...] strings."""
+    if not push_tokens:
+        return
+    messages = [{"to": t, "title": title, "body": body, "sound": "default"} for t in push_tokens]
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client_http:
+            await client_http.post(
+                "https://exp.host/--/api/v2/push/send",
+                json=messages,
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+            )
+    except Exception as e:
+        logger.warning(f"Expo push send failed: {e}")
+
+
+def _current_escalation_stage(dt_local: datetime) -> Optional[Dict[str, Any]]:
+    for stage in ESCALATION_STAGES:
+        mark = dt_local.replace(hour=stage["hour"], minute=stage["minute"], second=0, microsecond=0)
+        delta_minutes = (dt_local - mark).total_seconds() / 60
+        if 0 <= delta_minutes < STAGE_FIRE_WINDOW_MINUTES:
+            return stage
+    return None
+
+
+def _format_upline_summary(missing_names):
+    """Consolidated roll-call — ONE message per upline recipient naming every
+    missing person under them, never one push per missing agent."""
+    if len(missing_names) == 1:
+        return f"{missing_names[0]} has not submitted numbers."
+    return f"The following have not submitted numbers: {', '.join(missing_names)}."
+
+
+async def _already_logged(agent_id, sales_day, log_stage):
+    existing = await db.notification_log.find_one(
+        {"agent_id": agent_id, "sales_day": sales_day, "stage": log_stage}, {"_id": 0, "agent_id": 1},
+    )
+    return existing is not None
+
+
+async def _log_and_check(agent_id, sales_day, log_stage):
+    """Returns True if this is a fresh send (not previously logged)."""
+    if await _already_logged(agent_id, sales_day, log_stage):
+        return False
+    try:
+        await db.notification_log.insert_one({
+            "agent_id": agent_id, "sales_day": sales_day, "stage": log_stage, "sent_at": now_utc(),
+        })
+    except Exception:
+        return False  # race: another tick logged it between our check and insert
+    return True
+
+
+async def run_pulse_escalation_check():
+    """Idempotent per (agent_id, sales_day, log_stage) -- safe to call more than
+    once. Checks only level_1/level_2 agents against today's production_entries
+    ('everybody but MGA/RGA' rule).
+
+    Two distinct message types per stage:
+    - The missing agent gets their own personal reminder -- the exact stage
+      wording, sent to them alone.
+    - Each in-reach upline gets ONE consolidated roll-call push naming every
+      missing person in their downline that stage reaches -- never one push
+      per missing agent. MGA/RGA are excluded from this entirely until the
+      final (11:30 PM) stage, where the full remaining chain is included.
+    """
+    now_local = now_detroit()
+    stage = _current_escalation_stage(now_local)
+    if not stage:
+        return {"ok": True, "stage": None, "agent_notified": 0, "upline_notified": 0}
+
+    today = current_sales_day_str()
+    submitted_ids = {
+        d["agent_id"] async for d in db.production_entries.find({"sales_day": today}, {"_id": 0, "agent_id": 1})
+    }
+    candidates = [
+        a async for a in db.agent_profiles.find({"role": {"$in": ["level_1", "level_2"]}}, {"_id": 0, "agent_id": 1, "name": 1})
+        if a["agent_id"] not in submitted_ids
+    ]
+    roles_by_id = {
+        a["agent_id"]: a["role"] async for a in db.agent_profiles.find({}, {"_id": 0, "agent_id": 1, "role": 1})
+    }
+
+    # Personal reminder -- agent only, exact stage wording.
+    agent_notified = 0
+    for a in candidates:
+        agent_id = a["agent_id"]
+        if not await _log_and_check(agent_id, today, stage["stage"]):
+            continue
+        tokens = [t["push_token"] async for t in db.push_tokens.find({"agent_id": agent_id}, {"_id": 0, "push_token": 1})]
+        await send_expo_push(tokens, "VantageLife", stage["message"])
+        agent_notified += 1
+
+    # Consolidated upline roll-call -- one push per upline recipient, naming
+    # every missing downline agent this stage reaches for them.
+    is_final_stage = stage["ancestor_reach"] is None
+    upline_missing = {}
+    for a in candidates:
+        chain = await _ancestor_chain(a["agent_id"])
+        sliced = chain if is_final_stage else chain[: stage["ancestor_reach"]]
+        if not is_final_stage:
+            sliced = [aid for aid in sliced if roles_by_id.get(aid) not in ("level_3", "level_4")]
+        for upline_id in sliced:
+            upline_missing.setdefault(upline_id, []).append(a["name"])
+
+    upline_notified = 0
+    upline_log_stage = f"{stage['stage']}_upline"
+    for upline_id, missing_names in upline_missing.items():
+        if not await _log_and_check(upline_id, today, upline_log_stage):
+            continue
+        tokens = [t["push_token"] async for t in db.push_tokens.find({"agent_id": upline_id}, {"_id": 0, "push_token": 1})]
+        await send_expo_push(tokens, "VantageLife", _format_upline_summary(missing_names))
+        upline_notified += 1
+
+    return {"ok": True, "stage": stage["stage"], "agent_notified": agent_notified, "upline_notified": upline_notified}
+
+
+@api_router.post("/admin/run-notification-check")
+async def admin_run_notification_check(user: Dict[str, Any] = Depends(require_admin)):
+    """Manual trigger for QA -- fires the check immediately regardless of the
+    scheduler loop's timing, still gated by the same idempotent log."""
+    return await run_pulse_escalation_check()
 
 
 # =========================================================
@@ -1084,7 +1335,11 @@ async def post_nomination_to_wall(nomination_id: str, user: Dict[str, Any] = Dep
 # =========================================================
 
 @api_router.post("/manager/erase")
-async def manager_erase(payload: EraseIn, user: Dict[str, Any] = Depends(require_level(4))):
+async def manager_erase(payload: EraseIn, user: Dict[str, Any] = Depends(require_level(3))):
+    # Same downline scoping as entry (can_enter_for): an MGA may only correct
+    # their own downline; RGA (level_4) has full agency, same as visible_agent_ids.
+    if not await can_enter_for(user, payload.agent_id):
+        raise HTTPException(status_code=403, detail="You can only correct numbers for your own downline")
     if len(payload.reason.strip()) < 10:
         raise HTTPException(status_code=400, detail="Reason must be at least 10 characters")
     agent = await db.agent_profiles.find_one({"agent_id": payload.agent_id}, {"_id": 0})
@@ -1462,11 +1717,20 @@ class AdminAddPersonIn(BaseModel):
     # form can surface (a bare 422 detail is a list, which the frontend api()
     # helper can't render). Tenure is never defaulted or inferred.
     is_rookie: Optional[bool] = None
+    # Resident state — two-letter code (e.g. "MI"), for the WAR-sheet-parity
+    # backup export's RESIDENT STATE column. Optional: not every legacy agent
+    # has this recorded yet; use /admin/set-state to fill it in later.
+    state: Optional[str] = None
 
 
 class AdminSetTenureIn(BaseModel):
     agent_id: str
     is_rookie: bool  # True = Rookie, False = Veteran; required — always an explicit choice
+
+
+class AdminSetStateIn(BaseModel):
+    agent_id: str
+    state: str  # two-letter resident state code, e.g. "MI"
 
 
 class AdminSetFlagsIn(BaseModel):
@@ -1484,7 +1748,8 @@ async def admin_people(user: Dict[str, Any] = Depends(require_admin)):
     """Full roster with login-link status and permission flags, for the Admin screen."""
     agents = [a async for a in db.agent_profiles.find(
         {}, {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "phone": 1,
-             "office": 1, "role": 1, "io_role": 1, "upline_id": 1, "is_rookie": 1},
+             "office": 1, "role": 1, "io_role": 1, "upline_id": 1, "is_rookie": 1,
+             "state": 1},
     ).sort("name", 1)]
     flags_by_email: Dict[str, Dict[str, Any]] = {}
     async for u in db.users.find({}, {"_id": 0, "email": 1, "is_admin": 1, "can_switch_role": 1}):
@@ -1553,6 +1818,8 @@ async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Dep
     }
     if payload.io_role:
         profile["io_role"] = payload.io_role.strip()
+    if payload.state:
+        profile["state"] = payload.state.strip().upper()
     await db.agent_profiles.insert_one(profile)
     profile.pop("_id", None)
     # If they signed in before being rostered they hold a "pending" users doc — link it now.
@@ -1597,6 +1864,35 @@ async def admin_set_tenure(payload: AdminSetTenureIn, user: Dict[str, Any] = Dep
         "new_value": payload.is_rookie,
     })
     return {"ok": True, "agent_id": payload.agent_id, "is_rookie": payload.is_rookie}
+
+
+@api_router.post("/admin/set-state")
+async def admin_set_state(payload: AdminSetStateIn, user: Dict[str, Any] = Depends(require_admin)):
+    """Set resident state on an existing agent. Same resolution-path shape as
+    /admin/set-tenure — for legacy agents rostered before the state field
+    existed, and needed for the WAR-sheet-parity backup export."""
+    agent = await db.agent_profiles.find_one({"agent_id": payload.agent_id}, {"_id": 0})
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    state = payload.state.strip().upper()
+    if len(state) != 2:
+        raise HTTPException(status_code=400, detail="State must be a two-letter code, e.g. 'MI'")
+    await db.agent_profiles.update_one(
+        {"agent_id": payload.agent_id},
+        {"$set": {"state": state, "updated_at": now_utc()}},
+    )
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now_utc(),
+        "action": "set_state",
+        "agent_id": payload.agent_id,
+        "agent_name": agent.get("name"),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "original_value": agent.get("state"),
+        "new_value": state,
+    })
+    return {"ok": True, "agent_id": payload.agent_id, "state": state}
 
 
 @api_router.post("/admin/set-flags")
@@ -1669,6 +1965,11 @@ async def on_startup():
     await db.agent_profiles.create_index("office")
     await db.production_entries.create_index([("agent_id", 1), ("sales_day", 1)])
     await db.production_entries.create_index("submitted_at")
+    await db.push_tokens.create_index("user_id", unique=True)
+    # Idempotency guard for the escalation scheduler: a duplicate-key error on
+    # this index is exactly how run_pulse_escalation_check() detects "already
+    # sent this stage today" and skips re-notifying.
+    await db.notification_log.create_index([("agent_id", 1), ("sales_day", 1), ("stage", 1)], unique=True)
     # Auto-seed on first run
     count = await db.agent_profiles.count_documents({})
     if count == 0:
@@ -1677,6 +1978,19 @@ async def on_startup():
             logger.info("Auto-seeded mock data on first run.")
         except Exception as e:
             logger.error(f"Auto-seed failed: {e}")
+    app.state.escalation_task = asyncio.create_task(_escalation_loop())
+
+
+async def _escalation_loop():
+    """Ticks once a minute so each of the six 30-minute stages gets caught
+    inside its STAGE_FIRE_WINDOW_MINUTES window; the notification_log unique
+    index (not this loop's timing) is what actually prevents double-sends."""
+    while True:
+        try:
+            await run_pulse_escalation_check()
+        except Exception as e:
+            logger.error(f"Escalation check failed: {e}")
+        await asyncio.sleep(60)
 
 
 async def _bootstrap_seed():
@@ -1690,4 +2004,7 @@ async def _bootstrap_seed():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    task = getattr(app.state, "escalation_task", None)
+    if task:
+        task.cancel()
     client.close()

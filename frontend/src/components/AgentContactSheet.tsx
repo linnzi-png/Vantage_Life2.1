@@ -18,6 +18,10 @@ export interface AgentContact {
 interface Props {
   agent: AgentContact | null;
   onClose: () => void;
+  // Present only for MGA/RGA viewing a downline agent — opens the quick-entry
+  // form for that agent. Omitted entirely (no button rendered) for everyone
+  // else, since entry permission starts one tier above viewing.
+  onEnterNumbers?: () => void;
 }
 
 export function formatPhone(raw: string | undefined | null): string {
@@ -34,7 +38,7 @@ function openLink(url: string, errorMessage: string) {
   });
 }
 
-export function AgentContactSheet({ agent, onClose }: Props) {
+export function AgentContactSheet({ agent, onClose, onEnterNumbers }: Props) {
   if (!agent) return null;
 
   const label = roleTitle(agent.io_role, agent.role) || agent.role.replace('level_', 'L');
@@ -122,6 +126,24 @@ export function AgentContactSheet({ agent, onClose }: Props) {
             </View>
           </View>
         )}
+
+        {onEnterNumbers ? (
+          <TouchableOpacity
+            style={[styles.contactRow, styles.enterNumbersRow]}
+            onPress={onEnterNumbers}
+            activeOpacity={0.7}
+            testID="enter-numbers-row"
+          >
+            <View style={styles.iconWrap}>
+              <Ionicons name="create" size={18} color={COLORS.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.contactLabel}>NIGHTLY NUMBERS</Text>
+              <Text style={styles.contactValue}>Enter numbers for {agent.name.split(' ')[0]}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
+          </TouchableOpacity>
+        ) : null}
 
         <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
           <Text style={styles.closeTxt}>CLOSE</Text>
@@ -225,6 +247,11 @@ const styles = StyleSheet.create({
   },
   contactRowMissing: {
     opacity: 0.55,
+  },
+  enterNumbersRow: {
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+    marginTop: 4,
   },
   contactMissing: {
     color: COLORS.textMuted,
