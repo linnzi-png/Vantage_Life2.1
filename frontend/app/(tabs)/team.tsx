@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
+import { QuickEntryForm, QuickEntryTarget } from '../../src/components/QuickEntryForm';
 import { SearchBar } from '../../src/components/SearchBar';
 
 interface TeamRow {
@@ -29,6 +30,8 @@ export default function TeamScreen() {
   const [selected, setSelected] = useState<TeamRow | null>(null);
   const [uplineOpen, setUplineOpen] = useState(false);
   const [readyNoms, setReadyNoms] = useState(0);
+  const [quickEntryTarget, setQuickEntryTarget] = useState<QuickEntryTarget | null>(null);
+  const [missingQueue, setMissingQueue] = useState<TeamRow[]>([]); // remaining "no_pulse" agents queued for auto-advance
 
   const fetchAll = async () => {
     try {
@@ -47,6 +50,35 @@ export default function TeamScreen() {
   const [query, setQuery] = useState('');
   const sorted = [...rows].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
   const q = query.trim().toLowerCase();
+  // Entry permission starts one tier above viewing — only MGA/RGA (level 3+)
+  // may enter Nightly Numbers on a teammate's behalf, matching can_enter_for
+  // on the backend.
+  const canEnter = levelNum(user?.role) >= 3;
+  const missingTonight = rows.filter((r) => r.alerts?.includes('no_pulse'));
+
+  const openQuickEntry = (row: TeamRow) => {
+    setSelected(null);
+    setQuickEntryTarget({ agent_id: row.agent_id, name: row.name });
+  };
+
+  const startMissingQueue = () => {
+    if (missingTonight.length === 0) return;
+    setMissingQueue(missingTonight.slice(1));
+    setQuickEntryTarget({ agent_id: missingTonight[0].agent_id, name: missingTonight[0].name });
+  };
+
+  const advanceQueue = async () => {
+    await fetchAll();
+    setMissingQueue((q) => {
+      if (q.length === 0) {
+        setQuickEntryTarget(null);
+        return q;
+      }
+      const [next, ...rest] = q;
+      setQuickEntryTarget({ agent_id: next.agent_id, name: next.name });
+      return rest;
+    });
+  };
   const visible = q
     ? sorted.filter((r) => `${r.name} ${r.office} ${roleTitle(r.io_role, r.role)}`.toLowerCase().includes(q))
     : sorted;
@@ -117,6 +149,27 @@ export default function TeamScreen() {
         </TouchableOpacity>
       ) : null}
 
+      {canEnter && missingTonight.length > 0 ? (
+        <TouchableOpacity
+          style={styles.missingCard}
+          onPress={startMissingQueue}
+          activeOpacity={0.75}
+          testID="missing-tonight-card"
+        >
+          <View style={styles.iconWrapMissing}>
+            <Ionicons name="alert" size={16} color={COLORS.yellow} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.missingKicker}>MISSING TONIGHT · {missingTonight.length}</Text>
+            <Text style={styles.missingNames} numberOfLines={1}>
+              {missingTonight.slice(0, 3).map((r) => r.name).join(', ')}{missingTonight.length > 3 ? `, +${missingTonight.length - 3} more` : ''}
+            </Text>
+          </View>
+          <Text style={styles.missingAction}>ENTER ALL</Text>
+          <Ionicons name="chevron-forward" size={14} color={COLORS.textDim} />
+        </TouchableOpacity>
+      ) : null}
+
       <View style={styles.sortBar}>
         {sortBtn('gross_alp', 'Gross ALP')}
         {sortBtn('net_alp', 'Net ALP')}
@@ -170,8 +223,22 @@ export default function TeamScreen() {
         ))}
       </ScrollView>
 
-      <AgentContactSheet agent={selected} onClose={() => setSelected(null)} />
-      <AgentContactSheet agent={uplineOpen ? upline : null} onClose={() => setUplineOpen(false)} />
+      <AgentContactSheet
+        agent={selected}
+        onClose={() => setSelected(null)}
+        onEnterNumbers={canEnter && selected ? () => openQuickEntry(selected) : undefined}
+      />
+      <AgentContactSheet
+        agent={uplineOpen ? upline : null}
+        onClose={() => setUplineOpen(false)}
+      />
+      <QuickEntryForm
+        target={quickEntryTarget}
+        onClose={() => { setQuickEntryTarget(null); setMissingQueue([]); }}
+        onSubmitted={advanceQueue}
+        hasNext={missingQueue.length > 0}
+        onNext={advanceQueue}
+      />
     </SafeAreaView>
   );
 }
@@ -207,6 +274,17 @@ const styles = StyleSheet.create({
   },
   uplineKicker:  { color: COLORS.primary, fontSize: 9, fontWeight: '900', letterSpacing: 1.8, marginBottom: 2 },
   uplineName:    { color: '#fff', fontWeight: '800', fontSize: 14 },
+  missingCard:   {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginHorizontal: 16, marginBottom: 8,
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: COLORS.yellow,
+    padding: 12, borderRadius: 6,
+  },
+  iconWrapMissing: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.surface2, alignItems: 'center', justifyContent: 'center' },
+  missingKicker: { color: COLORS.yellow, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
+  missingNames:  { color: COLORS.textDim, fontSize: 12, marginTop: 2 },
+  missingAction: { color: COLORS.yellow, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
   nomBtn:        {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     borderWidth: 1, borderColor: '#E5E4E2', borderRadius: 5,

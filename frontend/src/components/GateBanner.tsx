@@ -1,5 +1,5 @@
 // Gate banners driven by backend gate_state(): "warning" (9 PM–midnight) and
-// "midnight_miracle" (12 AM–6 AM) render; "open" renders nothing.
+// "midnight_cutoff" (12 AM–6 AM) render; "open" renders nothing.
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
