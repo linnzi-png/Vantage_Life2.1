@@ -1,6 +1,7 @@
 // Shared API helper + auth context for VantageLife 2.0
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { registerForPulseNotifications } from './push';
 
 const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const SESSION_KEY = 'vl_session_token';
@@ -99,6 +100,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { reload(); }, []);
 
+  // Register for the 9 PM escalation notifications once there's a real,
+  // linked agent — no point asking for permission on a "pending" account
+  // that can't submit numbers yet anyway.
+  useEffect(() => {
+    if (user?.agent_id) registerForPulseNotifications();
+  }, [user?.agent_id]);
+
   const signInDemo = async (level: Role) => {
     setLoading(true);
     const r = await api<{ user: AppUser; session_token: string; role_label: string }>('/api/auth/demo-login', {
@@ -134,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    try { await api('/api/push/unregister', { method: 'POST' }); } catch {}
     try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
     await setToken(null);
     setUser(null); setAgent(null); setRoleLabel('');
