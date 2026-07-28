@@ -43,16 +43,20 @@ export default function LoginScreen() {
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
+      if (!credential.identityToken) {
+        throw new Error('Apple did not return an identity token. Please try again.');
+      }
       await signInApple(
-        credential.identityToken!,
+        credential.identityToken,
         credential.fullName?.givenName ?? null,
         credential.fullName?.familyName ?? null,
       );
       router.replace('/');
-    } catch (e: any) {
-      if (e.code !== 'ERR_REQUEST_CANCELED') {
-        alert(`Apple Sign-In failed: ${e.message || e}`);
-      }
+    } catch (e: unknown) {
+      const err = e as { code?: string; message?: string };
+      // User dismissed the Apple sheet — not an error, stay silent.
+      if (err.code === 'ERR_REQUEST_CANCELED' || err.code === 'ERR_CANCELED') return;
+      alert(`Apple Sign-In failed: ${err.message || 'Unknown error'}. Please check your connection and try again.`);
     } finally {
       setBusy(null);
     }
