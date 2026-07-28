@@ -71,10 +71,28 @@ async def test_mga_can_enter_for_downline_agent(client, seeded_db):
     assert entry["submitted_on_time"] is True  # bypasses the 9 PM gate
 
 
-async def test_ga_cannot_enter_for_downline_agent(client, seeded_db):
-    # GA is level_2 — entry starts at level_3, one tier above viewing.
+async def test_ga_can_enter_for_downline_agent(client, seeded_db):
+    # GA/SA is level_2 — entry starts at level_2, same tier as viewing
+    # (per owner 2026-07-28).
     token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
     r = await client.post("/api/pulse", json={**FULL_PULSE, "target_agent_id": "AG_1"}, headers=auth(token))
+    assert r.status_code == 200, r.text
+    entry = await seeded_db.production_entries.find_one({"agent_id": "AG_1"}, {"_id": 0})
+    assert entry["is_proxy_entry"] is True
+    assert entry["entered_by_role"] == "level_2"
+
+
+async def test_agent_cannot_enter_for_another_agent(client, seeded_db):
+    # level_1 may only ever enter for themselves.
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    r = await client.post("/api/pulse", json={**FULL_PULSE, "target_agent_id": "AG_2"}, headers=auth(token))
+    assert r.status_code == 403
+
+
+async def test_ga_cannot_enter_outside_own_downline(client, seeded_db):
+    # GA_1's downline does not include AG_2 (sibling branch under GA_2).
+    token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    r = await client.post("/api/pulse", json={**FULL_PULSE, "target_agent_id": "AG_2"}, headers=auth(token))
     assert r.status_code == 403
 
 
@@ -121,9 +139,17 @@ async def test_mga_can_view_downline_today_totals(client, seeded_db):
     assert r.json()["totals"]["sales"] == FULL_PULSE["sales"]
 
 
-async def test_ga_cannot_view_downline_today_totals_via_agent_id(client, seeded_db):
+async def test_ga_can_view_downline_today_totals_via_agent_id(client, seeded_db):
+    # Follows entry permission: level_2 can proxy-enter for AG_1, so they can
+    # also see AG_1's entry totals in the Quick Entry flow.
     ga_tok = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
     r = await client.get("/api/pulse/me/today?agent_id=AG_1", headers=auth(ga_tok))
+    assert r.status_code == 200
+
+
+async def test_ga_cannot_view_totals_outside_downline(client, seeded_db):
+    ga_tok = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    r = await client.get("/api/pulse/me/today?agent_id=AG_2", headers=auth(ga_tok))
     assert r.status_code == 403
 
 

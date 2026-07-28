@@ -40,7 +40,7 @@ DETROIT_TZ = pytz.timezone("America/Detroit")
 # for up to 3 sales days back. Past that, only an upline (MGA/RGA, level_3+)
 # can correct it — see can_enter_for() and /api/manager/erase.
 MAX_SELF_BUFFER_DAYS = 3
-# When an MGA/RGA is entering on a downline agent's behalf (target_agent_id
+# When an upline is entering on a downline agent's behalf (target_agent_id
 # set, per can_enter_for), the same buffered-flush cap the app already used
 # for everyone (unchanged from the original 7-day window).
 MAX_UPLINE_BUFFER_DAYS = 7
@@ -433,7 +433,7 @@ async def delete_account(response: Response, user: Dict[str, Any] = Depends(get_
 async def downline_agent_ids(agent_id: str) -> List[str]:
     """BFS over agent_profiles.upline_id. Includes agent_id itself plus every
     agent reachable downline from it. Shared by visible_agent_ids (read access,
-    level_2+) and can_enter_for (write access, level_3+) so both walk the exact
+    level_2+) and can_enter_for (write access, level_2+) so both walk the exact
     same hierarchy definition."""
     visible = {agent_id}
     queue = [agent_id]
@@ -464,15 +464,15 @@ async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
 
 async def can_enter_for(user: Dict[str, Any], target_agent_id: str) -> bool:
     """Nightly Numbers entry permission (distinct from read-visibility above).
-    Entry starts one tier higher than viewing: only level_3+ (MGA/RGA) may
-    submit on someone else's behalf, and only for their own downline — never
-    for a sibling branch or a peer at the same level. Everyone may always
-    enter for themselves."""
+    Any upline (level_2+ — SA/GA, MGA, RGA) may submit on someone else's
+    behalf, and only for their own downline — never for a sibling branch or
+    a peer at the same level. Everyone may always enter for themselves.
+    (Per owner 2026-07-28: entry starts at level_2, same tier as viewing.)"""
     own_agent_id = user.get("agent_id")
     if target_agent_id == own_agent_id:
         return True
     role = user.get("role", "level_1")
-    if role not in ("level_3", "level_4"):
+    if role not in ("level_2", "level_3", "level_4"):
         return False
     if not own_agent_id:
         return False
