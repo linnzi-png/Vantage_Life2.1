@@ -50,10 +50,9 @@ export default function TeamScreen() {
   const [query, setQuery] = useState('');
   const sorted = [...rows].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
   const q = query.trim().toLowerCase();
-  // Entry permission starts one tier above viewing — only MGA/RGA (level 3+)
-  // may enter Nightly Numbers on a teammate's behalf, matching can_enter_for
-  // on the backend.
-  const canEnter = levelNum(user?.role) >= 3;
+  // Any upline (SA/GA and above, level 2+) may enter Nightly Numbers on a
+  // downline teammate's behalf, matching can_enter_for on the backend.
+  const canEnter = levelNum(user?.role) >= 2;
   const missingTonight = rows.filter((r) => r.alerts?.includes('no_pulse'));
 
   const openQuickEntry = (row: TeamRow) => {
