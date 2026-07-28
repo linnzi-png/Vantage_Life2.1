@@ -1,12 +1,25 @@
 // Condensed one-screen Nightly Numbers entry — all 14 fields at once, no
-// stepping. Built for uplines (MGA/RGA) entering on behalf of a downline
+// stepping. Built for uplines (level_2+) entering on behalf of a downline
 // agent, where speed matters more than the guided one-field-at-a-time flow
 // self-entry uses (that flow stays untouched in pulse.tsx).
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
-import { PULSE_FIELDS, PulsePayload } from '../lib/cycle';
+import { PULSE_FIELDS, PulsePayload, recentSalesDays, currentSalesDay } from '../lib/cycle';
+
+// Matches MAX_UPLINE_BUFFER_DAYS on the backend: an upline may enter for a
+// downline agent up to 7 sales days back.
+const UPLINE_WINDOW_DAYS = 7;
+
+function dayChipLabel(salesDay: string, index: number): string {
+  if (index === 0) return 'Tonight';
+  if (index === 1) return 'Yesterday';
+  // salesDay is local YYYY-MM-DD; parse as local date, not UTC.
+  const [y, m, d] = salesDay.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+}
 
 export interface QuickEntryTarget {
   agent_id: string;
@@ -44,15 +57,18 @@ function buildPayload(form: FormState): PulsePayload {
 export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext }: Props) {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [salesDay, setSalesDay] = useState<string>(currentSalesDay());
 
   if (!target) return null;
+
+  const dayOptions = recentSalesDays(UPLINE_WINDOW_DAYS);
 
   const set = (key: keyof PulsePayload, val: string) => setForm((f) => ({ ...f, [key]: val }));
 
   const submit = async () => {
     setSubmitting(true);
     try {
-      const payload = { ...buildPayload(form), target_agent_id: target.agent_id };
+      const payload = { ...buildPayload(form), target_agent_id: target.agent_id, sales_day: salesDay };
       await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
       setForm(emptyForm);
       onSubmitted(target.agent_id);
@@ -76,6 +92,22 @@ export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext }
             <TouchableOpacity onPress={onClose} testID="quick-entry-close" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="close" size={24} color={COLORS.textDim} />
             </TouchableOpacity>
+          </View>
+
+          <View style={styles.dayRowWrap}>
+            <Text style={styles.dayKicker}>SALES DAY</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayRow}>
+              {dayOptions.map((d, i) => (
+                <TouchableOpacity
+                  key={d}
+                  style={[styles.dayChip, salesDay === d && styles.dayChipActive]}
+                  onPress={() => setSalesDay(d)}
+                  testID={`quick-entry-day-${d}`}
+                >
+                  <Text style={[styles.dayChipTxt, salesDay === d && styles.dayChipTxtActive]}>{dayChipLabel(d, i)}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
 
           <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -128,6 +160,13 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   kicker: { color: COLORS.primary, fontSize: 10, fontWeight: '900', letterSpacing: 1.6 },
   name: { color: '#fff', fontSize: 18, fontWeight: '900', marginTop: 2 },
+  dayRowWrap: { paddingTop: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingBottom: 12 },
+  dayKicker: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 1.6, marginBottom: 8 },
+  dayRow: { gap: 8 },
+  dayChip: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
+  dayChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  dayChipTxt: { color: COLORS.textDim, fontSize: 12, fontWeight: '800' },
+  dayChipTxtActive: { color: '#000' },
   scroll: { padding: 16, paddingBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   label: { color: '#fff', fontSize: 13, fontWeight: '700' },

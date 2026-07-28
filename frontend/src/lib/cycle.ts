@@ -55,6 +55,33 @@ export const PULSE_FIELDS: { key: keyof PulsePayload; label: string; hint: strin
 ];
 
 /**
+ * YYYY-MM-DD of the sales day currently open. Before 6:00 AM the previous
+ * day's cycle label still applies (6 AM–5:59 AM cycle).
+ */
+export function currentSalesDay(now: Date = new Date()): string {
+  const d = new Date(now);
+  if (d.getHours() < CYCLE_OPEN_HOUR) d.setDate(d.getDate() - 1);
+  return formatLocalDate(d);
+}
+
+/**
+ * The last `count` sales days, newest first, starting from the currently
+ * open sales day. Used by the upline quick-entry day picker — the backend
+ * accepts proxy entries up to 7 sales days back (MAX_UPLINE_BUFFER_DAYS).
+ */
+export function recentSalesDays(count: number, now: Date = new Date()): string[] {
+  const base = new Date(now);
+  if (base.getHours() < CYCLE_OPEN_HOUR) base.setDate(base.getDate() - 1);
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() - i);
+    out.push(formatLocalDate(d));
+  }
+  return out;
+}
+
+/**
  * True between midnight (00:00:00) and 5:59:59 AM local time.
  * Previous sales day is locked; new day has not opened at 6:00 AM.
  */
