@@ -1715,6 +1715,57 @@ async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
     return {"ok": True, "snapshot": snapshot}
 
 
+@api_router.post("/admin/purge-archived")
+async def purge_archived(
+    older_than_days: int = 365,
+    dry_run: bool = False,
+    user: Dict[str, Any] = Depends(require_level(4)),
+):
+    """Retention purge: delete archived entries older than `older_than_days`
+    (default 365) — but only for weeks already snapshotted in historical_vault,
+    so nothing is dropped without a backing record. Active (un-archived) entries
+    are never touched. Idempotent and safe to schedule: a cron can POST this.
+
+    (When a persisted work-report backup store exists — see #13 follow-up — the
+    backing guard should additionally require that backup to be present.)"""
+    if older_than_days < 1:
+        raise HTTPException(status_code=400, detail="older_than_days must be >= 1")
+    cutoff = (date.fromisoformat(current_sales_day_str()) - timedelta(days=older_than_days)).isoformat()
+    candidate_q = {"archived": True, "sales_day": {"$lt": cutoff}}
+
+    # A week is safe to purge only if historical_vault holds its snapshot.
+    weeks = [w for w in await db.production_entries.distinct("archived_week", candidate_q) if w]
+    backed, unbacked = [], []
+    for w in weeks:
+        if await db.historical_vault.find_one({"week_start": w}, {"_id": 1}):
+            backed.append(w)
+        else:
+            unbacked.append(w)
+
+    purge_q = {**candidate_q, "archived_week": {"$in": backed}}
+    would_purge = await db.production_entries.count_documents(purge_q)
+    skipped = await db.production_entries.count_documents(
+        {**candidate_q, "archived_week": {"$nin": backed}}
+    )
+
+    purged = 0
+    if not dry_run and backed:
+        purged = (await db.production_entries.delete_many(purge_q)).deleted_count
+
+    summary = {
+        "ok": True,
+        "dry_run": dry_run,
+        "cutoff": cutoff,
+        "older_than_days": older_than_days,
+        "weeks_purged": sorted(backed),
+        "weeks_skipped_unbacked": sorted(unbacked),
+        "entries_purged": would_purge if dry_run else purged,
+        "entries_skipped_unbacked": skipped,
+    }
+    logger.info("purge-archived: %s", summary)
+    return summary
+
+
 # =========================================================
 #                          SEED
 # =========================================================
