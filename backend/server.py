@@ -106,7 +106,9 @@ def gate_state(dt_local: Optional[datetime] = None) -> Dict[str, Any]:
     if 21 <= h < 24:
         return {"state": "warning", "message": "9:00 PM Deadline Passed. Log your numbers now to avoid leadership escalation.", "color": "yellow"}
     if 0 <= h < 6:
-        return {"state": "midnight_cutoff", "message": "Midnight Cutoff Approaching — submit your numbers now.", "color": "yellow"}
+        # Simple urgency prompt only — no buffer/time/delayed-posting wording
+        # (per owner, feedback #16); entries in this window post immediately.
+        return {"state": "midnight_cutoff", "message": "Submit your numbers now.", "color": "yellow"}
     if h == 6 and dt_local.minute < 1:
         return {"state": "open", "message": "Pulse window open.", "color": "green"}
     return {"state": "open", "message": "Pulse window open.", "color": "green"}
