@@ -149,6 +149,7 @@ class PulseIn(BaseModel):
     market: Optional[str] = None  # selectable office override
     sales_day: Optional[str] = None  # buffered flush only — YYYY-MM-DD; see MAX_SELF_BUFFER_DAYS / MAX_UPLINE_BUFFER_DAYS
     target_agent_id: Optional[str] = None  # set only when an MGA/RGA is entering on behalf of a downline agent
+    client_entry_id: Optional[str] = None  # client idempotency key — a retried submit with the same key must not double-count
 
 
 class EraseIn(BaseModel):
@@ -277,8 +278,11 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
     return user
 
 
-_apple_jwks_cache: Dict[str, Any] = {"keys": [], "fetched_at": None}
+_apple_jwks_cache: Dict[str, Any] = {"keys": [], "fetched_at": None, "last_attempt_at": None}
 APPLE_JWKS_TTL = timedelta(hours=6)
+# /auth/apple is unauthenticated, so unknown-kid forced refreshes are
+# attacker-triggerable; the cooldown caps outbound traffic to Apple.
+APPLE_JWKS_FORCE_COOLDOWN = timedelta(minutes=5)
 
 
 async def _fetch_apple_jwks(force: bool = False) -> List[Dict[str, Any]]:
@@ -290,18 +294,27 @@ async def _fetch_apple_jwks(force: bool = False) -> List[Dict[str, Any]]:
     )
     if fresh and not force:
         return _apple_jwks_cache["keys"]
+    if (
+        force
+        and _apple_jwks_cache["last_attempt_at"] is not None
+        and now_utc() - _apple_jwks_cache["last_attempt_at"] < APPLE_JWKS_FORCE_COOLDOWN
+    ):
+        return _apple_jwks_cache["keys"]
+    _apple_jwks_cache["last_attempt_at"] = now_utc()
     last_err: Optional[Exception] = None
     for _ in range(2):
         try:
             async with httpx.AsyncClient(timeout=10.0) as cli:
                 r = await cli.get(APPLE_KEYS_URL)
             if r.status_code == 200:
+                # r.json() can raise on a malformed 200 body — treated like any
+                # other fetch failure so the retry / cached-key fallback runs.
                 keys = r.json().get("keys", [])
                 if keys:
                     _apple_jwks_cache["keys"] = keys
                     _apple_jwks_cache["fetched_at"] = now_utc()
                     return keys
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, ValueError, AttributeError) as e:
             last_err = e
     if _apple_jwks_cache["keys"]:
         return _apple_jwks_cache["keys"]
@@ -717,6 +730,15 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
+    if payload.client_entry_id:
+        # A timed-out or retried submit whose insert already committed must
+        # not double-count sales/ALP — return the original entry instead.
+        existing = await db.production_entries.find_one(
+            {"agent_id": target_agent_id, "client_entry_id": payload.client_entry_id}, {"_id": 0}
+        )
+        if existing:
+            return {"ok": True, "entry": _ser_entry(existing), "duplicate": True}
+
     now_local = now_detroit()
     max_buffer_days = MAX_UPLINE_BUFFER_DAYS if is_proxy_entry else MAX_SELF_BUFFER_DAYS
     if payload.sales_day:
@@ -766,6 +788,7 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
         "entered_by_name": user.get("name"),
         "entered_by_role": user.get("role"),
         "is_proxy_entry": is_proxy_entry,
+        "client_entry_id": payload.client_entry_id,
     }
     await db.production_entries.insert_one(entry)
     entry.pop("_id", None)

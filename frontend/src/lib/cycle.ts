@@ -32,6 +32,16 @@ export interface BufferedPulse {
   payload: PulsePayload;
   sales_day: string;
   queued_at: string; // ISO 8601 timestamp
+  client_entry_id?: string; // absent on entries buffered before the idempotency key existed
+}
+
+/**
+ * Idempotency key for a single pulse submission. The server dedupes on it, so
+ * a retry after a timeout (where the write may have committed) can't
+ * double-count sales or ALP.
+ */
+export function makeClientEntryId(): string {
+  return `ce_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
 }
 
 // Single source of truth for the 14 Nightly Numbers fields — shared by the
