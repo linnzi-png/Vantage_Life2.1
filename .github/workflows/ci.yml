@@ -1,0 +1,57 @@
+name: CI
+
+# Enforce the two gates CLAUDE.md requires before any merge:
+#   - backend pytest suite passes
+#   - frontend TypeScript typecheck passes (strict mode, no `any`)
+# Runs on every PR and on pushes to main.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend · pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Match the Railway deploy runtime (backend/runtime.txt: python-3.11).
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install backend deps (runtime + test)
+        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest backend/tests -v
+
+  frontend:
+    name: Frontend · typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      # --frozen-lockfile fails if package.json and yarn.lock drift, which is
+      # exactly the stale-dependency class of bug that motivated adding CI.
+      - name: Install frontend deps
+        run: yarn --cwd frontend install --frozen-lockfile
+
+      - name: Typecheck
+        run: npm run typecheck
