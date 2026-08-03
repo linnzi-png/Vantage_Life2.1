@@ -1,6 +1,8 @@
-// Sales-cycle timing and late-night buffer logic.
+// Sales-cycle timing.
 // Reporting cycle: 6:00 AM to 5:59:59 AM next day.
-// Dead zone: midnight to 5:59:59 AM — previous day locked, new day not yet open.
+// Late-night window: midnight to 5:59:59 AM. Entries in this window are the
+// "Midnight Miracle" grace period for the still-open sales day and post
+// immediately, exactly like a daytime entry — there is no local buffering.
 
 export const CYCLE_OPEN_HOUR = 6; // local time
 
@@ -92,24 +94,18 @@ export function recentSalesDays(count: number, now: Date = new Date()): string[]
 }
 
 /**
- * True between midnight (00:00:00) and 5:59:59 AM local time.
- * Previous sales day is locked; new day has not opened at 6:00 AM.
+ * True between midnight (00:00:00) and 5:59:59 AM local time — the Midnight
+ * Miracle grace window for the still-open sales day. Used only to show an
+ * urgency prompt; entries submitted in this window post immediately.
  */
-export function isLateNightBuffer(now: Date = new Date()): boolean {
+export function isLateNightWindow(now: Date = new Date()): boolean {
   return now.getHours() < CYCLE_OPEN_HOUR;
 }
 
 /**
- * YYYY-MM-DD of the sales day that opens at 6:00 AM today.
- * Only meaningful when isLateNightBuffer() is true.
- */
-export function getUpcomingSalesDay(now: Date = new Date()): string {
-  return formatLocalDate(now);
-}
-
-/**
  * True once the clock has passed 6:00 AM on the entry's target sales_day.
- * Used to determine when a buffered entry can be flushed to the API.
+ * Retained only to drain entries queued by older builds that used the
+ * (now-removed) late-night buffer; new entries are never queued.
  */
 export function isBufferEntryEligible(salesDay: string, now: Date = new Date()): boolean {
   const today = formatLocalDate(now);

@@ -1,4 +1,6 @@
 """Pulse submission: entry creation, sales-day assignment, buffered-flush limits."""
+from datetime import datetime
+
 import server
 from conftest import auth, make_session
 
@@ -21,6 +23,20 @@ async def test_agent_can_submit_pulse(client, seeded_db):
         assert entry[k] == v, f"{k}: {entry[k]} != {v}"
     assert entry["sales_day"] == server.current_sales_day_str()
     assert entry["office"] == "MCM"
+
+
+async def test_midnight_window_posts_immediately_to_open_sales_day(client, seeded_db, monkeypatch):
+    """Entries submitted between midnight and 6 AM post immediately (no local
+    buffering) and land on the still-open Midnight Miracle sales day — the
+    previous calendar date under the 6 AM boundary."""
+    fake_2am = server.DETROIT_TZ.localize(datetime(2026, 8, 4, 2, 0))
+    monkeypatch.setattr(server, "now_detroit", lambda: fake_2am)
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    r = await client.post("/api/pulse", json=FULL_PULSE, headers=auth(token))
+    assert r.status_code == 200, r.text
+    entry = await seeded_db.production_entries.find_one({"agent_id": "AG_1"}, {"_id": 0})
+    assert entry["sales_day"] == "2026-08-03"  # the day still open at 2 AM
+    assert entry["sales_day"] == server.current_sales_day_str()
 
 
 async def test_future_sales_day_rejected(client, seeded_db):
