@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
-import { BufferedPulse, PulsePayload, PULSE_FIELDS, getUpcomingSalesDay, isBufferEntryEligible, isLateNightBuffer } from '../../src/lib/cycle';
+import { BufferedPulse, PulsePayload, PULSE_FIELDS, isBufferEntryEligible, isLateNightWindow } from '../../src/lib/cycle';
 import GateBanner from '../../src/components/GateBanner';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 
@@ -32,6 +32,10 @@ const PULSE_ACCESSORY_ID = 'pulse-next-accessory-bar';
 
 const BUFFER_KEY = 'vl_pulse_buffer';
 
+// Migration only: older builds queued late-night entries locally instead of
+// posting them. New entries are never queued, but we still drain any leftover
+// queued entries from those builds on mount. Safe to delete once no device
+// holds a pre-fix buffer.
 async function readBuffer(): Promise<BufferedPulse[]> {
   try {
     const raw = await AsyncStorage.getItem(BUFFER_KEY);
@@ -39,12 +43,6 @@ async function readBuffer(): Promise<BufferedPulse[]> {
   } catch {
     return [];
   }
-}
-
-async function appendToBuffer(entry: BufferedPulse): Promise<void> {
-  const buf = await readBuffer();
-  buf.push(entry);
-  await AsyncStorage.setItem(BUFFER_KEY, JSON.stringify(buf));
 }
 
 async function flushEligibleEntries(): Promise<number> {
@@ -96,9 +94,9 @@ export default function PulseScreen() {
   const [today, setToday] = useState<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string } | null>(null);
   const [streak, setStreak] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [inBuffer, setInBuffer] = useState(false);
-  const [queued, setQueued] = useState(false);
-  const [queuedDay, setQueuedDay] = useState('');
+  // True during the midnight–6 AM window; drives the "submit now" urgency
+  // prompt only. Entries still post immediately.
+  const [lateNight, setLateNight] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -114,13 +112,13 @@ export default function PulseScreen() {
   }, []);
 
   useEffect(() => {
-    setInBuffer(isLateNightBuffer());
+    setLateNight(isLateNightWindow());
     flushEligibleEntries().then(async (count) => {
       await refresh();
       if (count > 0) {
         Alert.alert(
-          'Buffered pulse posted',
-          `${count} queued pulse${count > 1 ? 's' : ''} posted to today's sales day.`,
+          'Pulse posted',
+          `${count} pulse${count > 1 ? 's' : ''} from an earlier session posted to your sales day.`,
         );
       }
     });
@@ -154,21 +152,13 @@ export default function PulseScreen() {
     setSubmitting(true);
     try {
       const payload = buildPayload(form);
-
-      if (inBuffer) {
-        const salesDay = getUpcomingSalesDay();
-        await appendToBuffer({ payload, sales_day: salesDay, queued_at: new Date().toISOString() });
-        setQueuedDay(salesDay);
-        setQueued(true);
-        setForm(empty);
-        setStep(0);
-      } else {
-        await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
-        Alert.alert('Pulse logged', `${form.sales || '0'} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
-        setForm(empty);
-        setStep(0);
-        await refresh();
-      }
+      // Always post immediately — including the midnight–6 AM window, where the
+      // backend assigns the still-open (Midnight Miracle) sales day. No queuing.
+      await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
+      Alert.alert('Pulse logged', `${form.sales || '0'} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
+      setForm(empty);
+      setStep(0);
+      await refresh();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to submit';
       Alert.alert('Error', msg);
@@ -197,13 +187,12 @@ export default function PulseScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Show buffer banner during the dead zone; suppress the API gate banner */}
-      {inBuffer ? (
-        <View style={styles.bufferBanner} testID="buffer-banner">
-          <Ionicons name="time-outline" size={16} color="#60A5FA" />
-          <Text style={styles.bufferBannerText}>
-            Late night buffer active · Your submission will post to today's sales day at 6:00 AM
-          </Text>
+      {/* Midnight–6 AM: simple urgency prompt (entries post immediately).
+          Outside that window, defer to the backend-driven gate banner. */}
+      {lateNight ? (
+        <View style={styles.nightBanner} testID="late-night-banner">
+          <Ionicons name="flash" size={16} color="#60A5FA" />
+          <Text style={styles.nightBannerText}>Submit your numbers now</Text>
         </View>
       ) : today?.gate ? (
         <GateBanner gate={today.gate} />
@@ -231,19 +220,7 @@ export default function PulseScreen() {
             ) : null}
           </View>
 
-          {/* Post-queue confirmation card — shown after buffering an entry */}
-          {queued ? (
-            <View style={styles.queuedCard} testID="queued-confirmation">
-              <Ionicons name="checkmark-circle" size={28} color="#60A5FA" />
-              <Text style={styles.queuedTitle}>Numbers safe — queued for 6:00 AM</Text>
-              <Text style={styles.queuedSub}>
-                Your Pulse for the {queuedDay} sales day has been received. It will be posted automatically the moment the sales day opens at 6:00 AM. No action needed.
-              </Text>
-              <TouchableOpacity style={styles.queuedBtn} onPress={() => setQueued(false)}>
-                <Text style={styles.queuedBtnTxt}>LOG ANOTHER PULSE</Text>
-              </TouchableOpacity>
-            </View>
-          ) : !done ? (
+          {!done ? (
             <View
               style={styles.stepCard}
               testID="pulse-step-card"
@@ -291,14 +268,6 @@ export default function PulseScreen() {
           ) : (
             <View style={styles.stepCard} testID="pulse-review-card">
               <Text style={styles.kicker}>REVIEW & SUBMIT</Text>
-              {inBuffer ? (
-                <View style={styles.bufferReviewNote}>
-                  <Ionicons name="time-outline" size={13} color="#60A5FA" />
-                  <Text style={styles.bufferReviewNoteText}>
-                    Will post to {getUpcomingSalesDay()} sales day at 6:00 AM
-                  </Text>
-                </View>
-              ) : null}
               {STEPS.map((s) => (
                 <View key={s.key} style={styles.reviewRow}>
                   <Text style={styles.reviewLabel}>{s.label}</Text>
@@ -317,12 +286,8 @@ export default function PulseScreen() {
                   disabled={submitting}
                   onPress={onSubmit}
                 >
-                  <Text style={styles.btnPrimaryTxt}>
-                    {submitting
-                      ? (inBuffer ? 'QUEUING…' : 'SUBMITTING…')
-                      : (inBuffer ? 'QUEUE FOR 6 AM' : 'SUBMIT PULSE')}
-                  </Text>
-                  <Ionicons name={inBuffer ? 'time-outline' : 'checkmark-circle'} size={14} color="#000" />
+                  <Text style={styles.btnPrimaryTxt}>{submitting ? 'SUBMITTING…' : 'SUBMIT PULSE'}</Text>
+                  <Ionicons name="checkmark-circle" size={14} color="#000" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -375,7 +340,7 @@ export default function PulseScreen() {
 
       {/* iOS numeric keypad has no return key, so dock NEXT directly above it —
           the step advances without ever scrolling or leaving the keypad. */}
-      {Platform.OS === 'ios' && !done && !queued ? (
+      {Platform.OS === 'ios' && !done ? (
         <InputAccessoryView nativeID={PULSE_ACCESSORY_ID}>
           <View style={styles.accessoryBar}>
             <Text style={styles.accessoryStep} numberOfLines={1}>STEP {step + 1} OF {STEPS.length}</Text>
@@ -443,30 +408,13 @@ const styles = StyleSheet.create({
   entryAlp: { color: COLORS.primary, fontWeight: '900', fontSize: 14, fontVariant: ['tabular-nums' as never] },
   entryMeta: { color: COLORS.textDim, fontSize: 11, flex: 1, marginLeft: 8 },
   entryTs: { color: COLORS.textMuted, fontSize: 10 },
-  // Late night buffer styles
-  bufferBanner: {
+  // Midnight–6 AM urgency prompt
+  nightBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 14, paddingVertical: 10,
     backgroundColor: '#0A1929', borderLeftWidth: 3, borderLeftColor: '#3B82F6',
   },
-  bufferBannerText: { color: '#93C5FD', fontWeight: '700', fontSize: 12, flex: 1, letterSpacing: 0.3 },
-  bufferReviewNote: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#0A1929', borderRadius: 4, paddingHorizontal: 10, paddingVertical: 7,
-    marginBottom: 10, borderWidth: 1, borderColor: '#1E3A5F',
-  },
-  bufferReviewNoteText: { color: '#93C5FD', fontSize: 11, fontWeight: '700' },
-  queuedCard: {
-    backgroundColor: '#0A1929', borderWidth: 1, borderColor: '#1E3A5F',
-    borderRadius: 6, padding: 20, marginTop: 8, alignItems: 'center', gap: 10,
-  },
-  queuedTitle: { color: '#fff', fontWeight: '900', fontSize: 16, textAlign: 'center' },
-  queuedSub: { color: '#93C5FD', fontSize: 13, textAlign: 'center', lineHeight: 20 },
-  queuedBtn: {
-    marginTop: 6, borderWidth: 1, borderColor: '#3B82F6',
-    paddingHorizontal: 18, paddingVertical: 10, borderRadius: 4,
-  },
-  queuedBtnTxt: { color: '#60A5FA', fontWeight: '900', fontSize: 11, letterSpacing: 1 },
+  nightBannerText: { color: '#93C5FD', fontWeight: '700', fontSize: 12, flex: 1, letterSpacing: 0.3 },
   uplineCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
