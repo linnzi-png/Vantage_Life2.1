@@ -13,8 +13,7 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "buildNumber": "22"
+      }
     },
     "android": {
       "package": "com.aopremiere.vantagelife",
