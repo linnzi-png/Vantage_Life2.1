@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
 import { QuickEntryForm, QuickEntryTarget } from '../../src/components/QuickEntryForm';
@@ -14,6 +15,13 @@ interface TeamRow {
   phone: string; email: string; is_rookie: boolean;
   gross_alp: number; net_alp: number; sits: number; sales: number; close_ratio: number; avg_deal: number; alerts: string[];
 }
+
+// Scoreboard period. Weekly is the default: cumulative from the most recent
+// Wednesday 2:00 PM Detroit cutoff. See scoreboard_window() in backend/server.py.
+type Period = 'daily' | 'weekly' | 'monthly';
+const PERIOD_KEY = 'vl_team_period';
+const PERIOD_LABELS: Record<Period, string> = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+const isPeriod = (v: unknown): v is Period => v === 'daily' || v === 'weekly' || v === 'monthly';
 
 const ALERT_LABELS: Record<string, { label: string; color: string }> = {
   low_close_ratio: { label: 'Low Close', color: COLORS.red },
@@ -30,13 +38,24 @@ export default function TeamScreen() {
   const [selected, setSelected] = useState<TeamRow | null>(null);
   const [uplineOpen, setUplineOpen] = useState(false);
   const [readyNoms, setReadyNoms] = useState(0);
+  const [period, setPeriod] = useState<Period>('weekly');
   const [quickEntryTarget, setQuickEntryTarget] = useState<QuickEntryTarget | null>(null);
   const [missingQueue, setMissingQueue] = useState<TeamRow[]>([]); // remaining "no_pulse" agents queued for auto-advance
+
+  // Restore the last-used period so the choice survives app restarts.
+  useEffect(() => {
+    AsyncStorage.getItem(PERIOD_KEY).then((saved) => { if (isPeriod(saved)) setPeriod(saved); }).catch(() => {});
+  }, []);
+
+  const changePeriod = (p: Period) => {
+    setPeriod(p);
+    AsyncStorage.setItem(PERIOD_KEY, p).catch(() => {});
+  };
 
   const fetchAll = async () => {
     try {
       const [r, u, n] = await Promise.all([
-        api<{ team: TeamRow[] }>('/api/team'),
+        api<{ team: TeamRow[] }>(`/api/team?period=${period}`),
         api<{ upline: AgentContact | null }>('/api/my-upline').catch(() => ({ upline: null })),
         api<{ nominations: any[] }>('/api/nominations?status=threshold_met').catch(() => ({ nominations: [] })),
       ]);
@@ -45,7 +64,8 @@ export default function TeamScreen() {
       setReadyNoms(n.nominations.length);
     } catch {}
   };
-  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, []);
+  // Re-fetch whenever the period changes; keep the 30s live refresh going.
+  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, [period]);
 
   const [query, setQuery] = useState('');
   const sorted = [...rows].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
@@ -111,6 +131,18 @@ export default function TeamScreen() {
     </TouchableOpacity>
   );
 
+  const periodBtn = (p: Period) => (
+    <TouchableOpacity
+      onPress={() => changePeriod(p)}
+      style={[styles.periodBtn, period === p && styles.periodBtnActive]}
+      testID={`team-period-${p}`}
+      accessibilityRole="button"
+      accessibilityState={{ selected: period === p }}
+    >
+      <Text style={[styles.periodTxt, period === p && styles.periodTxtActive]}>{PERIOD_LABELS[p]}</Text>
+    </TouchableOpacity>
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={[styles.head, { flexDirection: 'row', alignItems: 'center' }]}>
@@ -147,6 +179,12 @@ export default function TeamScreen() {
           </View>
         </TouchableOpacity>
       ) : null}
+
+      <View style={styles.periodBar} testID="team-period-selector">
+        {periodBtn('daily')}
+        {periodBtn('weekly')}
+        {periodBtn('monthly')}
+      </View>
 
       {canEnter && missingTonight.length > 0 ? (
         <TouchableOpacity
@@ -247,6 +285,11 @@ const styles = StyleSheet.create({
   head:          { paddingHorizontal: 16, paddingVertical: 12 },
   kicker:        { color: COLORS.primary, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
   title:         { color: '#fff', fontSize: 22, fontWeight: '900' },
+  periodBar:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingTop: 8 },
+  periodBtn:     { flex: 1, alignItems: 'center', paddingVertical: 8, borderWidth: 1, borderColor: COLORS.border, borderRadius: 4, backgroundColor: COLORS.surface },
+  periodBtnActive: { borderColor: COLORS.primary, backgroundColor: 'rgba(49,152,66,0.12)' },
+  periodTxt:     { color: COLORS.textDim, fontSize: 12, fontWeight: '900', letterSpacing: 0.8 },
+  periodTxtActive: { color: COLORS.primary },
   sortBar:       { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, minHeight: 44 },
   sortBtn:       { flex: 1, alignItems: 'center', paddingHorizontal: 4, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border, borderRadius: 4, backgroundColor: COLORS.surface },
   sortBtnActive: { borderColor: COLORS.primary, backgroundColor: 'rgba(49,152,66,0.12)' },

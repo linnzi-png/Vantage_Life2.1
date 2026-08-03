@@ -20,7 +20,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from jose import jwt as apple_jwt
 from jose.exceptions import JOSEError
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, timezone, timedelta, date
 
 ROOT_DIR = Path(__file__).parent
@@ -1003,11 +1003,60 @@ async def my_upline(user: Dict[str, Any] = Depends(require_agent)):
 #                          TEAM
 # =========================================================
 
+# ---- Scoreboard period windows -------------------------------------------
+# The Team Production scoreboard can be viewed over three windows. "daily"
+# keeps the existing 6 AM Detroit sales-day boundary. "weekly" and "monthly"
+# are anchored to the Wednesday 2:00 PM America/Detroit cutoff and filter on
+# submitted_at, so totals fall back to $0 the instant the cutoff passes with
+# no data deletion required. Entries are retained (see wednesday_reset), so a
+# window that spans prior weeks (monthly) still has its data.
+SCOREBOARD_PERIODS = ("daily", "weekly", "monthly")
+DEFAULT_SCOREBOARD_PERIOD = "weekly"
+
+
+def most_recent_wed_2pm(dt_local: datetime) -> datetime:
+    """Most recent Wednesday 2:00 PM America/Detroit at or before dt_local.
+
+    dt_local must be Detroit-tz-aware (e.g. now_detroit()). Built via
+    DETROIT_TZ.localize so the boundary shifts correctly across DST."""
+    days_since_wed = (dt_local.weekday() - 2) % 7  # Mon=0..Wed=2
+    wed = (dt_local - timedelta(days=days_since_wed)).date()
+    cutoff = DETROIT_TZ.localize(datetime(wed.year, wed.month, wed.day, 14, 0))
+    if cutoff > dt_local:
+        # It is Wednesday before 2:00 PM — the active week began the prior Wed.
+        wed = wed - timedelta(days=7)
+        cutoff = DETROIT_TZ.localize(datetime(wed.year, wed.month, wed.day, 14, 0))
+    return cutoff
+
+
+def month_start_detroit(dt_local: datetime) -> datetime:
+    """Midnight on the 1st of dt_local's calendar month, America/Detroit."""
+    return DETROIT_TZ.localize(datetime(dt_local.year, dt_local.month, 1, 0, 0))
+
+
+def scoreboard_window(period: str) -> Tuple[Dict[str, Any], Optional[datetime]]:
+    """Return (Mongo match fragment, window start in UTC) for a period.
+
+    Daily matches the current sales_day (start is None). Weekly/monthly match
+    submitted_at >= the window start. Raises 400 on an unknown period."""
+    if period not in SCOREBOARD_PERIODS:
+        raise HTTPException(status_code=400, detail="period must be daily, weekly, or monthly")
+    if period == "daily":
+        return {"sales_day": current_sales_day_str()}, None
+    now = now_detroit()
+    start = most_recent_wed_2pm(now) if period == "weekly" else month_start_detroit(now)
+    start_utc = start.astimezone(timezone.utc)
+    return {"submitted_at": {"$gte": start_utc}}, start_utc
+
+
 @api_router.get("/team")
-async def team_view(user: Dict[str, Any] = Depends(require_level(2))):
+async def team_view(
+    period: str = DEFAULT_SCOREBOARD_PERIOD,
+    user: Dict[str, Any] = Depends(require_level(2)),
+):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
-    q: Dict[str, Any] = {"sales_day": today}
+    q, window_start = scoreboard_window(period)
     if ids is not None:
         q["agent_id"] = {"$in": ids}
     pipeline = [
@@ -1073,7 +1122,12 @@ async def team_view(user: Dict[str, Any] = Depends(require_level(2))):
                 "gross_alp": 0, "net_alp": 0, "sits": 0, "sales": 0,
                 "close_ratio": 0, "avg_deal": 0, "alerts": ["no_pulse"],
             })
-    return {"team": out, "sales_day": today}
+    return {
+        "team": out,
+        "sales_day": today,
+        "period": period,
+        "window_start": iso_utc(window_start) if window_start else None,
+    }
 
 
 # =========================================================
@@ -1449,8 +1503,14 @@ async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
     weekday = today.weekday()  # Mon=0..Sun=6; Wed=2
     days_since_wed = (weekday - 2) % 7
     week_start = (today - timedelta(days=days_since_wed)).isoformat()
+    # Only the current, un-archived entries belong to the week being closed.
+    # Entries are retained as a permanent transactional record, so every field
+    # below must be scoped to active entries — otherwise prior weeks' retained
+    # data would be re-counted into this week's snapshot.
+    active = {"archived": {"$ne": True}}
     # Snapshot totals
     totals_pipe = [
+        {"$match": active},
         {"$group": {
             "_id": None,
             "gross_alp": {"$sum": "$gross_alp"},
@@ -1470,7 +1530,7 @@ async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
     all_offices = [o for o in await db.agent_profiles.distinct("office") if o]
     for office in all_offices:
         ag_ids = [a["agent_id"] async for a in db.agent_profiles.find({"office": office}, {"_id": 0, "agent_id": 1})]
-        a = await aggregate_alp({"agent_id": {"$in": ag_ids}})
+        a = await aggregate_alp({"agent_id": {"$in": ag_ids}, "archived": {"$ne": True}})
         by_office[office] = a
 
     snapshot = {
@@ -1482,8 +1542,15 @@ async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
         "agent_count": await db.agent_profiles.count_documents({}),
     }
     await db.historical_vault.insert_one(snapshot)
-    # Reset by clearing production entries (in real app you'd flag instead of delete)
-    await db.production_entries.delete_many({})
+    # Retain entries as the permanent transactional record: flag the week's
+    # active entries as archived instead of deleting them. Daily/weekly/monthly
+    # scoreboards roll over on their own via their time windows; the flag keeps
+    # each future snapshot scoped to just its own week.
+    archived_result = await db.production_entries.update_many(
+        active,
+        {"$set": {"archived": True, "archived_week": week_start, "archived_at": now_utc()}},
+    )
+    snapshot["entries_archived"] = archived_result.modified_count
     snapshot.pop("_id", None)
     snapshot["archived_at"] = iso_utc(snapshot["archived_at"])
     return {"ok": True, "snapshot": snapshot}
@@ -1965,6 +2032,7 @@ async def on_startup():
     await db.agent_profiles.create_index("office")
     await db.production_entries.create_index([("agent_id", 1), ("sales_day", 1)])
     await db.production_entries.create_index("submitted_at")
+    await db.production_entries.create_index("archived")
     await db.push_tokens.create_index("user_id", unique=True)
     # Idempotency guard for the escalation scheduler: a duplicate-key error on
     # this index is exactly how run_pulse_escalation_check() detects "already
