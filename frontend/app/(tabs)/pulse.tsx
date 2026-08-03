@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
-import { BufferedPulse, PulsePayload, PULSE_FIELDS, isBufferEntryEligible, isLateNightWindow } from '../../src/lib/cycle';
+import { BufferedPulse, PulsePayload, PULSE_FIELDS, isBufferEntryEligible, isLateNightWindow, makeClientEntryId } from '../../src/lib/cycle';
 import GateBanner from '../../src/components/GateBanner';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 
@@ -53,7 +53,7 @@ async function flushEligibleEntries(): Promise<number> {
   for (const entry of buf) {
     if (isBufferEntryEligible(entry.sales_day, now)) {
       try {
-        await api('/api/pulse', { method: 'POST', body: JSON.stringify({ ...entry.payload, sales_day: entry.sales_day }) });
+        await api('/api/pulse', { method: 'POST', body: JSON.stringify({ ...entry.payload, sales_day: entry.sales_day, client_entry_id: entry.client_entry_id }) });
         submitted++;
       } catch {
         remaining.push(entry); // re-queue on failure, retry next open
@@ -148,13 +148,21 @@ export default function PulseScreen() {
     setStep((s) => Math.min(s + 1, STEPS.length));
   }, [step]);
 
+  // Persists across a failed submit so a retry reuses the same idempotency
+  // key; reset only after the server confirms (or the entry is buffered).
+  const pendingEntryId = useRef<string | null>(null);
+
   const onSubmit = async () => {
     setSubmitting(true);
     try {
       const payload = buildPayload(form);
       // Always post immediately — including the midnight–6 AM window, where the
       // backend assigns the still-open (Midnight Miracle) sales day. No queuing.
-      await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
+      // The idempotency key survives a failed retry so a committed write can't
+      // double-count.
+      if (!pendingEntryId.current) pendingEntryId.current = makeClientEntryId();
+      await api('/api/pulse', { method: 'POST', body: JSON.stringify({ ...payload, client_entry_id: pendingEntryId.current }) });
+      pendingEntryId.current = null;
       Alert.alert('Pulse logged', `${form.sales || '0'} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
       setForm(empty);
       setStep(0);

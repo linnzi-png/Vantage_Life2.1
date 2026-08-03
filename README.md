@@ -56,3 +56,16 @@ npm run typecheck   # frontend tsc --noEmit
 npm test            # pytest backend/tests
 npm run build       # expo web export (what Vercel runs)
 ```
+
+Running the suite the first time needs the backend test dependencies, which
+are separate from the runtime deps `install:all` pulls in:
+
+```bash
+pip install -r backend/requirements-dev.txt   # pytest, pytest-asyncio, mongomock-motor
+```
+
+`typecheck` and `npm test` both run in CI (`.github/workflows/ci.yml`) on every
+pull request and push to `main` — keep them green. If a typecheck fails right
+after pulling, your local deps are stale: run `npm run install:all` (CI installs
+with `--frozen-lockfile`, so drift between `package.json` and `yarn.lock` fails
+there too).
