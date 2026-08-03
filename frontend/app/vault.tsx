@@ -1,6 +1,6 @@
 // Historical Vault — Week comparison (Level 4 only)
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Share, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import { api, COLORS } from '../src/lib/auth';
@@ -12,8 +12,32 @@ export default function VaultScreen() {
   const [a, setA] = useState<string | null>(null);
   const [b, setB] = useState<string | null>(null);
   const [cmp, setCmp] = useState<any>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
 
   useEffect(() => { (async () => { try { const r = await api<{ weeks: Week[] }>('/api/vault/weeks'); setWeeks(r.weeks); } catch {} })(); }, []);
+
+  // Export a week as the WAR-format JSON backup — round-trips through the
+  // importer. On web it downloads; on native it opens the share sheet.
+  const exportWeek = async (weekStart: string) => {
+    setExporting(weekStart);
+    try {
+      const data = await api<any>(`/api/vault/export?week_start=${weekStart}`);
+      const json = JSON.stringify(data, null, 2);
+      const filename = `war_export_${weekStart}.json`;
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        const href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+        const link = document.createElement('a');
+        link.href = href; link.download = filename; link.click();
+        URL.revokeObjectURL(href);
+      } else {
+        await Share.share({ message: json, title: filename });
+      }
+    } catch (e: any) {
+      Alert.alert('Export failed', e?.message || 'Could not export this week.');
+    } finally {
+      setExporting(null);
+    }
+  };
 
   useEffect(() => {
     if (a && b && a !== b) {
@@ -51,6 +75,16 @@ export default function VaultScreen() {
                 <Text style={styles.weekDate}>{w.week_start}</Text>
                 <Text style={styles.weekAlp}>{fmt(w.totals?.gross_alp || 0)}</Text>
                 <Text style={styles.weekMeta}>{w.totals?.sales || 0} sales · {w.agent_count} agents</Text>
+                <TouchableOpacity
+                  onPress={() => exportWeek(w.week_start)}
+                  disabled={exporting === w.week_start}
+                  style={styles.exportBtn}
+                  testID={`vault-export-${w.week_start}`}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="download-outline" size={12} color={COLORS.primary} />
+                  <Text style={styles.exportTxt}>{exporting === w.week_start ? 'EXPORTING…' : 'EXPORT'}</Text>
+                </TouchableOpacity>
               </TouchableOpacity>
             );
           })}
@@ -96,6 +130,8 @@ const styles = StyleSheet.create({
   weekDate: { color: COLORS.textDim, fontSize: 11, fontWeight: '700' },
   weekAlp: { color: '#fff', fontSize: 18, fontWeight: '900', marginTop: 4 },
   weekMeta: { color: COLORS.textMuted, fontSize: 10, marginTop: 2 },
+  exportBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8, alignSelf: 'flex-start', borderWidth: 1, borderColor: COLORS.border, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 5 },
+  exportTxt: { color: COLORS.primary, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   tag: { position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   tagTxt: { color: '#000', fontWeight: '900', fontSize: 11 },
   compareCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderTopWidth: 2, borderTopColor: COLORS.primary, borderRadius: 6, padding: 14, marginTop: 16 },
