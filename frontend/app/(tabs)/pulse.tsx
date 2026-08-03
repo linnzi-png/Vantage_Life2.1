@@ -5,26 +5,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
-import { BufferedPulse, PulsePayload, getUpcomingSalesDay, isBufferEntryEligible, isLateNightBuffer } from '../../src/lib/cycle';
+import { BufferedPulse, PulsePayload, PULSE_FIELDS, getUpcomingSalesDay, isBufferEntryEligible, isLateNightBuffer } from '../../src/lib/cycle';
 import GateBanner from '../../src/components/GateBanner';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 
-const STEPS: { key: keyof PulseForm; label: string; hint: string; type?: 'int' | 'money' }[] = [
-  { key: 'sets', label: 'Total Appointments (Sets)', hint: 'Total appointments booked.', type: 'int' },
-  { key: 'sits', label: 'Total Sits', hint: 'Total appointments you actually ran (excludes N1).', type: 'int' },
-  { key: 'sales', label: 'Total Sales', hint: 'Total closed deals today.', type: 'int' },
-  { key: 'ots_sits', label: 'On Spot Sits', hint: 'Sits run on the spot (walk-ins / same-day).', type: 'int' },
-  { key: 'ots_sales', label: 'On Spot Sales', hint: 'Sales closed on the spot.', type: 'int' },
-  { key: 'n1', label: 'Uninsurables (N1)', hint: 'Tracked but excluded from Sits totals.', type: 'int' },
-  { key: 'refs_obtained', label: 'Referrals Collected', hint: 'Referrals you collected today.', type: 'int' },
-  { key: 'ref_sits', label: 'Referral Sits', hint: 'Sits run from referrals.', type: 'int' },
-  { key: 'ref_sales', label: 'Referral Sales', hint: 'Sales closed from referrals.', type: 'int' },
-  { key: 'pos_sits', label: 'POS Sits', hint: 'Policy Owner Service sits.', type: 'int' },
-  { key: 'pos_sales', label: 'POS Sales', hint: 'Policy Owner Service sales.', type: 'int' },
-  { key: 'vet_sits', label: 'Response Card / Veteran Sits', hint: 'Sits from response cards or Veteran leads.', type: 'int' },
-  { key: 'vet_sales', label: 'Response Card / Veteran Sales', hint: 'Sales from response cards or Veteran leads.', type: 'int' },
-  { key: 'gross_alp', label: 'Total ALP for the Day (Gross ALP)', hint: 'Annual Life Premium for the day.', type: 'money' },
-];
+const STEPS = PULSE_FIELDS;
 
 interface PulseForm {
   sets: string; sits: string; sales: string; ots_sits: string; ots_sales: string;
