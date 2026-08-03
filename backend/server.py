@@ -8,6 +8,8 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import asyncio
+import csv
+import io
 import logging
 import re
 import uuid
@@ -1539,6 +1541,108 @@ async def vault_compare(week_a: str, week_b: str, user: Dict[str, Any] = Depends
         if isinstance(w.get("archived_at"), datetime):
             w["archived_at"] = iso_utc(w["archived_at"])
     return {"a": a, "b": b, "delta": delta}
+
+
+@api_router.get("/vault/export")
+async def vault_export(
+    week_start: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    format: str = "json",
+    user: Dict[str, Any] = Depends(require_level(4)),
+):
+    """Export retained production entries as a WAR-format weekly report — the
+    same shape import_war_data.py reads, so the JSON round-trips and serves as
+    a permanent backup. Defaults to the current Wed-to-Wed week. `format=csv`
+    returns a per-agent-per-day spreadsheet instead."""
+    def _parse(d: str) -> date:
+        try:
+            return date.fromisoformat(d)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="dates must be YYYY-MM-DD")
+
+    if week_start:
+        ws = _parse(week_start)
+        frm, to = ws, ws + timedelta(days=6)
+    elif start and end:
+        frm, to = _parse(start), _parse(end)
+        if to < frm:
+            raise HTTPException(status_code=400, detail="end cannot be before start")
+    elif start or end:
+        raise HTTPException(status_code=400, detail="provide both start and end, or week_start")
+    else:
+        today = date.fromisoformat(current_sales_day_str())
+        frm = today - timedelta(days=(today.weekday() - 2) % 7)  # most recent Wednesday
+        to = today
+    from_iso, to_iso = frm.isoformat(), to.isoformat()
+
+    # The 14 Nightly Metrics come straight from the PulseIn schema — never
+    # hardcode metric names.
+    metric_fields = list(PulseIn.model_fields.keys())
+    ids = await visible_agent_ids(user)
+    q: Dict[str, Any] = {"sales_day": {"$gte": from_iso, "$lte": to_iso}}
+    if ids is not None:
+        q["agent_id"] = {"$in": ids}
+    pipeline = [
+        {"$match": q},
+        {"$group": {
+            "_id": {"sales_day": "$sales_day", "agent_id": "$agent_id"},
+            **{f: {"$sum": f"${f}"} for f in metric_fields},
+        }},
+    ]
+    rows = [d async for d in db.production_entries.aggregate(pipeline)]
+    agents = {a["agent_id"]: a async for a in db.agent_profiles.find({}, {"_id": 0})}
+
+    # Build day -> [performance rows] with the canonical WAR field names, so the
+    # output re-imports through make_entry() with per-agent totals intact.
+    by_day: Dict[str, list] = {}
+    flat = []  # rows for CSV
+    total_alp = 0.0
+    for r in rows:
+        aid = r["_id"]["agent_id"]
+        sd = r["_id"]["sales_day"]
+        a = agents.get(aid)
+        perf: Dict[str, Any] = {"agent": a["name"] if a else aid, "office": a.get("office", "") if a else ""}
+        for f in metric_fields:
+            perf[f] = r.get(f, 0)
+        perf["alp"] = perf.pop("gross_alp", 0)  # WAR carries gross ALP under "alp"
+        total_alp += float(perf["alp"] or 0)
+        by_day.setdefault(sd, []).append(perf)
+        flat.append({"date": sd, **perf, "gross_alp": perf["alp"]})
+
+    if format == "csv":
+        cols = ["date", "agent", "office", *[f for f in metric_fields if f != "gross_alp"], "gross_alp"]
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+        w.writeheader()
+        for row in sorted(flat, key=lambda x: (x["date"], -float(x.get("alp", 0) or 0))):
+            w.writerow(row)
+        return Response(
+            content=buf.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="war_export_{from_iso}_{to_iso}.csv"'},
+        )
+
+    weekly_tabs = []
+    for sd in sorted(by_day.keys()):
+        perfs = sorted(by_day[sd], key=lambda p: -float(p.get("alp", 0) or 0))
+        weekly_tabs.append({
+            "tab_name": sd,
+            "date": sd,
+            "daily_alp": round(sum(float(p.get("alp", 0) or 0) for p in perfs), 2),
+            "performance": perfs,
+        })
+    return {
+        "report_metadata": {
+            "source_file": f"vantagelife_export_{from_iso}_{to_iso}.json",
+            "rga_office": "ALL",
+            "weekly_total_alp": round(total_alp, 2),
+            "week_ending": to_iso,
+            "processed_at": iso_utc(now_utc()),
+            "tab_sync_complete": True,
+        },
+        "weekly_tabs": weekly_tabs,
+    }
 
 
 @api_router.post("/admin/wednesday-reset")
