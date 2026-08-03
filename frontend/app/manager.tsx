@@ -20,7 +20,9 @@ export default function ManagerScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await api<{ team: AgentRow[]; sales_day: string }>('/api/team');
+        // Eraser adjusts a specific sales_day, so it always works off the
+        // daily window regardless of the Team screen's period default.
+        const r = await api<{ team: AgentRow[]; sales_day: string }>('/api/team?period=daily');
         setList(r.team.filter((x) => x.sales > 0).slice(0, 100));
         setSalesDay(r.sales_day);
       } catch (e: any) { Alert.alert('Error', e.message); }
@@ -47,7 +49,7 @@ export default function ManagerScreen() {
       Alert.alert('Adjusted', `Net ALP delta: ${r.delta >= 0 ? '+' : ''}$${Math.round(r.delta).toLocaleString()}\nGross unchanged on Platinum Wall.`);
       setSelected(null); setNewAlp(''); setReason('');
       // refresh list
-      const fresh = await api<{ team: AgentRow[] }>('/api/team');
+      const fresh = await api<{ team: AgentRow[] }>('/api/team?period=daily');
       setList(fresh.team.filter((x) => x.sales > 0).slice(0, 100));
     } catch (e: any) { Alert.alert('Error', e.message || 'Failed'); }
     finally { setBusy(false); }

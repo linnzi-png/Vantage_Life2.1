@@ -21,15 +21,48 @@ async def rga_token(db):
     return await make_session(db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
 
 
-async def test_reset_allowed_wednesday_after_2pm(client, seeded_db, detroit_clock):
+async def test_reset_archives_and_retains_entries(client, seeded_db, detroit_clock):
     detroit_clock(2026, 7, 1, 14, 0)  # Wednesday 2:00 PM exactly
     token = await rga_token(seeded_db)
+    await seeded_db.production_entries.insert_one(
+        {"entry_id": "pe_1", "agent_id": "AG_1", "office": "MCM", "gross_alp": 500,
+         "net_alp": 500, "sits": 2, "sales": 1}
+    )
     r = await client.post("/api/admin/wednesday-reset", headers=auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["ok"] is True
-    # Archive written, active entries cleared
+    # Archive written to the vault…
     assert await seeded_db.historical_vault.count_documents({}) == 1
-    assert await seeded_db.production_entries.count_documents({}) == 0
+    # …and the entry is RETAINED as a transactional record, flagged archived —
+    # not deleted (permanent per-agent history).
+    assert await seeded_db.production_entries.count_documents({}) == 1
+    assert await seeded_db.production_entries.count_documents({"archived": True}) == 1
+    assert await seeded_db.production_entries.count_documents({"archived": {"$ne": True}}) == 0
+    doc = await seeded_db.production_entries.find_one({"entry_id": "pe_1"})
+    assert doc["archived_week"] == "2026-07-01"
+
+
+async def test_reset_snapshot_scopes_to_current_week_only(client, seeded_db, detroit_clock):
+    """A second reset must not re-count the prior week's retained entries."""
+    detroit_clock(2026, 7, 1, 14, 0)
+    token = await rga_token(seeded_db)
+    await seeded_db.production_entries.insert_one(
+        {"entry_id": "pe_w1", "agent_id": "AG_1", "office": "MCM", "gross_alp": 1000,
+         "net_alp": 1000, "sits": 1, "sales": 1}
+    )
+    await client.post("/api/admin/wednesday-reset", headers=auth(token))
+
+    # New week: one fresh (active) entry.
+    detroit_clock(2026, 7, 8, 14, 0)
+    await seeded_db.production_entries.insert_one(
+        {"entry_id": "pe_w2", "agent_id": "AG_1", "office": "MCM", "gross_alp": 250,
+         "net_alp": 250, "sits": 1, "sales": 1}
+    )
+    r = await client.post("/api/admin/wednesday-reset", headers=auth(token))
+    assert r.status_code == 200, r.text
+    # Second snapshot reflects only the second week's $250, not $1250.
+    latest = await seeded_db.historical_vault.find_one({"week_start": "2026-07-08"})
+    assert latest["totals"]["gross_alp"] == 250
 
 
 async def test_reset_blocked_wednesday_before_2pm(client, seeded_db, detroit_clock):
