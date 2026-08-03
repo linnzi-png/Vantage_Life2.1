@@ -49,11 +49,23 @@ export async function api<T = any>(path: string, opts: RequestInit = {}): Promis
     ...(opts.headers as Record<string, string> | undefined),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${BACKEND}${path}`, {
-    ...opts,
-    headers,
-    credentials: 'include',
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND}${path}`, {
+      ...opts,
+      headers,
+      credentials: 'include',
+      signal: controller.signal,
+    });
+  } catch (e: unknown) {
+    // Surface a human-readable message instead of "TypeError: Network request failed".
+    const aborted = (e as { name?: string }).name === 'AbortError';
+    throw new Error(aborted ? 'The server took too long to respond. Please try again.' : 'Unable to reach the server. Please check your connection and try again.');
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     let msg = `${res.status}`;
     try { const j = await res.json(); msg = j.detail || msg; } catch {}

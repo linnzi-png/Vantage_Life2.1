@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
-import { BufferedPulse, PulsePayload, PULSE_FIELDS, getUpcomingSalesDay, isBufferEntryEligible, isLateNightBuffer } from '../../src/lib/cycle';
+import { BufferedPulse, PulsePayload, PULSE_FIELDS, getUpcomingSalesDay, isBufferEntryEligible, isLateNightBuffer, makeClientEntryId } from '../../src/lib/cycle';
 import GateBanner from '../../src/components/GateBanner';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 
@@ -55,7 +55,7 @@ async function flushEligibleEntries(): Promise<number> {
   for (const entry of buf) {
     if (isBufferEntryEligible(entry.sales_day, now)) {
       try {
-        await api('/api/pulse', { method: 'POST', body: JSON.stringify({ ...entry.payload, sales_day: entry.sales_day }) });
+        await api('/api/pulse', { method: 'POST', body: JSON.stringify({ ...entry.payload, sales_day: entry.sales_day, client_entry_id: entry.client_entry_id }) });
         submitted++;
       } catch {
         remaining.push(entry); // re-queue on failure, retry next open
@@ -150,20 +150,27 @@ export default function PulseScreen() {
     setStep((s) => Math.min(s + 1, STEPS.length));
   }, [step]);
 
+  // Persists across a failed submit so a retry reuses the same idempotency
+  // key; reset only after the server confirms (or the entry is buffered).
+  const pendingEntryId = useRef<string | null>(null);
+
   const onSubmit = async () => {
     setSubmitting(true);
     try {
       const payload = buildPayload(form);
+      if (!pendingEntryId.current) pendingEntryId.current = makeClientEntryId();
 
       if (inBuffer) {
         const salesDay = getUpcomingSalesDay();
-        await appendToBuffer({ payload, sales_day: salesDay, queued_at: new Date().toISOString() });
+        await appendToBuffer({ payload, sales_day: salesDay, queued_at: new Date().toISOString(), client_entry_id: pendingEntryId.current });
+        pendingEntryId.current = null;
         setQueuedDay(salesDay);
         setQueued(true);
         setForm(empty);
         setStep(0);
       } else {
-        await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
+        await api('/api/pulse', { method: 'POST', body: JSON.stringify({ ...payload, client_entry_id: pendingEntryId.current }) });
+        pendingEntryId.current = null;
         Alert.alert('Pulse logged', `${form.sales || '0'} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
         setForm(empty);
         setStep(0);

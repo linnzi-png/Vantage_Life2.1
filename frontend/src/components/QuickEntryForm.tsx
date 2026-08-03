@@ -2,11 +2,11 @@
 // stepping. Built for uplines (level_2+) entering on behalf of a downline
 // agent, where speed matters more than the guided one-field-at-a-time flow
 // self-entry uses (that flow stays untouched in pulse.tsx).
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
-import { PULSE_FIELDS, PulsePayload, recentSalesDays, currentSalesDay } from '../lib/cycle';
+import { PULSE_FIELDS, PulsePayload, recentSalesDays, currentSalesDay, makeClientEntryId } from '../lib/cycle';
 
 // Matches MAX_UPLINE_BUFFER_DAYS on the backend: an upline may enter for a
 // downline agent up to 7 sales days back.
@@ -58,6 +58,9 @@ export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext }
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [salesDay, setSalesDay] = useState<string>(currentSalesDay());
+  // Persists across a failed submit so a retry reuses the same idempotency
+  // key; reset only after the server confirms the write.
+  const pendingEntryId = useRef<string | null>(null);
 
   if (!target) return null;
 
@@ -68,8 +71,10 @@ export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext }
   const submit = async () => {
     setSubmitting(true);
     try {
-      const payload = { ...buildPayload(form), target_agent_id: target.agent_id, sales_day: salesDay };
+      if (!pendingEntryId.current) pendingEntryId.current = makeClientEntryId();
+      const payload = { ...buildPayload(form), target_agent_id: target.agent_id, sales_day: salesDay, client_entry_id: pendingEntryId.current };
       await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
+      pendingEntryId.current = null;
       setForm(emptyForm);
       onSubmitted(target.agent_id);
     } catch (e: unknown) {
