@@ -10,11 +10,12 @@ import { AgentContactSheet, AgentContact } from '../../src/components/AgentConta
 import OfficeTabs, { OfficeRow } from '../../src/components/OfficeTabs';
 import GateBanner from '../../src/components/GateBanner';
 import Ticker, { TickerItem } from '../../src/components/Ticker';
+import { PeriodSelector, usePersistedPeriod, Period } from '../../src/components/PeriodSelector';
 
 interface Summary {
   total_alp: number; total_net_alp: number; total_sits: number; total_sales: number;
   delta_pct_vs_yesterday: number; sales_day: string; gate: any; is_full_agency: boolean;
-  is_history?: boolean;
+  is_history?: boolean; period?: Period;
 }
 
 const HISTORY_DAYS = 30;
@@ -33,23 +34,32 @@ export default function DashboardScreen() {
   const [viewDay, setViewDay] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [todayDay, setTodayDay] = useState<string | null>(null);
+  // Dashboard defaults to Daily (the specific-day picker only applies here);
+  // Weekly/Monthly show a rolling window and hide the day picker.
+  const [period, changePeriod] = usePersistedPeriod('vl_dashboard_period', 'daily');
+
+  const onChangePeriod = (p: Period) => {
+    changePeriod(p);
+    if (p !== 'daily') setViewDay(null); // a rolling window has no single "day"
+  };
 
   const fetchAll = useCallback(async () => {
     try {
-      // Summary and offices support history; ticker and wall are live-only.
-      const dayParam = viewDay ? `?sales_day=${viewDay}` : '';
+      // Daily uses the (optionally historical) day; weekly/monthly use a rolling
+      // window. Ticker and wall are always live.
+      const q = period !== 'daily' ? `?period=${period}` : (viewDay ? `?sales_day=${viewDay}` : '');
       const [s, t, p, o] = await Promise.all([
-        api<Summary>(`/api/dashboard/summary${dayParam}`),
+        api<Summary>(`/api/dashboard/summary${q}`),
         api<{ items: TickerItem[] }>('/api/dashboard/ticker'),
         api<{ vets: any[]; rookies: any[]; platinum_rule?: any[] }>('/api/dashboard/platinum-wall'),
-        api<{ offices: OfficeRow[] }>(`/api/dashboard/offices${dayParam}`),
+        api<{ offices: OfficeRow[] }>(`/api/dashboard/offices${q}`),
       ]);
       setSummary(s); setTicker(t.items); setVets(p.vets); setRookies(p.rookies); setPlatinum(p.platinum_rule || []); setOffices(o.offices);
-      if (!viewDay) setTodayDay(s.sales_day);
+      if (!viewDay && period === 'daily') setTodayDay(s.sales_day);
     } catch (e) {
       console.warn('Dashboard fetch error:', e);
     }
-  }, [viewDay]);
+  }, [viewDay, period]);
 
   const dayOptions = React.useMemo(() => {
     const anchor = todayDay || summary?.sales_day;
@@ -91,15 +101,21 @@ export default function DashboardScreen() {
           <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text></Text>
           <Text style={styles.sub}>{user?.name} · <Text style={{ color: COLORS.primary }}>{roleTitle(agent?.io_role, user?.role) || roleLabel}</Text></Text>
         </View>
-        <TouchableOpacity
-          style={[styles.dayPill, viewDay ? styles.dayPillHistory : null]}
-          onPress={() => setPickerOpen(true)}
-          testID="day-picker-open"
-        >
-          <Ionicons name="calendar-outline" size={12} color={viewDay ? COLORS.gold : COLORS.primary} />
-          <Text style={styles.dayPillTxt}>{viewDay ?? (summary?.sales_day || '—')}</Text>
-          <Ionicons name="chevron-down" size={10} color={COLORS.textDim} />
-        </TouchableOpacity>
+        {period === 'daily' ? (
+          <TouchableOpacity
+            style={[styles.dayPill, viewDay ? styles.dayPillHistory : null]}
+            onPress={() => setPickerOpen(true)}
+            testID="day-picker-open"
+          >
+            <Ionicons name="calendar-outline" size={12} color={viewDay ? COLORS.gold : COLORS.primary} />
+            <Text style={styles.dayPillTxt}>{viewDay ?? (summary?.sales_day || '—')}</Text>
+            <Ionicons name="chevron-down" size={10} color={COLORS.textDim} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      <View style={styles.periodBar}>
+        <PeriodSelector value={period} onChange={onChangePeriod} testID="dashboard-period" />
       </View>
 
       {viewDay ? (
@@ -122,7 +138,9 @@ export default function DashboardScreen() {
         ) : (
           <>
             <Text style={styles.sectionTitle}>
-              {summary.is_history
+              {period !== 'daily'
+                ? `${period.toUpperCase()} ${summary.is_full_agency ? 'GLOBAL' : 'TEAM'} PRODUCTION`
+                : summary.is_history
                 ? `PRODUCTION · ${summary.sales_day}`
                 : summary.is_full_agency ? "TODAY'S GLOBAL PRODUCTION" : "TODAY'S TEAM PRODUCTION"}
             </Text>
@@ -207,6 +225,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
   brand: { color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: 1.5 },
   sub: { color: COLORS.textDim, fontSize: 11, marginTop: 2, letterSpacing: 0.5 },
+  periodBar: { paddingHorizontal: 16, paddingBottom: 8 },
   dayPill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 4 },
   dayPillHistory: { borderColor: COLORS.gold },
   dayPillTxt: { color: COLORS.text, fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums' as any] },

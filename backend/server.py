@@ -575,10 +575,52 @@ def resolve_history_day(sales_day: Optional[str]) -> str:
     return requested.isoformat()
 
 
+def scoreboard_prev_window(period: str) -> Dict[str, Any]:
+    """submitted_at match for the window immediately before the current one, so
+    weekly/monthly views can show a period-over-period delta. Not for 'daily'."""
+    now = now_detroit()
+    if period == "weekly":
+        cur = most_recent_wed_2pm(now)
+        prev = cur - timedelta(days=7)
+    else:  # monthly — first day of the previous calendar month
+        cur = month_start_detroit(now)
+        prev = month_start_detroit(cur - timedelta(days=1))
+    return {"submitted_at": {"$gte": prev.astimezone(timezone.utc), "$lt": cur.astimezone(timezone.utc)}}
+
+
 @api_router.get("/dashboard/summary")
-async def dashboard_summary(sales_day: Optional[str] = None, user: Dict[str, Any] = Depends(require_agent)):
+async def dashboard_summary(
+    sales_day: Optional[str] = None,
+    period: Optional[str] = None,
+    user: Dict[str, Any] = Depends(require_agent),
+):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
+
+    # Weekly/monthly: a rolling window (delta vs the previous window). Daily and
+    # the no-period default keep the exact single-day + vs-yesterday behavior.
+    if period and period != "daily":
+        base, _ = scoreboard_window(period)  # validates; raises 400 on unknown
+        base_prev = scoreboard_prev_window(period)
+        if ids is not None:
+            base["agent_id"] = {"$in": ids}
+            base_prev["agent_id"] = {"$in": ids}
+        cur_agg = await aggregate_alp(base)
+        prev_agg = await aggregate_alp(base_prev)
+        delta_pct = ((cur_agg["gross_alp"] - prev_agg["gross_alp"]) / prev_agg["gross_alp"] * 100.0) if prev_agg["gross_alp"] > 0 else 0.0
+        return {
+            "sales_day": today,
+            "period": period,
+            "total_alp": cur_agg["gross_alp"],
+            "total_net_alp": cur_agg["net_alp"],
+            "total_sits": cur_agg["sits"],
+            "total_sales": cur_agg["sales"],
+            "delta_pct_vs_yesterday": round(delta_pct, 1),  # vs previous window
+            "gate": None,
+            "is_full_agency": ids is None,
+            "is_history": False,
+        }
+
     day = resolve_history_day(sales_day)
     prev = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
     base = {"sales_day": day}
@@ -593,6 +635,7 @@ async def dashboard_summary(sales_day: Optional[str] = None, user: Dict[str, Any
         delta_pct = ((today_agg["gross_alp"] - yest_agg["gross_alp"]) / yest_agg["gross_alp"]) * 100.0
     return {
         "sales_day": day,
+        "period": "daily",
         "total_alp": today_agg["gross_alp"],
         "total_net_alp": today_agg["net_alp"],
         "total_sits": today_agg["sits"],
@@ -685,9 +728,18 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent))
 
 
 @api_router.get("/dashboard/offices")
-async def dashboard_offices(sales_day: Optional[str] = None, user: Dict[str, Any] = Depends(require_agent)):
+async def dashboard_offices(
+    sales_day: Optional[str] = None,
+    period: Optional[str] = None,
+    user: Dict[str, Any] = Depends(require_agent),
+):
     ids = await visible_agent_ids(user)
-    today = resolve_history_day(sales_day)
+    # Weekly/monthly use a rolling window; daily/default keeps the single-day
+    # (optionally historical) behavior.
+    if period and period != "daily":
+        window, _ = scoreboard_window(period)  # validates; raises 400 on unknown
+    else:
+        window = {"sales_day": resolve_history_day(sales_day)}
     # Discover offices from the actual agent_profiles so new RGAs appear automatically
     office_filter: Dict[str, Any] = {}
     if ids is not None:
@@ -703,7 +755,7 @@ async def dashboard_offices(sales_day: Optional[str] = None, user: Dict[str, Any
         if not office_agent_ids:
             out.append({"office": office, "alp": 0, "sales": 0, "avg_deal": 0})
             continue
-        agg = await aggregate_alp({"sales_day": today, "agent_id": {"$in": office_agent_ids}})
+        agg = await aggregate_alp({**window, "agent_id": {"$in": office_agent_ids}})
         avg = (agg["gross_alp"] / agg["sales"]) if agg["sales"] > 0 else 0
         out.append({
             "office": office,
@@ -711,7 +763,7 @@ async def dashboard_offices(sales_day: Optional[str] = None, user: Dict[str, Any
             "sales": agg["sales"],
             "avg_deal": round(avg, 2),
         })
-    return {"offices": out}
+    return {"offices": out, "period": period or "daily"}
 
 
 # =========================================================
