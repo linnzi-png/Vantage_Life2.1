@@ -1,7 +1,10 @@
 """VantageLife 2.0 — FastAPI Backend
 AO Premier — Real-Time Impact Culture
 """
-from fastapi import FastAPI, APIRouter, Request, HTTPException, Response, Depends, Body
+from fastapi import (
+    FastAPI, APIRouter, Request, HTTPException, Response, Depends, Body,
+    UploadFile, File, Form,
+)
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -18,6 +21,7 @@ import httpx
 import pytz
 
 import metrics
+import war_import
 from pathlib import Path
 from pydantic import BaseModel, Field
 from jose import jwt as apple_jwt
@@ -2244,6 +2248,140 @@ async def admin_set_flags(payload: AdminSetFlagsIn, user: Dict[str, Any] = Depen
             detail="No login found for that email — have them sign in once, then grant the flag.",
         )
     return {"ok": True, "email": email, **updates}
+
+
+@api_router.post("/admin/import-war-report")
+async def admin_import_war_report(
+    file: UploadFile = File(...),
+    week_start: Optional[str] = Form(None),
+    dry_run: bool = Form(False),
+    create_missing: bool = Form(False),
+    user: Dict[str, Any] = Depends(require_admin),
+):
+    """Import one weekly WAR spreadsheet into production_entries.
+
+    In-app replacement for the terminal backfill script (import_xlsx_war.py):
+    both read the same layout via war_import, so they cannot drift apart.
+
+    Overlap rule: each report carries NINE daily tabs, so "Wed (2)"/"Thurs (2)"
+    land on the same sales days as the NEXT report's "Wed"/"Thurs". The later
+    file wins — a re-import replaces an existing WAR-sourced entry for the same
+    (agent, sales_day), so corrections in the following week's report are kept
+    rather than dropped. Entries an agent submitted in-app are never replaced;
+    they are reported under "protected" and left untouched.
+    """
+    filename = file.filename or ""
+    if not filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Upload a .xlsx WAR report")
+
+    # Week start comes from the filename date (the Wednesday the report opens
+    # on) unless explicitly supplied. Without it every tab would be misdated.
+    if week_start:
+        try:
+            ws_date = date.fromisoformat(week_start)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="week_start must be YYYY-MM-DD")
+    else:
+        ws_date = war_import.week_start_from_filename(filename)
+        if ws_date is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not read the week start from the filename — expected "
+                       "'YYYY-MM-DD_...xlsx', or send week_start explicitly.",
+            )
+    if ws_date.weekday() != 2:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Week start {ws_date.isoformat()} is a "
+                   f"{ws_date.strftime('%A')} — WAR reports open on Wednesday.",
+        )
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    try:
+        parsed = await asyncio.to_thread(war_import.parse_workbook, io.BytesIO(raw), ws_date)
+    except Exception as e:
+        logger.exception("WAR import failed to parse %s", filename)
+        raise HTTPException(status_code=400, detail=f"Could not read the spreadsheet: {e}")
+
+    office = parsed["office"]
+    inserted = replaced = protected = skipped_unmatched = 0
+    created_agents: List[str] = []
+    unmatched: Dict[str, Dict[str, Any]] = {}
+    days_seen: List[str] = []
+
+    for date_str in sorted(parsed["days"].keys()):
+        rows = parsed["days"][date_str]
+        days_seen.append(date_str)
+        for m in rows:
+            name = str(m["name"]).strip()
+            profile = await db.agent_profiles.find_one(
+                {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}},
+                {"_id": 0, "agent_id": 1},
+            )
+            if not profile:
+                if not create_missing:
+                    # Report rather than orphan: an agent created without an
+                    # upline is invisible in every GA/MGA team rollup, since
+                    # visible_agent_ids() walks agent_profiles.upline_id.
+                    unmatched.setdefault(name, {
+                        "name": name,
+                        "mga": m.get("mga"), "ga": m.get("ga"), "sa": m.get("sa"),
+                        "state": m.get("state"), "rows": 0,
+                    })
+                    unmatched[name]["rows"] += 1
+                    skipped_unmatched += 1
+                    continue
+                agent_id = f"agent_{uuid.uuid4().hex[:10]}"
+                await db.agent_profiles.insert_one({
+                    "agent_id": agent_id,
+                    "name": name,
+                    "office": office,
+                    "role": "level_1",
+                    "upline_id": None,
+                    "created_at": now_utc(),
+                    "created_by_import": True,
+                })
+                created_agents.append(name)
+            else:
+                agent_id = profile["agent_id"]
+
+            entry = war_import.build_entry(agent_id, office, date_str, m)
+            existing = await db.production_entries.find_one(
+                {"agent_id": agent_id, "sales_day": date_str},
+                {"_id": 0, "entry_id": 1, "source": 1},
+            )
+            if existing is None:
+                if not dry_run:
+                    await db.production_entries.insert_one(entry)
+                inserted += 1
+            elif existing.get("source") == war_import.WAR_IMPORT_SOURCE:
+                if not dry_run:
+                    entry["entry_id"] = existing["entry_id"]
+                    entry["updated_at"] = now_utc()
+                    await db.production_entries.replace_one(
+                        {"entry_id": existing["entry_id"]}, entry
+                    )
+                replaced += 1
+            else:
+                protected += 1
+
+    return {
+        "ok": True,
+        "dry_run": dry_run,
+        "file": filename,
+        "office": office,
+        "week_start": ws_date.isoformat(),
+        "days": days_seen,
+        "tabs_found": parsed["tabs_found"],
+        "inserted": inserted,
+        "replaced": replaced,
+        "protected": protected,
+        "skipped_unmatched": skipped_unmatched,
+        "created_agents": created_agents,
+        "unmatched": sorted(unmatched.values(), key=lambda u: u["name"]),
+    }
 
 
 @api_router.post("/me/role")

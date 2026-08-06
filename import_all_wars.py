@@ -1,57 +1,58 @@
-"""Import all downloaded WAR xlsx files into MongoDB. Downloads must already exist."""
+"""Bulk-import a directory of WAR xlsx files into MongoDB.
+
+Superseded by the in-app Admin → Import War Report screen, which needs no
+local MongoDB access. Kept for bulk local backfills.
+
+Week start is read from each filename ('YYYY-MM-DD_...xlsx'), and files are
+imported in chronological order so that the two days each report shares with
+the following week are resolved later-file-wins.
+
+Usage (never hardcode the connection string — pass it in the environment):
+
+    export MONGO_URL='mongodb+srv://USER:PASSWORD@host/'
+    python import_all_wars.py [directory]
+
+Defaults to ./downloads if no directory is given.
+"""
 import os
 import subprocess
+import sys
 
-REPO = r"C:\Users\linnz\OneDrive\Documents\Vantage_Life2.1"
-DOWNLOADS = os.path.join(REPO, "downloads")
-MONGO_URL = "mongodb+srv://linnzi_db_user:Wy7fahxb9Gfp9xh2@vantagelife.r5atbyt.mongodb.net/"
+REPO = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(REPO, "backend", "import_xlsx_war.py")
 
-WEEKS = [
-    "2026-02-18", "2026-02-25", "2026-03-04", "2026-03-11",
-    "2026-03-18", "2026-03-25", "2026-04-01", "2026-04-08",
-    "2026-04-15", "2026-04-22", "2026-04-29", "2026-05-06",
-    "2026-05-13", "2026-05-20", "2026-05-27", "2026-06-03",
-]
-OFFICES = ["Gojcaj", "MJ", "Rust", "Monty"]
+# Credentials come from the environment. A connection string committed to the
+# repo leaks the whole production database to anyone with read access.
+MONGO_URL = os.environ.get("MONGO_URL")
+if not MONGO_URL:
+    sys.exit("MONGO_URL is not set. Export it before running (see module docstring).")
+
+source_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO, "downloads")
+if not os.path.isdir(source_dir):
+    sys.exit(f"No such directory: {source_dir}")
+
+files = sorted(f for f in os.listdir(source_dir) if f.endswith(".xlsx"))
+if not files:
+    sys.exit(f"No .xlsx files found in {source_dir}")
 
 log_path = os.path.join(REPO, "import_log.txt")
-ok = 0
-fail = 0
+env = os.environ.copy()
+env["PYTHONIOENCODING"] = "utf-8"
 
-with open(log_path, "w") as log:
-    for ws in WEEKS:
-        safe = ws.replace("-", "_")
-        for office in OFFICES:
-            fname = f"{office}_WAR_{safe}.xlsx"
-            fpath = os.path.join(DOWNLOADS, fname)
-            if not os.path.exists(fpath):
-                log.write(f"[SKIP] {ws} {office} — file not found\n")
-                continue
-            env = os.environ.copy()
-            env["WEEK_START"] = ws
-            env["MONGO_URL"] = MONGO_URL
-            env["PYTHONIOENCODING"] = "utf-8"
-            r = subprocess.run(
-                ["python", SCRIPT, fpath],
-                cwd=REPO,
-                env=env,
-                capture_output=True,
-                text=True,
-            )
-            status = "OK" if r.returncode == 0 else "FAIL"
-            if r.returncode == 0:
-                ok += 1
-            else:
-                fail += 1
-            log.write(f"[{status}] {ws} {office}\n")
-            if r.stdout:
-                log.write(r.stdout)
-            if r.stderr:
-                log.write(r.stderr)
-            log.flush()
-            print(f"[{status}] {ws} {office}")
+print(f"Importing {len(files)} file(s) from {source_dir} ...")
+with open(log_path, "w", encoding="utf-8") as log:
+    result = subprocess.run(
+        [sys.executable, SCRIPT, *[os.path.join(source_dir, f) for f in files]],
+        cwd=os.path.join(REPO, "backend"),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    log.write(result.stdout or "")
+    log.write(result.stderr or "")
 
-    summary = f"\nDone: {ok} OK, {fail} FAILED\n"
-    log.write(summary)
-    print(summary)
+print(result.stdout or "")
+if result.returncode != 0:
+    print(result.stderr or "", file=sys.stderr)
+print(f"Log written to {log_path}")
+sys.exit(result.returncode)

@@ -10,6 +10,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, useAuth, roleTitle, COLORS, Role } from '../src/lib/auth';
+import { WarReportImport } from '../src/components/WarReportImport';
 
 interface Person {
   agent_id: string;
@@ -161,6 +162,8 @@ export default function AdminScreen() {
           <Ionicons name={showAdd ? 'chevron-up' : 'person-add'} size={16} color="#000" />
           <Text style={styles.addBtnTxt}>{showAdd ? 'Hide Form' : 'Add Person'}</Text>
         </TouchableOpacity>
+
+        <WarReportImport />
 
         {showAdd ? (
           <View style={styles.card} testID="admin-add-form">
