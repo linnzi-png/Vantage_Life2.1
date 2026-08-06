@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth, COLORS, levelNum, Role } from '../../src/lib/auth';
+import { useTour } from '../../src/lib/tour';
+import { TourAnchor } from '../../src/components/TourAnchor';
 
 const SWITCH_TIERS: { role: Role; label: string }[] = [
   { role: 'level_1', label: 'L1' },
@@ -16,8 +18,16 @@ const SWITCH_TIERS: { role: Role; label: string }[] = [
 export default function MoreScreen() {
   const router = useRouter();
   const { user, agent, roleLabel, signOut, deleteAccount, switchRole } = useAuth();
+  const { start: startTour } = useTour();
   const lvl = levelNum(user?.role);
   const [switching, setSwitching] = React.useState(false);
+
+  const replayTour = () => {
+    if (!user || user.role === 'pending' || !user.agent_id) return;
+    // The tour opens on the dashboard; navigate first so step 1 has no jump.
+    router.navigate('/');
+    startTour(user.role);
+  };
 
   const items: { id: string; icon: any; label: string; onPress: () => void; show: boolean }[] = [
     { id: 'admin', icon: 'shield-checkmark', label: 'Admin Panel', onPress: () => router.push('/admin'), show: !!user?.is_admin },
@@ -58,7 +68,7 @@ export default function MoreScreen() {
         {items.filter((i) => i.show).length > 0 ? (
           <>
             <Text style={styles.kicker}>EXECUTIVE TOOLS</Text>
-            <View style={styles.list}>
+            <TourAnchor id="more-tools" style={styles.list}>
               {items.filter((i) => i.show).map((it) => (
                 <TouchableOpacity key={it.id} style={styles.item} onPress={it.onPress} testID={`more-${it.id}`}>
                   <Ionicons name={it.icon} size={18} color={COLORS.primary} />
@@ -66,7 +76,20 @@ export default function MoreScreen() {
                   <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
                 </TouchableOpacity>
               ))}
-            </View>
+            </TourAnchor>
+          </>
+        ) : null}
+
+        {user?.agent_id && user.role !== 'pending' ? (
+          <>
+            <Text style={[styles.kicker, { marginTop: 16 }]}>HELP</Text>
+            <TourAnchor id="more-walkthrough" style={styles.list}>
+              <TouchableOpacity style={styles.item} onPress={replayTour} testID="more-walkthrough">
+                <Ionicons name="help-buoy" size={18} color={COLORS.primary} />
+                <Text style={styles.itemTxt}>App Walkthrough</Text>
+                <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
+              </TouchableOpacity>
+            </TourAnchor>
           </>
         ) : null}
 

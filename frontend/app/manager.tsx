@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert,
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { api, COLORS, useAuth, levelNum } from '../src/lib/auth';
+import { TourAnchor } from '../src/components/TourAnchor';
 
 interface AgentRow { agent_id: string; name: string; office: string; gross_alp: number; net_alp: number; sales: number; }
 
@@ -59,8 +60,10 @@ export default function ManagerScreen() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: COLORS.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Stack.Screen options={{ title: 'COMMAND PANEL', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
-        <Text style={styles.kicker}>NET ALP ERASER · LEVEL 4</Text>
-        <Text style={styles.intro}>Adjustments update Net ALP for internal reporting; Gross ALP on the Platinum Wall stays unchanged.</Text>
+        <TourAnchor id="manager-intro">
+          <Text style={styles.kicker}>NET ALP ERASER · LEVEL 4</Text>
+          <Text style={styles.intro}>Adjustments update Net ALP for internal reporting; Gross ALP on the Platinum Wall stays unchanged.</Text>
+        </TourAnchor>
 
         {selected ? (
           <View style={styles.formCard} testID="erase-form">

@@ -7,6 +7,7 @@ import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth, levelNum } from '../src/lib/auth';
 import { SearchBar } from '../src/components/SearchBar';
+import { TourAnchor } from '../src/components/TourAnchor';
 import { AgentContactSheet, AgentContact } from '../src/components/AgentContactSheet';
 
 interface Endorsement { agent_id: string; name: string; ts: string; }
@@ -110,7 +111,9 @@ export default function NominationsScreen() {
         <Text style={styles.title}>NOMINATIONS</Text>
         <Text style={styles.sub}>{threshold} endorsements from leadership flag a nomination for the wall.</Text>
       </View>
-      <SearchBar value={query} onChange={setQuery} placeholder="Search nominee, office, reason" testID="nominations-search" />
+      <TourAnchor id="noms-header">
+        <SearchBar value={query} onChange={setQuery} placeholder="Search nominee, office, reason" testID="nominations-search" />
+      </TourAnchor>
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}

@@ -9,6 +9,7 @@ import { AgentContactSheet, AgentContact, formatPhone } from '../../src/componen
 import { QuickEntryForm, QuickEntryTarget } from '../../src/components/QuickEntryForm';
 import { PeriodSelector, usePersistedPeriod } from '../../src/components/PeriodSelector';
 import { SearchBar } from '../../src/components/SearchBar';
+import { TourAnchor } from '../../src/components/TourAnchor';
 
 interface TeamRow {
   agent_id: string; name: string; office: string; role: string; io_role: string;
@@ -121,15 +122,17 @@ export default function TeamScreen() {
           <Text style={styles.kicker}>HIERARCHY VIEW · LIVE</Text>
           <Text style={styles.title}>TEAM PRODUCTION</Text>
         </View>
-        <TouchableOpacity style={styles.nomBtn} onPress={() => router.push('/nominations')} testID="open-nominations">
-          <Ionicons name="medal" size={14} color="#E5E4E2" />
-          <Text style={styles.nomBtnTxt}>NOMINATIONS</Text>
-          {readyNoms > 0 ? (
-            <View style={styles.badge} testID="nominations-badge">
-              <Text style={styles.badgeTxt}>{readyNoms}</Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
+        <TourAnchor id="team-nominations">
+          <TouchableOpacity style={styles.nomBtn} onPress={() => router.push('/nominations')} testID="open-nominations">
+            <Ionicons name="medal" size={14} color="#E5E4E2" />
+            <Text style={styles.nomBtnTxt}>NOMINATIONS</Text>
+            {readyNoms > 0 ? (
+              <View style={styles.badge} testID="nominations-badge">
+                <Text style={styles.badgeTxt}>{readyNoms}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </TourAnchor>
       </View>
 
       {upline && levelNum(user?.role) < 4 ? (
@@ -156,6 +159,7 @@ export default function TeamScreen() {
       </View>
 
       {canEnter && missingTonight.length > 0 ? (
+        <TourAnchor id="team-missing">
         <TouchableOpacity
           style={styles.missingCard}
           onPress={startMissingQueue}
@@ -174,6 +178,7 @@ export default function TeamScreen() {
           <Text style={styles.missingAction}>ENTER ALL</Text>
           <Ionicons name="chevron-forward" size={14} color={COLORS.textDim} />
         </TouchableOpacity>
+        </TourAnchor>
       ) : null}
 
       <View style={styles.sortBar}>
@@ -183,7 +188,9 @@ export default function TeamScreen() {
         {sortBtn('close_ratio', 'Close %')}
         {sortBtn('avg_deal', 'Avg Deal')}
       </View>
-      <SearchBar value={query} onChange={setQuery} placeholder="Search name, office, title" testID="team-search" />
+      <TourAnchor id="team-roster">
+        <SearchBar value={query} onChange={setQuery} placeholder="Search name, office, title" testID="team-search" />
+      </TourAnchor>
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
