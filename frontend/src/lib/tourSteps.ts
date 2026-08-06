@@ -71,7 +71,7 @@ const BASICS_FULL: TourStep[] = [
     screen: '/',
     anchor: 'dash-header',
     title: 'YOUR DASHBOARD',
-    body: 'Your name and producer title live up here. The date pill is the open sales day — the reporting cycle runs 6:00 AM to 5:59 AM Detroit time, not midnight to midnight. Tap the pill anytime to look back at a past day, read-only.',
+    body: 'Your name and producer title live up here. The date pill is the open sales day. Tap the pill anytime to look back at a past day, read-only.',
   },
   {
     id: 'periods',
@@ -147,7 +147,7 @@ const basicsBrief = (welcomeBody: string, includeUpline: boolean): TourStep[] =>
     screen: '/',
     anchor: 'dash-header',
     title: 'THE SALES DAY',
-    body: 'The date pill is the open sales day — the cycle runs 6:00 AM to 5:59 AM Detroit time. The production week locks every Wednesday at 2:00 PM. Tap the pill to review past days read-only.',
+    body: 'The date pill is the open sales day. The production week locks every Wednesday at 2:00 PM. Tap the pill to review past days read-only.',
   },
   {
     id: 'live-stats',
