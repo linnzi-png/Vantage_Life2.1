@@ -5,6 +5,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '../src/lib/auth';
+import { TourProvider } from '../src/lib/tour';
+import { TourOverlay } from '../src/components/TourOverlay';
 
 // Keep the splash visible until the layout tree is mounted.
 // Without this, the splash auto-hides before React has painted the dark
@@ -24,29 +26,32 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0D0D0D' }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <StatusBar style="light" />
-          <Stack
-            screenOptions={{
-              headerStyle: { backgroundColor: '#0D0D0D' },
-              headerTintColor: '#FFFFFF',
-              // Dark background on every screen so no white bleeds through
-              // during the login → tabs transition.
-              contentStyle: { backgroundColor: '#0D0D0D' },
-              headerShadowVisible: false,
-              // 'fade' crossfade eliminates the white flash that 'slide'
-              // and the default transition show between screens.
-              animation: 'fade',
-            }}
-          >
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="login" options={{ headerShown: false }} />
-            <Stack.Screen name="pending" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="manager" options={{ title: 'Manager Command' }} />
-            <Stack.Screen name="audit" options={{ title: 'Audit Log' }} />
-            <Stack.Screen name="vault" options={{ title: 'Historical Vault' }} />
-            <Stack.Screen name="admin" options={{ title: 'Admin Panel' }} />
-          </Stack>
+          <TourProvider>
+            <StatusBar style="light" />
+            <Stack
+              screenOptions={{
+                headerStyle: { backgroundColor: '#0D0D0D' },
+                headerTintColor: '#FFFFFF',
+                // Dark background on every screen so no white bleeds through
+                // during the login → tabs transition.
+                contentStyle: { backgroundColor: '#0D0D0D' },
+                headerShadowVisible: false,
+                // 'fade' crossfade eliminates the white flash that 'slide'
+                // and the default transition show between screens.
+                animation: 'fade',
+              }}
+            >
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="login" options={{ headerShown: false }} />
+              <Stack.Screen name="pending" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="manager" options={{ title: 'Manager Command' }} />
+              <Stack.Screen name="audit" options={{ title: 'Audit Log' }} />
+              <Stack.Screen name="vault" options={{ title: 'Historical Vault' }} />
+              <Stack.Screen name="admin" options={{ title: 'Admin Panel' }} />
+            </Stack>
+            <TourOverlay />
+          </TourProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -7,6 +7,7 @@ import { api, COLORS, useAuth } from '../../src/lib/auth';
 import { NominateSheet } from '../../src/components/NominateSheet';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 import { SearchBar } from '../../src/components/SearchBar';
+import { TourAnchor } from '../../src/components/TourAnchor';
 
 interface Shoutout {
   shoutout_id: string;
@@ -73,10 +74,12 @@ export default function ShoutoutsScreen() {
           <Text style={styles.kicker}>VICTORY CULTURE</Text>
           <Text style={styles.title}>PREMIER SHOUTOUTS</Text>
         </View>
-        <TouchableOpacity style={styles.nominateBtn} onPress={() => setNominateOpen(true)} testID="open-nominate">
-          <Ionicons name="medal" size={14} color="#E5E4E2" />
-          <Text style={styles.nominateTxt}>NOMINATE</Text>
-        </TouchableOpacity>
+        <TourAnchor id="shoutouts-nominate">
+          <TouchableOpacity style={styles.nominateBtn} onPress={() => setNominateOpen(true)} testID="open-nominate">
+            <Ionicons name="medal" size={14} color="#E5E4E2" />
+            <Text style={styles.nominateTxt}>NOMINATE</Text>
+          </TouchableOpacity>
+        </TourAnchor>
       </View>
       <SearchBar value={query} onChange={setQuery} placeholder="Search name, office, award, reason" testID="shoutouts-search" />
       <ScrollView

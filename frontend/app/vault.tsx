@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Share, 
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import { api, COLORS } from '../src/lib/auth';
+import { TourAnchor } from '../src/components/TourAnchor';
 
 interface Week { week_id: string; week_start: string; archived_at: string; totals: any; agent_count: number; }
 
@@ -51,8 +52,10 @@ export default function VaultScreen() {
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <Stack.Screen options={{ title: 'HISTORICAL VAULT', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
-        <Text style={styles.kicker}>LAST 8 ARCHIVED WEEKS</Text>
-        <Text style={styles.intro}>Pick two weeks to compare side-by-side with delta percentages.</Text>
+        <TourAnchor id="vault-weeks">
+          <Text style={styles.kicker}>LAST 8 ARCHIVED WEEKS</Text>
+          <Text style={styles.intro}>Pick two weeks to compare side-by-side with delta percentages.</Text>
+        </TourAnchor>
 
         <View style={styles.weekGrid}>
           {weeks.map((w) => {

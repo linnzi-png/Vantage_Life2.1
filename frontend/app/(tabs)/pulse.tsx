@@ -8,6 +8,7 @@ import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
 import { BufferedPulse, PulsePayload, PULSE_FIELDS, isBufferEntryEligible, isLateNightWindow, makeClientEntryId } from '../../src/lib/cycle';
 import GateBanner from '../../src/components/GateBanner';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
+import { TourAnchor } from '../../src/components/TourAnchor';
 
 const STEPS = PULSE_FIELDS;
 
@@ -228,6 +229,7 @@ export default function PulseScreen() {
             ) : null}
           </View>
 
+          <TourAnchor id="pulse-stepper">
           {!done ? (
             <View
               style={styles.stepCard}
@@ -300,6 +302,7 @@ export default function PulseScreen() {
               </View>
             </View>
           )}
+          </TourAnchor>
 
           <Text style={[styles.kicker, { marginTop: 18 }]}>TODAY'S ENTRIES</Text>
           {entries.filter((e) => !e.is_adjustment).length === 0 ? (
@@ -315,6 +318,7 @@ export default function PulseScreen() {
           )}
 
           {upline && levelNum(user?.role) < 4 ? (
+            <TourAnchor id="pulse-upline">
             <TouchableOpacity
               style={styles.uplineCard}
               onPress={() => setContactOpen(true)}
@@ -340,6 +344,7 @@ export default function PulseScreen() {
                 <Ionicons name="chevron-forward" size={14} color={COLORS.textDim} />
               </View>
             </TouchableOpacity>
+            </TourAnchor>
           ) : null}
         </ScrollView>
 

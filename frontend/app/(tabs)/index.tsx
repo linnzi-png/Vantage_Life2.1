@@ -11,6 +11,7 @@ import OfficeTabs, { OfficeRow } from '../../src/components/OfficeTabs';
 import GateBanner from '../../src/components/GateBanner';
 import Ticker, { TickerItem } from '../../src/components/Ticker';
 import { PeriodSelector, usePersistedPeriod, Period } from '../../src/components/PeriodSelector';
+import { TourAnchor } from '../../src/components/TourAnchor';
 
 interface Summary {
   total_alp: number; total_net_alp: number; total_sits: number; total_sales: number;
@@ -96,7 +97,7 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header} testID="dashboard-header">
+      <TourAnchor id="dash-header" style={styles.header} testID="dashboard-header">
         <View>
           <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text></Text>
           <Text style={styles.sub}>{user?.name} · <Text style={{ color: COLORS.primary }}>{roleTitle(agent?.io_role, user?.role) || roleLabel}</Text></Text>
@@ -112,11 +113,11 @@ export default function DashboardScreen() {
             <Ionicons name="chevron-down" size={10} color={COLORS.textDim} />
           </TouchableOpacity>
         ) : null}
-      </View>
+      </TourAnchor>
 
-      <View style={styles.periodBar}>
+      <TourAnchor id="dash-period" style={styles.periodBar}>
         <PeriodSelector value={period} onChange={onChangePeriod} testID="dashboard-period" />
-      </View>
+      </TourAnchor>
 
       {viewDay ? (
         <TouchableOpacity style={styles.historyBar} onPress={() => setViewDay(null)} testID="history-return">
@@ -144,7 +145,7 @@ export default function DashboardScreen() {
                 ? `PRODUCTION · ${summary.sales_day}`
                 : summary.is_full_agency ? "TODAY'S GLOBAL PRODUCTION" : "TODAY'S TEAM PRODUCTION"}
             </Text>
-            <View style={styles.cardsRow}>
+            <TourAnchor id="dash-stats" style={styles.cardsRow}>
               <StatCard
                 label="Total Team ALP"
                 value={fmtMoney(summary.total_alp)}
@@ -166,17 +167,19 @@ export default function DashboardScreen() {
                 accent={COLORS.gold}
                 testID="stat-total-sales"
               />
-            </View>
+            </TourAnchor>
 
-            <PlatinumWall
-              vets={vets}
-              rookies={rookies}
-              platinum={platinum}
-              onPress={(it: WallItem) => setContactAgent({
-                name: it.name, role: it.role || 'level_1', io_role: it.io_role,
-                phone: it.phone, email: it.email, office: it.office,
-              })}
-            />
+            <TourAnchor id="dash-wall">
+              <PlatinumWall
+                vets={vets}
+                rookies={rookies}
+                platinum={platinum}
+                onPress={(it: WallItem) => setContactAgent({
+                  name: it.name, role: it.role || 'level_1', io_role: it.io_role,
+                  phone: it.phone, email: it.email, office: it.office,
+                })}
+              />
+            </TourAnchor>
 
             <OfficeTabs offices={offices} />
 
@@ -185,7 +188,9 @@ export default function DashboardScreen() {
         )}
       </ScrollView>
 
-      <Ticker items={ticker} />
+      <TourAnchor id="dash-ticker">
+        <Ticker items={ticker} />
+      </TourAnchor>
       <AgentContactSheet agent={contactAgent} onClose={() => setContactAgent(null)} />
 
       <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>

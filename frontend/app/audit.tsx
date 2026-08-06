@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import { api, COLORS } from '../src/lib/auth';
+import { TourAnchor } from '../src/components/TourAnchor';
 
 interface Audit {
   audit_id: string; ts: string; action: string;
@@ -20,8 +21,10 @@ export default function AuditScreen() {
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <Stack.Screen options={{ title: 'AUDIT LOG', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
-        <Text style={styles.kicker}>IMMUTABLE LEDGER</Text>
-        <Text style={styles.intro}>Every Net ALP adjustment is recorded with a timestamp and a 10+ character reason.</Text>
+        <TourAnchor id="audit-intro">
+          <Text style={styles.kicker}>IMMUTABLE LEDGER</Text>
+          <Text style={styles.intro}>Every Net ALP adjustment is recorded with a timestamp and a 10+ character reason.</Text>
+        </TourAnchor>
         {items.length === 0 ? (
           <Text style={styles.empty}>No adjustments yet.</Text>
         ) : items.map((a) => (
