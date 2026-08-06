@@ -42,6 +42,48 @@ export async function setToken(t: string | null) {
   else await AsyncStorage.removeItem(SESSION_KEY);
 }
 
+/**
+ * Multipart upload. Kept separate from api() because that helper hardcodes a
+ * JSON content type — setting it on a FormData body strips the multipart
+ * boundary and the server rejects the request. The browser/RN runtime must be
+ * left to set Content-Type itself here.
+ *
+ * Uses a longer timeout than api(): parsing a nine-tab WAR workbook server-side
+ * takes well over the 20s interactive budget.
+ */
+export async function apiUpload<T = any>(
+  path: string,
+  form: FormData,
+  timeoutMs = 120000,
+): Promise<T> {
+  const token = await getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND}${path}`, {
+      method: 'POST',
+      body: form,
+      headers,
+      credentials: 'include',
+      signal: controller.signal,
+    });
+  } catch (e: unknown) {
+    const aborted = (e as { name?: string }).name === 'AbortError';
+    throw new Error(aborted ? 'The upload took too long. Please try again.' : 'Unable to reach the server. Please check your connection and try again.');
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try { const j = await res.json(); msg = j.detail || msg; } catch {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
 export async function api<T = any>(path: string, opts: RequestInit = {}): Promise<T> {
   const token = await getToken();
   const headers: Record<string, string> = {

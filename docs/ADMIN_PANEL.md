@@ -45,6 +45,44 @@ Admin list is bootstrapped from the `ADMIN_EMAILS` env var
 
 All of this is flag-based — instant, and needs no new build or App Store release.
 
+## Importing War Reports
+
+**Admin Panel → Import War Reports.** Uploads weekly WAR spreadsheets straight into
+production data — no terminal, no local MongoDB.
+
+1. Name each file with the week's **Wednesday**: `2026-02-18_MJ_War_Report.xlsx`.
+   The date drives which sales day each tab lands on, so a wrong date misdates the
+   whole week. Non-Wednesday dates are rejected.
+2. **Choose Files** — pick all of them at once. They upload in filename order, which
+   is chronological; that ordering matters (see the overlap rule below).
+3. Leave **Preview only (dry run)** ON for the first pass. It reports exactly what
+   would change and writes nothing.
+4. Review the summary, then turn dry run OFF and import for real.
+
+### The nine-tab overlap rule
+
+Each report has nine daily tabs (`Wed` → `Thurs (2)`) but reports are seven days
+apart. So `Wed (2)`/`Thurs (2)` cover the same sales days as the *next* report's
+`Wed`/`Thurs`. **The later file wins** — re-importing replaces the earlier
+WAR-sourced entry for that (agent, day), which keeps the following week's
+corrections instead of dropping them. This is why chronological order matters, and
+why re-uploading the same file is safe: it updates in place rather than duplicating.
+
+### What is never overwritten
+
+Entries an agent submitted in the app (`source` other than `war_xlsx_import`) are
+left untouched and reported as **protected**. A spreadsheet backfill can never
+silently replace someone's own entry.
+
+### Agents not on the roster
+
+Their rows are **skipped** and listed by name with their MGA/GA, because an agent
+created without an upline is invisible in every team rollup (`visible_agent_ids()`
+walks `agent_profiles.upline_id`). Add them via **Add Person** with the correct
+upline, then re-run the import. The **Create agents not on the roster** toggle
+exists for bulk historical loads, but leaves those agents orphaned until you set
+an upline.
+
 ## How it works (for maintainers)
 
 - **Source of truth is `agent_profiles`.** Sign-in re-derives role/`agent_id` from
@@ -55,6 +93,10 @@ All of this is flag-based — instant, and needs no new build or App Store relea
   - `POST /api/admin/set-role` — `{ agent_id, role }`
   - `POST /api/admin/add-person` — `{ name, email, phone?, office?, role, io_role?, upline_agent_id? }`
   - `POST /api/admin/set-flags` — `{ email, is_admin?, can_switch_role? }`
+  - `POST /api/admin/import-war-report` — multipart: `file` (.xlsx), plus optional
+    `week_start` (YYYY-MM-DD, defaults to the filename date), `dry_run`, `create_missing`.
+    Returns per-file counts (`inserted`/`replaced`/`protected`/`skipped_unmatched`) and
+    the `unmatched` agent list.
   - `POST /api/me/role` — self-service switch, gated by the caller's `can_switch_role`;
     changes the caller's **own** account only.
 - `GET /api/auth/me` returns `is_admin` and `can_switch_role` so the UI knows what to show.
@@ -67,5 +109,9 @@ The panel replaces these, but they still exist for scripted/bulk use:
 
 - `backend/create_users.py` — upsert the `USERS` list into the roster.
 - `backend/set_test_role.py <email> <level_1..4>` — flip one person's tier.
+- `backend/import_xlsx_war.py <files...>` — bulk WAR backfill. Shares its parsing with
+  the upload endpoint via `backend/war_import.py`, so both apply the same column
+  mapping and the same later-file-wins overlap rule. Requires direct MongoDB network
+  access, so it will not run from a cloud container.
 
-Both require `MONGO_URL` (and `DB_NAME`, default `vantagelife`) in the environment.
+All require `MONGO_URL` (and `DB_NAME`, default `vantagelife`) in the environment.
