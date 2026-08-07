@@ -1,3 +1,6 @@
 pytest>=8.0
 pytest-asyncio>=0.24
 mongomock-motor>=0.0.29
+# Sync mongomock for the CLI backfill tests — import_xlsx_war.py uses pymongo,
+# not motor, so it cannot be exercised through the async fixtures.
+mongomock>=4.3.0
