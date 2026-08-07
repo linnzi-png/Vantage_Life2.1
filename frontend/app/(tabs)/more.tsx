@@ -35,7 +35,7 @@ export default function MoreScreen() {
     { id: 'nominations', icon: 'medal', label: 'Platinum Nominations', onPress: () => router.push('/nominations'), show: lvl >= 2 },
     { id: 'manager', icon: 'construct', label: 'Manager Command Panel', onPress: () => router.push('/manager'), show: lvl >= 4 },
     { id: 'audit', icon: 'list', label: 'Audit Log', onPress: () => router.push('/audit'), show: lvl >= 4 },
-    { id: 'vault', icon: 'archive', label: 'Historical Vault', onPress: () => router.push('/vault'), show: lvl >= 4 },
+    { id: 'vault', icon: 'stats-chart', label: 'Company Health', onPress: () => router.push('/vault'), show: lvl >= 4 },
   ];
 
   const onSwitch = async (role: Role) => {
