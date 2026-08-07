@@ -5,7 +5,6 @@
 // app's own sheets, so nothing ever sits above this overlay during a step.
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   Keyboard,
   Modal,
   Platform,
@@ -20,6 +19,7 @@ import { router, usePathname } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { COLORS } from '../lib/auth';
 import { useTour } from '../lib/tour';
+import { confirmAsync } from '../lib/dialog';
 
 interface Rect {
   x: number;
@@ -130,17 +130,17 @@ export function TourOverlay() {
     back();
   }, [back]);
 
-  // Android hardware back / web ESC. Alert.alert is a no-op on web, so skip
-  // directly there.
-  const confirmSkip = useCallback(() => {
-    if (Platform.OS === 'web') {
-      skip();
-      return;
-    }
-    Alert.alert('Skip walkthrough?', 'You can replay it anytime from MORE → App Walkthrough.', [
-      { text: 'Keep going', style: 'cancel' },
-      { text: 'Skip', style: 'destructive', onPress: skip },
-    ]);
+  // Android hardware back / web ESC. confirmAsync handles the platform split —
+  // Alert is a no-op on web, so this used to skip without asking there.
+  const confirmSkip = useCallback(async () => {
+    const ok = await confirmAsync({
+      title: 'Skip walkthrough?',
+      message: 'You can replay it anytime from MORE → App Walkthrough.',
+      confirmText: 'Skip',
+      cancelText: 'Keep going',
+      destructive: true,
+    });
+    if (ok) skip();
   }, [skip]);
 
   if (!step) return null;

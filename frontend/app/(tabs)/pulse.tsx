@@ -1,6 +1,6 @@
 // Nightly Pulse Entry — mobile-first stepper
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, InputAccessoryView, Keyboard, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, InputAccessoryView, Keyboard, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,6 +9,7 @@ import { BufferedPulse, PulsePayload, PULSE_FIELDS, isBufferEntryEligible, isLat
 import GateBanner from '../../src/components/GateBanner';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 import { TourAnchor } from '../../src/components/TourAnchor';
+import { notify } from '../../src/lib/dialog';
 
 const STEPS = PULSE_FIELDS;
 
@@ -117,7 +118,7 @@ export default function PulseScreen() {
     flushEligibleEntries().then(async (count) => {
       await refresh();
       if (count > 0) {
-        Alert.alert(
+        notify(
           'Pulse posted',
           `${count} pulse${count > 1 ? 's' : ''} from an earlier session posted to your sales day.`,
         );
@@ -164,13 +165,13 @@ export default function PulseScreen() {
       if (!pendingEntryId.current) pendingEntryId.current = makeClientEntryId();
       await api('/api/pulse', { method: 'POST', body: JSON.stringify({ ...payload, client_entry_id: pendingEntryId.current }) });
       pendingEntryId.current = null;
-      Alert.alert('Pulse logged', `${form.sales || '0'} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
+      notify('Pulse logged', `${form.sales || '0'} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
       setForm(empty);
       setStep(0);
       await refresh();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to submit';
-      Alert.alert('Error', msg);
+      notify('Error', msg);
     } finally {
       setSubmitting(false);
     }

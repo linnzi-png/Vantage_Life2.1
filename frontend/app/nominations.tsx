@@ -1,7 +1,7 @@
 // Platinum Rule nominations inbox — level_2+ endorse (SA is a level_2 title,
 // so SA/GA/MGA/RGA); MGA/RGA post to the Platinum Wall.
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { api, COLORS, useAuth, levelNum } from '../src/lib/auth';
 import { SearchBar } from '../src/components/SearchBar';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { AgentContactSheet, AgentContact } from '../src/components/AgentContactSheet';
+import { confirmAsync, notify } from '../src/lib/dialog';
 
 interface Endorsement { agent_id: string; name: string; ts: string; }
 interface Nomination {
@@ -54,35 +55,28 @@ export default function NominationsScreen() {
       await api(`/api/nominations/${n.nomination_id}/endorse`, { method: 'POST' });
       await fetchAll();
     } catch (e: any) {
-      Alert.alert('Could not endorse', String(e?.message || e));
+      notify('Could not endorse', String(e?.message || e));
     } finally {
       setBusyId(null);
     }
   };
 
   const postToWall = async (n: Nomination) => {
-    Alert.alert(
-      'Post to Platinum Wall?',
-      `Recognize ${n.nominee_name} for living the Platinum Rule. This appears org-wide.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Post it',
-          style: 'default',
-          onPress: async () => {
-            setBusyId(n.nomination_id);
-            try {
-              await api(`/api/nominations/${n.nomination_id}/post-to-wall`, { method: 'POST' });
-              await fetchAll();
-            } catch (e: any) {
-              Alert.alert('Could not post', String(e?.message || e));
-            } finally {
-              setBusyId(null);
-            }
-          },
-        },
-      ],
-    );
+    const ok = await confirmAsync({
+      title: 'Post to Platinum Wall?',
+      message: `Recognize ${n.nominee_name} for living the Platinum Rule. This appears org-wide.`,
+      confirmText: 'Post it',
+    });
+    if (!ok) return;
+    setBusyId(n.nomination_id);
+    try {
+      await api(`/api/nominations/${n.nomination_id}/post-to-wall`, { method: 'POST' });
+      await fetchAll();
+    } catch (e: any) {
+      notify('Could not post', String(e?.message || e));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   if (!canEndorse) {

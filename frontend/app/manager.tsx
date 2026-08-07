@@ -1,10 +1,11 @@
 // Manager Command Panel — Net ALP Eraser (Level 4 only)
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { api, COLORS, useAuth, levelNum } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
+import { notify } from '../src/lib/dialog';
 
 interface AgentRow { agent_id: string; name: string; office: string; gross_alp: number; net_alp: number; sales: number; }
 
@@ -26,7 +27,7 @@ export default function ManagerScreen() {
         const r = await api<{ team: AgentRow[]; sales_day: string }>('/api/team?period=daily');
         setList(r.team.filter((x) => x.sales > 0).slice(0, 100));
         setSalesDay(r.sales_day);
-      } catch (e: any) { Alert.alert('Error', e.message); }
+      } catch (e: any) { notify('Error', e.message); }
     })();
   }, []);
 
@@ -37,22 +38,22 @@ export default function ManagerScreen() {
   }
 
   const onSubmit = async () => {
-    if (!selected) return Alert.alert('Pick an agent first.');
+    if (!selected) return notify('Pick an agent first.');
     const v = parseFloat(newAlp);
-    if (isNaN(v)) return Alert.alert('Enter a valid Net ALP value.');
-    if (reason.trim().length < 10) return Alert.alert('Reason must be at least 10 characters.');
+    if (isNaN(v)) return notify('Enter a valid Net ALP value.');
+    if (reason.trim().length < 10) return notify('Reason must be at least 10 characters.');
     setBusy(true);
     try {
       const r = await api<{ ok: boolean; delta: number; audit: any }>('/api/manager/erase', {
         method: 'POST',
         body: JSON.stringify({ agent_id: selected.agent_id, sales_day: salesDay, new_alp: v, reason }),
       });
-      Alert.alert('Adjusted', `Net ALP delta: ${r.delta >= 0 ? '+' : ''}$${Math.round(r.delta).toLocaleString()}\nGross unchanged on Platinum Wall.`);
+      notify('Adjusted', `Net ALP delta: ${r.delta >= 0 ? '+' : ''}$${Math.round(r.delta).toLocaleString()}\nGross unchanged on Platinum Wall.`);
       setSelected(null); setNewAlp(''); setReason('');
       // refresh list
       const fresh = await api<{ team: AgentRow[] }>('/api/team?period=daily');
       setList(fresh.team.filter((x) => x.sales > 0).slice(0, 100));
-    } catch (e: any) { Alert.alert('Error', e.message || 'Failed'); }
+    } catch (e: any) { notify('Error', e.message || 'Failed'); }
     finally { setBusy(false); }
   };
 
