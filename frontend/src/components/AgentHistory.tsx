@@ -6,7 +6,7 @@
 // rather than an error: the card itself is still useful for contact details.
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
-import { api, COLORS } from '../lib/auth';
+import { api, ApiError, COLORS } from '../lib/auth';
 import { LineChart, BarChart, Point } from './Charts';
 
 export interface HistoryWeek {
@@ -32,9 +32,14 @@ export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?:
   const chartW = Math.min(width, 900) - 32 - 24;
 
   const [series, setSeries] = useState<HistoryWeek[] | null>(null);
+  // Only a 403 means "not your team" and should hide the section entirely.
+  // Anything else is a real failure and must say so — silently rendering
+  // nothing on every error makes a missing endpoint look like a permissions
+  // rule, which is impossible to diagnose from the UI.
   const [denied, setDenied] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
-  const loading = loadedFor !== agentId && !denied;
+  const loading = loadedFor !== agentId && !denied && !failed;
 
   useEffect(() => {
     let cancelled = false;
@@ -45,11 +50,14 @@ export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?:
         if (cancelled) return;
         setSeries(r.series);
         setDenied(false);
-      } catch {
-        // Not entitled, or the agent has no record — either way, show nothing.
+        setFailed(null);
+      } catch (e: unknown) {
         if (cancelled) return;
         setSeries(null);
-        setDenied(true);
+        const status = e instanceof ApiError ? e.status : 0;
+        setDenied(status === 403);
+        setFailed(status === 403 ? null
+          : e instanceof Error ? e.message : 'Could not load production history.');
       } finally {
         if (!cancelled) setLoadedFor(agentId);
       }
@@ -60,6 +68,14 @@ export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?:
   if (denied) return null;
   if (loading) {
     return <View style={styles.loading}><ActivityIndicator color={COLORS.primary} /></View>;
+  }
+  if (failed) {
+    return (
+      <View style={styles.section}>
+        <Text style={styles.kicker}>PRODUCTION HISTORY</Text>
+        <Text style={styles.failed}>{failed}</Text>
+      </View>
+    );
   }
   if (!series || series.length === 0) {
     return (
@@ -115,6 +131,7 @@ const styles = StyleSheet.create({
   loading: { paddingVertical: 20, alignItems: 'center' },
   kicker: { color: COLORS.primary, fontWeight: '900', fontSize: 10, letterSpacing: 1.4 },
   empty: { color: COLORS.textMuted, fontSize: 12, marginTop: 8 },
+  failed: { color: COLORS.orange, fontSize: 12, marginTop: 8 },
   statRow: { flexDirection: 'row', gap: 6, marginTop: 10 },
   stat: { flex: 1, backgroundColor: COLORS.surface2, borderRadius: 6, padding: 8 },
   statLab: { color: COLORS.textMuted, fontSize: 8, fontWeight: '900', letterSpacing: 1 },

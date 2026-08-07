@@ -29,6 +29,21 @@ export interface AppAgent {
   ga_id?: string | null;
 }
 
+/**
+ * Error carrying the HTTP status, so callers can tell an authorization denial
+ * apart from a server or routing failure. Without it a 403 ("not your team")
+ * and a 404 ("endpoint not deployed") are indistinguishable, and a UI that
+ * hides itself on either one fails silently and unexplainably.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 export async function getToken(): Promise<string | null> {
   try {
     return await AsyncStorage.getItem(SESSION_KEY);
@@ -79,7 +94,7 @@ export async function apiUpload<T = any>(
   if (!res.ok) {
     let msg = `${res.status}`;
     try { const j = await res.json(); msg = j.detail || msg; } catch {}
-    throw new Error(msg);
+    throw new ApiError(res.status, msg);
   }
   return res.json();
 }
@@ -111,7 +126,7 @@ export async function api<T = any>(path: string, opts: RequestInit = {}): Promis
   if (!res.ok) {
     let msg = `${res.status}`;
     try { const j = await res.json(); msg = j.detail || msg; } catch {}
-    throw new Error(msg);
+    throw new ApiError(res.status, msg);
   }
   return res.json();
 }
