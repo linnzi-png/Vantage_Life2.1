@@ -3,10 +3,11 @@
 // agent, where speed matters more than the guided one-field-at-a-time flow
 // self-entry uses (that flow stays untouched in pulse.tsx).
 import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Modal, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
 import { PULSE_FIELDS, PulsePayload, recentSalesDays, currentSalesDay, makeClientEntryId } from '../lib/cycle';
+import { notify } from '../lib/dialog';
 
 // Matches MAX_UPLINE_BUFFER_DAYS on the backend: an upline may enter for a
 // downline agent up to 7 sales days back.
@@ -79,7 +80,7 @@ export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext }
       onSubmitted(target.agent_id);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to submit';
-      Alert.alert('Error', msg);
+      notify('Error', msg);
     } finally {
       setSubmitting(false);
     }

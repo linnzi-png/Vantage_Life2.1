@@ -1,10 +1,11 @@
 // Historical Vault — Week comparison (Level 4 only)
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Share, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import { api, COLORS } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
+import { notify } from '../src/lib/dialog';
 
 interface Week { week_id: string; week_start: string; archived_at: string; totals: any; agent_count: number; }
 
@@ -34,7 +35,7 @@ export default function VaultScreen() {
         await Share.share({ message: json, title: filename });
       }
     } catch (e: any) {
-      Alert.alert('Export failed', e?.message || 'Could not export this week.');
+      notify('Export failed', e?.message || 'Could not export this week.');
     } finally {
       setExporting(null);
     }

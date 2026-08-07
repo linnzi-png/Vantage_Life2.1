@@ -1,12 +1,13 @@
 // More tab: profile, manager, audit, vault, logout
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth, COLORS, levelNum, Role } from '../../src/lib/auth';
 import { useTour } from '../../src/lib/tour';
 import { TourAnchor } from '../../src/components/TourAnchor';
+import { confirmAsync, notify } from '../../src/lib/dialog';
 
 const SWITCH_TIERS: { role: Role; label: string }[] = [
   { role: 'level_1', label: 'L1' },
@@ -43,7 +44,7 @@ export default function MoreScreen() {
     try {
       await switchRole(role);
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Role switch failed');
+      notify('Error', e instanceof Error ? e.message : 'Role switch failed');
     } finally {
       setSwitching(false);
     }
@@ -126,39 +127,28 @@ export default function MoreScreen() {
           <TouchableOpacity
             style={styles.item}
             testID="delete-account-btn"
-            onPress={() => {
-              Alert.alert(
-                'Delete Account',
-                'This will permanently delete your account and all associated data. This cannot be undone.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Delete My Account',
-                    style: 'destructive',
-                    onPress: () => {
-                      Alert.alert(
-                        'Are you sure?',
-                        'Type "DELETE" to confirm permanent account deletion.',
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'Permanently Delete',
-                            style: 'destructive',
-                            onPress: async () => {
-                              try {
-                                await deleteAccount();
-                                router.replace('/login');
-                              } catch (e: unknown) {
-                                Alert.alert('Error', e instanceof Error ? e.message : 'Account deletion failed.');
-                              }
-                            },
-                          },
-                        ],
-                      );
-                    },
-                  },
-                ],
-              );
+            onPress={async () => {
+              // Two-step on purpose — account deletion is irreversible.
+              const first = await confirmAsync({
+                title: 'Delete Account',
+                message: 'This will permanently delete your account and all associated data. This cannot be undone.',
+                confirmText: 'Delete My Account',
+                destructive: true,
+              });
+              if (!first) return;
+              const second = await confirmAsync({
+                title: 'Are you sure?',
+                message: 'This permanently deletes your account. There is no way to undo it.',
+                confirmText: 'Permanently Delete',
+                destructive: true,
+              });
+              if (!second) return;
+              try {
+                await deleteAccount();
+                router.replace('/login');
+              } catch (e: unknown) {
+                notify('Error', e instanceof Error ? e.message : 'Account deletion failed.');
+              }
             }}
           >
             <Ionicons name="trash" size={18} color={COLORS.red} />

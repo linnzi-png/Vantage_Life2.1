@@ -3,11 +3,12 @@
 // which is gated by require_admin server-side.
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Switch, Platform,
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Switch, Platform,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { apiUpload, COLORS } from '../lib/auth';
+import { confirmAsync } from '../lib/dialog';
 
 interface UnmatchedAgent {
   name: string;
@@ -104,17 +105,17 @@ export function WarReportImport() {
     setRunning(false);
   };
 
-  const confirmRun = () => {
+  const confirmRun = async () => {
     if (!files.length) return;
     if (dryRun) { runImport(); return; }
-    Alert.alert(
-      'Import for real?',
-      `${files.length} report(s) will be written to production data. Entries agents submitted in the app are never overwritten.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Import', onPress: runImport },
-      ],
-    );
+    // confirmAsync, not Alert.alert — Alert is a no-op on react-native-web, so
+    // the dialog never showed and the import silently never started.
+    const ok = await confirmAsync({
+      title: 'Import for real?',
+      message: `${files.length} report(s) will be written to production data. Entries agents submitted in the app are never overwritten.`,
+      confirmText: 'Import',
+    });
+    if (ok) runImport();
   };
 
   const totals = useMemo(() => {

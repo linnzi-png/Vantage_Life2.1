@@ -3,10 +3,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity, TextInput,
-  FlatList, Platform, KeyboardAvoidingView, Alert,
-} from 'react-native';
+  FlatList, Platform, KeyboardAvoidingView, } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth } from '../lib/auth';
+import { notify } from '../lib/dialog';
 
 interface DirectoryAgent { agent_id: string; name: string; office: string; }
 
@@ -51,9 +51,9 @@ export function NominateSheet({ visible, onClose, onSubmitted, preselected }: Pr
       });
       onClose();
       onSubmitted?.();
-      Alert.alert('Nomination sent', `${nominee.name}'s upline will see your Platinum Rule nomination.`);
+      notify('Nomination sent', `${nominee.name}'s upline will see your Platinum Rule nomination.`);
     } catch (e: any) {
-      Alert.alert('Could not submit', String(e?.message || e));
+      notify('Could not submit', String(e?.message || e));
     } finally {
       setBusy(false);
     }

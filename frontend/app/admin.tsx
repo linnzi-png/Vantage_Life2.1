@@ -5,12 +5,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
-  Alert, ActivityIndicator, Switch,
+  ActivityIndicator, Switch,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, useAuth, roleTitle, COLORS, Role } from '../src/lib/auth';
 import { WarReportImport } from '../src/components/WarReportImport';
+import { confirmAsync, notify } from '../src/lib/dialog';
 
 interface Person {
   agent_id: string;
@@ -59,7 +60,7 @@ export default function AdminScreen() {
       const r = await api<{ people: Person[] }>('/api/admin/people');
       setPeople(r.people);
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to load roster');
+      notify('Error', e instanceof Error ? e.message : 'Failed to load roster');
     } finally {
       setLoading(false);
     }
@@ -86,26 +87,20 @@ export default function AdminScreen() {
     return people.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 5);
   }, [people, fUplineQuery]);
 
-  const setRole = (p: Person, role: Role) => {
+  const setRole = async (p: Person, role: Role) => {
     if (p.role === role) return;
-    Alert.alert(
-      'Change Access Tier',
-      `Set ${p.name} to ${TIER_SHORT[role]} (${roleTitle(undefined, role)})? This changes what data they can see.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Change',
-          onPress: async () => {
-            try {
-              await api('/api/admin/set-role', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id, role }) });
-              setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, role } : x)));
-            } catch (e: unknown) {
-              Alert.alert('Error', e instanceof Error ? e.message : 'Role change failed');
-            }
-          },
-        },
-      ],
-    );
+    const ok = await confirmAsync({
+      title: 'Change Access Tier',
+      message: `Set ${p.name} to ${TIER_SHORT[role]} (${roleTitle(undefined, role)})? This changes what data they can see.`,
+      confirmText: 'Change',
+    });
+    if (!ok) return;
+    try {
+      await api('/api/admin/set-role', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id, role }) });
+      setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, role } : x)));
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'Role change failed');
+    }
   };
 
   const setFlag = async (p: Person, flag: 'is_admin' | 'can_switch_role', value: boolean) => {
@@ -114,7 +109,7 @@ export default function AdminScreen() {
       await api('/api/admin/set-flags', { method: 'POST', body: JSON.stringify({ email: p.email, [flag]: value }) });
       setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, [flag]: value } : x)));
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Flag update failed');
+      notify('Error', e instanceof Error ? e.message : 'Flag update failed');
     }
   };
 
@@ -133,7 +128,7 @@ export default function AdminScreen() {
       setShowAdd(false);
       await load();
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Could not add person');
+      notify('Error', e instanceof Error ? e.message : 'Could not add person');
     } finally {
       setSaving(false);
     }
@@ -145,7 +140,7 @@ export default function AdminScreen() {
       await api('/api/admin/set-tenure', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id, is_rookie: isRookie }) });
       setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, is_rookie: isRookie } : x)));
     } catch (e: unknown) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Tenure update failed');
+      notify('Error', e instanceof Error ? e.message : 'Tenure update failed');
     }
   };
 

@@ -1,10 +1,10 @@
 import React from 'react';
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
-  Linking, Platform, Alert,
-} from 'react-native';
+  Linking, Platform, } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, roleTitle } from '../lib/auth';
+import { notify } from '../lib/dialog';
 
 export interface AgentContact {
   name: string;
@@ -34,7 +34,7 @@ export function formatPhone(raw: string | undefined | null): string {
 function openLink(url: string, errorMessage: string) {
   Linking.openURL(url).catch((err) => {
     console.error('Failed to open link', err);
-    Alert.alert('Error', errorMessage);
+    notify('Error', errorMessage);
   });
 }
 
