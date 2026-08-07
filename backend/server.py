@@ -1596,6 +1596,113 @@ async def vault_weeks(user: Dict[str, Any] = Depends(require_level(4))):
     return {"weeks": items}
 
 
+def week_start_for_day(day_str: str) -> str:
+    """Wednesday on-or-before a sales_day — the reporting week it belongs to."""
+    d = date.fromisoformat(day_str)
+    return (d - timedelta(days=(d.weekday() - 2) % 7)).isoformat()
+
+
+# Metrics rolled up per week. gross/net ALP are dollars; the rest are counts.
+_TREND_SUMS = [
+    "sets", "sits", "sales", "ots_sits", "ots_sales", "n1", "refs_obtained",
+    "ref_sits", "ref_sales", "pos_sits", "pos_sales", "vet_sits", "vet_sales",
+    "gross_alp", "net_alp",
+]
+
+
+@api_router.get("/vault/trends")
+async def vault_trends(
+    office: Optional[str] = None,
+    weeks: Optional[int] = None,
+    user: Dict[str, Any] = Depends(require_level(4)),
+):
+    """Week-over-week production series for the health dashboard.
+
+    Reads production_entries rather than historical_vault on purpose: vault
+    snapshots store only gross/net ALP, sits and sales, so Close Rate could not
+    honour the N1 exclusion from them. Entries carry all 14 nightly metrics, and
+    they are retained after the Wednesday reset (flagged `archived`), so the
+    series covers every week that has data — not just the last 8 snapshots.
+
+    `office` filters to one office; omitted returns every office combined.
+    Available offices are always returned so the UI can build its tabs from the
+    data instead of hardcoding a roster of offices.
+    """
+    match: Dict[str, Any] = {}
+    if office:
+        match["office"] = office
+
+    # Group per (day, office) in Mongo — a small result set — then roll up to
+    # reporting weeks in Python, since the Wed-to-Wed boundary is not something
+    # the aggregation pipeline expresses cleanly.
+    pipeline: List[Dict[str, Any]] = []
+    if match:
+        pipeline.append({"$match": match})
+    pipeline.append({
+        "$group": {
+            "_id": {"sales_day": "$sales_day", "office": "$office"},
+            **{m: {"$sum": f"${m}"} for m in _TREND_SUMS},
+            "agent_ids": {"$addToSet": "$agent_id"},
+        }
+    })
+
+    by_week: Dict[str, Dict[str, Any]] = {}
+    offices: set = set()
+    async for row in db.production_entries.aggregate(pipeline):
+        day = row["_id"].get("sales_day")
+        if not day:
+            continue
+        off = row["_id"].get("office")
+        if off:
+            offices.add(off)
+        try:
+            ws = week_start_for_day(day)
+        except (ValueError, TypeError):
+            continue  # malformed sales_day — skip rather than poison the series
+        w = by_week.setdefault(ws, {m: 0.0 for m in _TREND_SUMS})
+        w.setdefault("agents", set())
+        w.setdefault("offices", set())
+        for m in _TREND_SUMS:
+            w[m] += float(row.get(m) or 0)
+        w["agents"].update(a for a in row.get("agent_ids", []) if a)
+        if off:
+            w["offices"].add(off)
+
+    series = []
+    for ws in sorted(by_week):
+        w = by_week[ws]
+        sales = int(w["sales"])
+        sits = int(w["sits"])
+        n1 = int(w["n1"])
+        sets_ = int(w["sets"])
+        series.append({
+            "week_start": ws,
+            **{m: (round(w[m], 2) if m.endswith("alp") else int(w[m])) for m in _TREND_SUMS},
+            # N1 excluded per business rule — via metrics.py, never inline.
+            "close_rate": round(metrics.close_rate(sales, sits, n1), 1),
+            "show_rate": round((sits / sets_ * 100) if sets_ > 0 else 0.0, 1),
+            "alp_per_sale": round(w["gross_alp"] / sales, 2) if sales else 0.0,
+            "agent_count": len(w["agents"]),
+            "office_count": len(w["offices"]),
+        })
+
+    if weeks and weeks > 0:
+        series = series[-weeks:]
+
+    return {
+        "series": series,
+        "offices": sorted(offices) if not office else sorted(offices | {office}),
+        "office": office,
+    }
+
+
+@api_router.get("/vault/offices")
+async def vault_offices(user: Dict[str, Any] = Depends(require_level(4))):
+    """Offices that actually have production data, for the dashboard tabs."""
+    found = [o for o in await db.production_entries.distinct("office") if o]
+    return {"offices": sorted(found)}
+
+
 @api_router.get("/vault/compare")
 async def vault_compare(week_a: str, week_b: str, user: Dict[str, Any] = Depends(require_level(4))):
     a = await db.historical_vault.find_one({"week_start": week_a}, {"_id": 0})
