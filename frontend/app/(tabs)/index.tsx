@@ -10,6 +10,7 @@ import { AgentContactSheet, AgentContact } from '../../src/components/AgentConta
 import OfficeTabs, { OfficeRow } from '../../src/components/OfficeTabs';
 import GateBanner from '../../src/components/GateBanner';
 import Ticker, { TickerItem } from '../../src/components/Ticker';
+import { AgentHistory } from '../../src/components/AgentHistory';
 import { PeriodSelector, usePersistedPeriod, Period } from '../../src/components/PeriodSelector';
 import { TourAnchor } from '../../src/components/TourAnchor';
 
@@ -182,6 +183,8 @@ export default function DashboardScreen() {
             </TourAnchor>
 
             <OfficeTabs offices={offices} />
+
+            {user?.agent_id ? <AgentHistory agentId={user.agent_id} /> : null}
 
             <View style={{ height: 40 }} />
           </>

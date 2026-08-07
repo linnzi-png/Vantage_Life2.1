@@ -1181,11 +1181,26 @@ def scoreboard_window(period: str) -> Tuple[Dict[str, Any], Optional[datetime]]:
 @api_router.get("/team")
 async def team_view(
     period: str = DEFAULT_SCOREBOARD_PERIOD,
+    week_start: Optional[str] = None,
     user: Dict[str, Any] = Depends(require_level(2)),
 ):
+    """Team rollup. `week_start` (a Wednesday) pulls up a specific past week
+    instead of a rolling window.
+
+    A historical week matches on sales_day rather than submitted_at: the rolling
+    windows key off submission time, which is right for "since the last reset",
+    but a past week must be defined by the days the production belongs to —
+    otherwise a backfilled entry, stamped when it was imported rather than when
+    it was sold, would land in the wrong week.
+    """
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
-    q, window_start = scoreboard_window(period)
+    if week_start:
+        day_from, day_to = week_day_range(week_start)
+        q: Dict[str, Any] = {"sales_day": {"$gte": day_from, "$lte": day_to}}
+        window_start = None
+    else:
+        q, window_start = scoreboard_window(period)
     if ids is not None:
         q["agent_id"] = {"$in": ids}
     pipeline = [
@@ -1254,9 +1269,26 @@ async def team_view(
     return {
         "team": out,
         "sales_day": today,
-        "period": period,
+        "period": None if week_start else period,
+        "week_start": week_start,
         "window_start": iso_utc(window_start) if window_start else None,
     }
+
+
+@api_router.get("/team/weeks")
+async def team_weeks(user: Dict[str, Any] = Depends(require_level(2))):
+    """Reporting weeks that have production for the caller's visible team —
+    the options for the Team screen's week picker."""
+    ids = await visible_agent_ids(user)
+    q: Dict[str, Any] = {} if ids is None else {"agent_id": {"$in": ids}}
+    days = await db.production_entries.distinct("sales_day", q)
+    weeks = set()
+    for d in days:
+        try:
+            weeks.add(week_start_for_day(d))
+        except (ValueError, TypeError):
+            continue
+    return {"weeks": sorted(weeks, reverse=True)}
 
 
 # =========================================================
@@ -1610,31 +1642,24 @@ _TREND_SUMS = [
 ]
 
 
-@api_router.get("/vault/trends")
-async def vault_trends(
-    office: Optional[str] = None,
-    weeks: Optional[int] = None,
-    user: Dict[str, Any] = Depends(require_level(4)),
-):
-    """Week-over-week production series for the health dashboard.
+def week_day_range(week_start: str) -> Tuple[str, str]:
+    """Inclusive sales_day bounds for a Wed-to-Tue reporting week."""
+    ws = date.fromisoformat(week_start)
+    if ws.weekday() != 2:
+        raise HTTPException(
+            status_code=400,
+            detail=f"week_start must be a Wednesday; {week_start} is a {ws.strftime('%A')}.",
+        )
+    return week_start, (ws + timedelta(days=6)).isoformat()
 
-    Reads production_entries rather than historical_vault on purpose: vault
-    snapshots store only gross/net ALP, sits and sales, so Close Rate could not
-    honour the N1 exclusion from them. Entries carry all 14 nightly metrics, and
-    they are retained after the Wednesday reset (flagged `archived`), so the
-    series covers every week that has data — not just the last 8 snapshots.
 
-    `office` filters to one office; omitted returns every office combined.
-    Available offices are always returned so the UI can build its tabs from the
-    data instead of hardcoding a roster of offices.
+async def weekly_series(match: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], set]:
+    """Roll production_entries matching `match` into per-week totals.
+
+    Shared by the office trends and the per-agent history so both apply the
+    same Wed-to-Tue bucketing and the same N1-excluded Close Rate. Returns
+    (series oldest-first, set of offices seen).
     """
-    match: Dict[str, Any] = {}
-    if office:
-        match["office"] = office
-
-    # Group per (day, office) in Mongo — a small result set — then roll up to
-    # reporting weeks in Python, since the Wed-to-Wed boundary is not something
-    # the aggregation pipeline expresses cleanly.
     pipeline: List[Dict[str, Any]] = []
     if match:
         pipeline.append({"$match": match})
@@ -1685,6 +1710,58 @@ async def vault_trends(
             "agent_count": len(w["agents"]),
             "office_count": len(w["offices"]),
         })
+    return series, offices
+
+
+@api_router.get("/agents/{agent_id}/history")
+async def agent_history(
+    agent_id: str,
+    weeks: Optional[int] = None,
+    user: Dict[str, Any] = Depends(require_agent),
+):
+    """Weekly production history for one agent.
+
+    Authorization mirrors every other business route: an agent may read their
+    own history, and an upline may read anyone in their downline — resolved by
+    visible_agent_ids(), never by tier label. RGAs get ids=None (full agency).
+    """
+    ids = await visible_agent_ids(user)
+    if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
+        raise HTTPException(status_code=403, detail="Not in your team")
+
+    profile = await db.agent_profiles.find_one(
+        {"agent_id": agent_id},
+        {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1},
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    series, _ = await weekly_series({"agent_id": agent_id})
+    if weeks and weeks > 0:
+        series = series[-weeks:]
+    return {"agent": profile, "series": series}
+
+
+@api_router.get("/vault/trends")
+async def vault_trends(
+    office: Optional[str] = None,
+    weeks: Optional[int] = None,
+    user: Dict[str, Any] = Depends(require_level(4)),
+):
+    """Week-over-week production series for the health dashboard.
+
+    Reads production_entries rather than historical_vault on purpose: vault
+    snapshots store only gross/net ALP, sits and sales, so Close Rate could not
+    honour the N1 exclusion from them. Entries carry all 14 nightly metrics, and
+    they are retained after the Wednesday reset (flagged `archived`), so the
+    series covers every week that has data — not just the last 8 snapshots.
+
+    `office` filters to one office; omitted returns every office combined.
+    Available offices are always returned so the UI can build its tabs from the
+    data instead of hardcoding a roster of offices.
+    """
+    match: Dict[str, Any] = {"office": office} if office else {}
+    series, offices = await weekly_series(match)
 
     if weeks and weeks > 0:
         series = series[-weeks:]
