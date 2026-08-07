@@ -72,6 +72,20 @@ ADMIN_EMAILS = {
 APPLE_BUNDLE_ID = "com.aopremiere.vantagelife"
 APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
 
+# Browser origins allowed to make credentialed calls. Both the Vercel-hosted
+# deployments and the custom production domain must be listed: the frontend is
+# served from www.app.aovantagelife.com in production, and an origin missing
+# here fails every fetch in the browser while the API itself looks healthy.
+# Subdomains are matched explicitly rather than with ".*" so an attacker-owned
+# host like "evil-vercel.app" cannot satisfy the pattern.
+_CORS_BASE_REGEX = (
+    r"https://([a-z0-9-]+\.)*vercel\.app"
+    r"|https://([a-z0-9-]+\.)*aovantagelife\.com"
+    r"|http://localhost(:\d+)?"
+)
+_CORS_EXTRA = os.environ.get("CORS_EXTRA_ORIGIN_REGEX", "").strip()
+CORS_ORIGIN_REGEX = f"{_CORS_BASE_REGEX}|{_CORS_EXTRA}" if _CORS_EXTRA else _CORS_BASE_REGEX
+
 # ---------------- Helpers ----------------
 
 def now_utc() -> datetime:
@@ -2414,7 +2428,12 @@ app.add_middleware(
     # used — if the request already carries a Cookie header. The very first
     # cross-origin login has no cookie yet, so it fell back to the literal "*",
     # which browsers reject outright for credentialed requests.
-    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost(:\d+)?",
+    # Covers Vercel preview/production deployments AND the custom production
+    # domain. Leaving the custom domain out blocks every credentialed browser
+    # call from the app's real address — login included — while the .vercel.app
+    # URL keeps working, which makes it look like an app bug rather than CORS.
+    # Extra origins can be appended via CORS_EXTRA_ORIGIN_REGEX.
+    allow_origin_regex=CORS_ORIGIN_REGEX,
     allow_methods=["*"],
     allow_headers=["*"],
 )
