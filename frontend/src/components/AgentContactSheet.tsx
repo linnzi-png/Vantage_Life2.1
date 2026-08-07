@@ -1,12 +1,17 @@
 import React from 'react';
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
-  Linking, Platform, } from 'react-native';
+  Linking, Platform, ScrollView,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, roleTitle } from '../lib/auth';
 import { notify } from '../lib/dialog';
+import { AgentHistory } from './AgentHistory';
 
 export interface AgentContact {
+  // Present when the card is opened from a roster row; without it the sheet
+  // shows contact details only and no production history.
+  agent_id?: string;
   name: string;
   role: string;
   io_role?: string;
@@ -49,6 +54,10 @@ export function AgentContactSheet({ agent, onClose, onEnterNumbers }: Props) {
       <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
       <View style={styles.sheet}>
         <View style={styles.handle} />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 4 }}
+        >
 
         <Text style={styles.name}>{agent.name}</Text>
         <View style={styles.badgeRow}>
@@ -145,6 +154,9 @@ export function AgentContactSheet({ agent, onClose, onEnterNumbers }: Props) {
           </TouchableOpacity>
         ) : null}
 
+        {agent.agent_id ? <AgentHistory agentId={agent.agent_id} /> : null}
+        </ScrollView>
+
         <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
           <Text style={styles.closeTxt}>CLOSE</Text>
         </TouchableOpacity>
@@ -168,6 +180,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   sheet: {
+    maxHeight: '88%',
     backgroundColor: '#1A1A1A',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,

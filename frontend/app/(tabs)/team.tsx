@@ -35,11 +35,16 @@ export default function TeamScreen() {
   const [period, changePeriod] = usePersistedPeriod('vl_team_period', 'weekly');
   const [quickEntryTarget, setQuickEntryTarget] = useState<QuickEntryTarget | null>(null);
   const [missingQueue, setMissingQueue] = useState<TeamRow[]>([]); // remaining "no_pulse" agents queued for auto-advance
+  // null = live rolling window (period). A week_start pins the view to that
+  // past reporting week instead, so a manager can review it as it stood.
+  const [weekStart, setWeekStart] = useState<string | null>(null);
+  const [weekOptions, setWeekOptions] = useState<string[]>([]);
 
   const fetchAll = async () => {
     try {
       const [r, u, n] = await Promise.all([
-        api<{ team: TeamRow[] }>(`/api/team?period=${period}`),
+        api<{ team: TeamRow[] }>(
+          weekStart ? `/api/team?week_start=${weekStart}` : `/api/team?period=${period}`),
         api<{ upline: AgentContact | null }>('/api/my-upline').catch(() => ({ upline: null })),
         api<{ nominations: any[] }>('/api/nominations?status=threshold_met').catch(() => ({ nominations: [] })),
       ]);
@@ -49,7 +54,21 @@ export default function TeamScreen() {
     } catch {}
   };
   // Re-fetch whenever the period changes; keep the 30s live refresh going.
-  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, [period]);
+  useEffect(() => {
+    fetchAll();
+    // A pinned past week is static — no point polling it every 30s.
+    if (weekStart) return;
+    const i = setInterval(fetchAll, 30000);
+    return () => clearInterval(i);
+  }, [period, weekStart]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ weeks: string[] }>('/api/team/weeks')
+      .then((r) => { if (!cancelled) setWeekOptions(r.weeks); })
+      .catch(() => { if (!cancelled) setWeekOptions([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   const [query, setQuery] = useState('');
   const sorted = [...rows].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
@@ -156,6 +175,33 @@ export default function TeamScreen() {
 
       <View style={styles.periodBar}>
         <PeriodSelector value={period} onChange={changePeriod} testID="team-period" />
+        {weekOptions.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.weekPicker}
+          >
+            <TouchableOpacity
+              onPress={() => setWeekStart(null)}
+              style={[styles.weekChip, !weekStart && styles.weekChipOn]}
+              testID="team-week-live"
+            >
+              <Text style={[styles.weekChipTxt, !weekStart && styles.weekChipTxtOn]}>LIVE</Text>
+            </TouchableOpacity>
+            {weekOptions.map((w) => (
+              <TouchableOpacity
+                key={w}
+                onPress={() => setWeekStart(w === weekStart ? null : w)}
+                style={[styles.weekChip, w === weekStart && styles.weekChipOn]}
+                testID={`team-week-${w}`}
+              >
+                <Text style={[styles.weekChipTxt, w === weekStart && styles.weekChipTxtOn]}>
+                  {(() => { const [, m, d] = w.split('-'); return `${Number(m)}/${Number(d)}`; })()}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        ) : null}
       </View>
 
       {canEnter && missingTonight.length > 0 ? (
@@ -257,6 +303,11 @@ export default function TeamScreen() {
 }
 
 const styles = StyleSheet.create({
+  weekPicker: { gap: 6, paddingVertical: 8 },
+  weekChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  weekChipOn: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
+  weekChipTxt: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  weekChipTxtOn: { color: '#000' },
   safe:          { flex: 1, backgroundColor: COLORS.bg },
   head:          { paddingHorizontal: 16, paddingVertical: 12 },
   kicker:        { color: COLORS.primary, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
