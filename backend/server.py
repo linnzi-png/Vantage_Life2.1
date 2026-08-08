@@ -1653,19 +1653,43 @@ def week_day_range(week_start: str) -> Tuple[str, str]:
     return week_start, (ws + timedelta(days=6)).isoformat()
 
 
-async def weekly_series(match: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], set]:
+async def agent_office_map() -> Dict[str, str]:
+    """agent_id -> the office on their roster record.
+
+    agent_profiles is the source of truth for which office someone belongs to.
+    production_entries.office carries whatever the source system called it, and
+    that drifts: a WAR spreadsheet header reads "Mohamed Aljahmi RGA" where the
+    roster reads "MJ RGA", which splits one office into two in any grouping
+    keyed off the entry. /dashboard/offices and the Wednesday reset already
+    resolve offices through agent_profiles; this keeps trends consistent.
+    """
+    return {
+        a["agent_id"]: (a.get("office") or "Unassigned")
+        async for a in db.agent_profiles.find({}, {"_id": 0, "agent_id": 1, "office": 1})
+    }
+
+
+async def weekly_series(
+    match: Dict[str, Any],
+    office_of: Optional[Dict[str, str]] = None,
+) -> Tuple[List[Dict[str, Any]], set]:
     """Roll production_entries matching `match` into per-week totals.
 
     Shared by the office trends and the per-agent history so both apply the
     same Wed-to-Tue bucketing and the same N1-excluded Close Rate. Returns
-    (series oldest-first, set of offices seen).
+    (series oldest-first, set of roster offices represented).
     """
+    if office_of is None:
+        office_of = await agent_office_map()
+
     pipeline: List[Dict[str, Any]] = []
     if match:
         pipeline.append({"$match": match})
+    # Group by day only: office attribution comes from the roster map below, and
+    # a per-agent group key would explode into (agents x days) buckets.
     pipeline.append({
         "$group": {
-            "_id": {"sales_day": "$sales_day", "office": "$office"},
+            "_id": "$sales_day",
             **{m: {"$sum": f"${m}"} for m in _TREND_SUMS},
             "agent_ids": {"$addToSet": "$agent_id"},
         }
@@ -1674,12 +1698,9 @@ async def weekly_series(match: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], se
     by_week: Dict[str, Dict[str, Any]] = {}
     offices: set = set()
     async for row in db.production_entries.aggregate(pipeline):
-        day = row["_id"].get("sales_day")
+        day = row["_id"]
         if not day:
             continue
-        off = row["_id"].get("office")
-        if off:
-            offices.add(off)
         try:
             ws = week_start_for_day(day)
         except (ValueError, TypeError):
@@ -1689,9 +1710,14 @@ async def weekly_series(match: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], se
         w.setdefault("offices", set())
         for m in _TREND_SUMS:
             w[m] += float(row.get(m) or 0)
-        w["agents"].update(a for a in row.get("agent_ids", []) if a)
-        if off:
-            w["offices"].add(off)
+        for a in row.get("agent_ids", []):
+            if not a:
+                continue
+            w["agents"].add(a)
+            off = office_of.get(a)
+            if off:
+                w["offices"].add(off)
+                offices.add(off)
 
     series = []
     for ws in sorted(by_week):
@@ -1757,26 +1783,35 @@ async def vault_trends(
     series covers every week that has data — not just the last 8 snapshots.
 
     `office` filters to one office; omitted returns every office combined.
-    Available offices are always returned so the UI can build its tabs from the
-    data instead of hardcoding a roster of offices.
+    Offices resolve through agent_profiles, not through the office stamped on
+    each entry — a WAR sheet header reads "Mohamed Aljahmi RGA" where the roster
+    reads "MJ RGA", and grouping by the entry would show one office as two.
     """
-    match: Dict[str, Any] = {"office": office} if office else {}
-    series, offices = await weekly_series(match)
+    office_of = await agent_office_map()
+    match: Dict[str, Any] = {}
+    if office:
+        member_ids = [aid for aid, off in office_of.items() if off == office]
+        # An office with no roster members matches nothing — an empty $in, not
+        # an absent filter, or it would silently return the whole agency.
+        match["agent_id"] = {"$in": member_ids}
+
+    series, _ = await weekly_series(match, office_of)
 
     if weeks and weeks > 0:
         series = series[-weeks:]
 
     return {
         "series": series,
-        "offices": sorted(offices) if not office else sorted(offices | {office}),
+        "offices": sorted({o for o in office_of.values() if o}),
         "office": office,
     }
 
 
 @api_router.get("/vault/offices")
 async def vault_offices(user: Dict[str, Any] = Depends(require_level(4))):
-    """Offices that actually have production data, for the dashboard tabs."""
-    found = [o for o in await db.production_entries.distinct("office") if o]
+    """Offices for the dashboard tabs, from agent_profiles — the source of
+    truth — matching /dashboard/offices and the Wednesday reset."""
+    found = [o for o in await db.agent_profiles.distinct("office") if o]
     return {"offices": sorted(found)}
 
 
@@ -2448,6 +2483,23 @@ async def admin_set_flags(payload: AdminSetFlagsIn, user: Dict[str, Any] = Depen
     return {"ok": True, "email": email, **updates}
 
 
+def _foreign_offices(roster_offices: Dict[str, int]) -> List[Dict[str, Any]]:
+    """Offices in a WAR file other than the one most of its agents belong to.
+
+    A file is expected to cover a single office. Anything else means the sheet
+    lists agents from elsewhere, whose production would be attributed to this
+    file's office — the failure that made one office's totals swallow another's.
+    """
+    if len(roster_offices) < 2:
+        return []
+    dominant = max(roster_offices, key=lambda k: roster_offices[k])
+    return [
+        {"office": off, "rows": n}
+        for off, n in sorted(roster_offices.items(), key=lambda kv: -kv[1])
+        if off != dominant
+    ]
+
+
 @api_router.post("/admin/import-war-report")
 async def admin_import_war_report(
     file: UploadFile = File(...),
@@ -2504,6 +2556,11 @@ async def admin_import_war_report(
         raise HTTPException(status_code=400, detail=f"Could not read the spreadsheet: {e}")
 
     office = parsed["office"]
+    # Roster office of every matched agent, counted by row. A WAR sheet is
+    # supposed to cover one office; if its agents mostly belong to another,
+    # the file is mislabelled or mixed, and importing it would attribute their
+    # production to the wrong office. Reported so preview catches it.
+    roster_offices: Dict[str, int] = {}
     inserted = replaced = protected = skipped_unmatched = 0
     created_agents: List[str] = []
     unmatched: Dict[str, Dict[str, Any]] = {}
@@ -2516,7 +2573,7 @@ async def admin_import_war_report(
             name = str(m["name"]).strip()
             profile = await db.agent_profiles.find_one(
                 {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}},
-                {"_id": 0, "agent_id": 1},
+                {"_id": 0, "agent_id": 1, "office": 1},
             )
             if not profile:
                 if not create_missing:
@@ -2542,10 +2599,17 @@ async def admin_import_war_report(
                     "created_by_import": True,
                 })
                 created_agents.append(name)
+                entry_office = office
             else:
                 agent_id = profile["agent_id"]
+                # Stamp the roster's office, not the spreadsheet header. The
+                # sheet says "Mohamed Aljahmi RGA" where the roster says
+                # "MJ RGA"; taking the sheet's version splits one office into
+                # two everywhere entries are grouped by office.
+                entry_office = profile.get("office") or office
+                roster_offices[entry_office] = roster_offices.get(entry_office, 0) + 1
 
-            entry = war_import.build_entry(agent_id, office, date_str, m)
+            entry = war_import.build_entry(agent_id, entry_office, date_str, m)
             existing = await db.production_entries.find_one(
                 {"agent_id": agent_id, "sales_day": date_str},
                 {"_id": 0, "entry_id": 1, "source": 1},
@@ -2579,6 +2643,11 @@ async def admin_import_war_report(
         "skipped_unmatched": skipped_unmatched,
         "created_agents": created_agents,
         "unmatched": sorted(unmatched.values(), key=lambda u: u["name"]),
+        # Rows per roster office, biggest first, plus the offices that are not
+        # the dominant one. A non-empty foreign_offices means this file mixes
+        # offices — worth stopping on before writing.
+        "roster_offices": dict(sorted(roster_offices.items(), key=lambda kv: -kv[1])),
+        "foreign_offices": _foreign_offices(roster_offices),
     }
 
 

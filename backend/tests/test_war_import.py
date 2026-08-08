@@ -291,3 +291,49 @@ async def test_agent_submitted_entries_are_never_replaced(client, seeded_db):
     kept = await seeded_db.production_entries.find_one({"entry_id": "pe_manual"})
     assert kept["gross_alp"] == 12345.0
     assert kept["sales"] == 99
+
+
+# ---------------- mixed-office guard ----------------
+
+async def test_single_office_file_reports_no_foreign_offices(client, seeded_db):
+    token = await admin_token(seeded_db)
+    # AG_1 and SA_1 are both in MCM.
+    buf = build_workbook(per_tab={"Wed": [("Agent One", SAMPLE), ("Sa One", SAMPLE)]})
+    r = await client.post("/api/admin/import-war-report",
+                          files=upload_files(buf, "2026-02-18_MJ_War_Report.xlsx"),
+                          headers=auth(token))
+    body = r.json()
+    assert body["foreign_offices"] == []
+    assert body["roster_offices"] == {"MCM": 2}
+
+
+async def test_file_mixing_offices_is_flagged(client, seeded_db):
+    """A WAR file should cover one office. Agents from elsewhere mean the sheet
+    lists the wrong people — the failure that let one office's totals swallow
+    another's when the entry carried the file's office."""
+    token = await admin_token(seeded_db)
+    # AG_1/SA_1/GA_1 are MCM; AG_2 is AMP.
+    buf = build_workbook(per_tab={"Wed": [
+        ("Agent One", SAMPLE), ("Sa One", SAMPLE), ("Ga One", SAMPLE), ("Agent Two", SAMPLE),
+    ]})
+    r = await client.post("/api/admin/import-war-report",
+                          files=upload_files(buf, "2026-02-18_MJ_War_Report.xlsx"),
+                          data={"dry_run": "true"},
+                          headers=auth(token))
+    body = r.json()
+    assert body["roster_offices"] == {"MCM": 3, "AMP": 1}
+    assert body["foreign_offices"] == [{"office": "AMP", "rows": 1}]
+
+
+async def test_entries_are_stamped_with_the_roster_office_not_the_sheet(client, seeded_db):
+    """The sheet header says one thing, the roster another; the roster wins, or
+    the same office appears twice in anything grouped by office."""
+    token = await admin_token(seeded_db)
+    buf = build_workbook(office="Mohamed Aljahmi RGA",
+                         per_tab={"Wed": [("Agent One", SAMPLE)]})
+    r = await client.post("/api/admin/import-war-report",
+                          files=upload_files(buf, "2026-02-18_MJ_War_Report.xlsx"),
+                          headers=auth(token))
+    assert r.json()["office"] == "Mohamed Aljahmi RGA"   # what the sheet said
+    entry = await seeded_db.production_entries.find_one({"agent_id": "AG_1"})
+    assert entry["office"] == "MCM"                       # what the roster says

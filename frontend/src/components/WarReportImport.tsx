@@ -32,6 +32,8 @@ interface ImportResult {
   skipped_unmatched: number;
   created_agents: string[];
   unmatched: UnmatchedAgent[];
+  roster_offices: Record<string, number>;
+  foreign_offices: { office: string; rows: number }[];
 }
 
 interface PickedFile {
@@ -128,6 +130,17 @@ export function WarReportImport() {
       skipped: done.reduce((n, r) => n + (r.result?.skipped_unmatched ?? 0), 0),
       errors: rows.filter((r) => r.status === 'error').length,
     };
+  }, [rows]);
+
+  // Rows whose agents belong to an office other than the file's dominant one.
+  // A WAR file should cover one office; a mix means production would be filed
+  // under the wrong office.
+  const foreign = useMemo(() => {
+    const seen = new Map<string, number>();
+    rows.forEach((r) => r.result?.foreign_offices?.forEach((f) => {
+      seen.set(f.office, (seen.get(f.office) ?? 0) + f.rows);
+    }));
+    return [...seen.entries()].sort((a, b) => b[1] - a[1]);
   }, [rows]);
 
   const unmatchedNames = useMemo(() => {
@@ -245,6 +258,20 @@ export function WarReportImport() {
             </View>
           ) : null}
 
+          {foreign.length ? (
+            <View style={styles.mixWarn} testID="war-import-mixed-offices">
+              <Text style={styles.mixTitle}>MIXED OFFICES IN THESE FILES</Text>
+              <Text style={styles.warnHint}>
+                Some agents belong to a different office than the file covers. Their
+                production is filed under their roster office, not the file&apos;s —
+                but if this is unexpected, the spreadsheet may list the wrong people.
+              </Text>
+              {foreign.map(([off, n]) => (
+                <Text key={off} style={styles.warnRow}>• {off} — {n} row{n === 1 ? '' : 's'}</Text>
+              ))}
+            </View>
+          ) : null}
+
           {unmatchedNames.length ? (
             <View style={styles.warn}>
               <Text style={styles.warnTitle}>NOT ON THE ROSTER — {unmatchedNames.length} AGENT(S)</Text>
@@ -289,6 +316,8 @@ const styles = StyleSheet.create({
   summary: { backgroundColor: COLORS.surface2, borderRadius: 6, padding: 10, marginTop: 6 },
   summaryTitle: { color: COLORS.gold, fontWeight: '900', fontSize: 10, letterSpacing: 1.2 },
   summaryTxt: { color: COLORS.text, fontSize: 12, marginTop: 4, lineHeight: 17 },
+  mixWarn: { borderWidth: 1, borderColor: COLORS.secondary, borderRadius: 6, padding: 10, marginTop: 10 },
+  mixTitle: { color: COLORS.secondary, fontWeight: '900', fontSize: 10, letterSpacing: 1.2 },
   warn: { borderWidth: 1, borderColor: COLORS.orange, borderRadius: 6, padding: 10, marginTop: 10 },
   warnTitle: { color: COLORS.orange, fontWeight: '900', fontSize: 10, letterSpacing: 1.2 },
   warnHint: { color: COLORS.textDim, fontSize: 11, marginTop: 4, lineHeight: 15 },

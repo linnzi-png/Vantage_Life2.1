@@ -98,29 +98,60 @@ async def test_show_rate_and_alp_per_sale(client, seeded_db):
 # ---------------- office filtering ----------------
 
 async def test_office_filter_narrows_the_series(client, seeded_db):
+    """Offices resolve through agent_profiles: AG_1 is in MCM, AG_2 in AMP."""
     token = await rga_token(seeded_db)
-    await entry(seeded_db, day="2026-02-18", office="MJ RGA", gross_alp=100.0, sales=1)
-    await entry(seeded_db, day="2026-02-18", office="Rust RGA", agent_id="AG_2", gross_alp=900.0, sales=9)
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", gross_alp=100.0, sales=1)
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_2", gross_alp=900.0, sales=9)
 
     everyone = (await client.get("/api/vault/trends", headers=auth(token))).json()["series"][0]
     assert everyone["gross_alp"] == 1000.0
     assert everyone["office_count"] == 2
 
-    mj = (await client.get("/api/vault/trends?office=MJ+RGA", headers=auth(token))).json()["series"][0]
-    assert mj["gross_alp"] == 100.0
-    assert mj["office_count"] == 1
+    mcm = (await client.get("/api/vault/trends?office=MCM", headers=auth(token))).json()["series"][0]
+    assert mcm["gross_alp"] == 100.0
+    assert mcm["office_count"] == 1
 
 
-async def test_offices_are_discovered_from_the_data(client, seeded_db):
-    """Tabs must come from the data — offices are never hardcoded."""
+async def test_one_office_under_two_entry_names_stays_one_office(client, seeded_db):
+    """Regression: a WAR sheet header ("Mohamed Aljahmi RGA") differs from the
+    roster name ("MCM"), so grouping by the entry's stored office showed a
+    single office as two tabs and split its totals across them."""
     token = await rga_token(seeded_db)
-    for off in ("MJ RGA", "Rust RGA", "Gojcaj RGA"):
-        await entry(seeded_db, day="2026-02-18", office=off, agent_id=f"AG_{off}")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1",
+                office="MCM", gross_alp=100.0, sales=1)
+    await entry(seeded_db, day="2026-02-19", agent_id="AG_1",
+                office="Mohamed Aljahmi RGA", gross_alp=250.0, sales=2)
 
-    assert (await client.get("/api/vault/offices", headers=auth(token))).json()["offices"] == [
-        "Gojcaj RGA", "MJ RGA", "Rust RGA"]
-    assert (await client.get("/api/vault/trends", headers=auth(token))).json()["offices"] == [
-        "Gojcaj RGA", "MJ RGA", "Rust RGA"]
+    body = (await client.get("/api/vault/trends", headers=auth(token))).json()
+    assert "Mohamed Aljahmi RGA" not in body["offices"]
+
+    week = body["series"][0]
+    assert week["office_count"] == 1
+    # Both days belong to the same agent, so both roll into that agent's office.
+    assert week["gross_alp"] == 350.0
+
+    mcm = (await client.get("/api/vault/trends?office=MCM", headers=auth(token))).json()
+    assert mcm["series"][0]["gross_alp"] == 350.0
+
+
+async def test_filtering_an_office_with_no_members_returns_nothing(client, seeded_db):
+    """An empty member list must match no entries — not fall through to the
+    whole agency, which an absent filter would do."""
+    token = await rga_token(seeded_db)
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", gross_alp=500.0)
+    r = await client.get("/api/vault/trends?office=Nowhere", headers=auth(token))
+    assert r.json()["series"] == []
+
+
+async def test_offices_come_from_the_roster_not_the_entries(client, seeded_db):
+    """Tabs are built from agent_profiles — the source of truth — matching
+    /dashboard/offices and the Wednesday reset."""
+    token = await rga_token(seeded_db)
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", office="Some Sheet Name")
+
+    for path in ("/api/vault/offices", "/api/vault/trends"):
+        offices = (await client.get(path, headers=auth(token))).json()["offices"]
+        assert offices == ["AMP", "MCM"], f"{path} returned {offices}"
 
 
 async def test_weeks_limit_keeps_the_most_recent(client, seeded_db):
@@ -142,6 +173,9 @@ async def test_archived_entries_are_still_included(client, seeded_db):
 
 
 async def test_empty_dataset_returns_an_empty_series(client, seeded_db):
+    """No production yet: no weeks, but the roster's offices still list so the
+    tabs render instead of the screen looking broken."""
     token = await rga_token(seeded_db)
     body = (await client.get("/api/vault/trends", headers=auth(token))).json()
-    assert body["series"] == [] and body["offices"] == []
+    assert body["series"] == []
+    assert body["offices"] == ["AMP", "MCM"]
