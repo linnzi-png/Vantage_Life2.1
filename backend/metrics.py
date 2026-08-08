@@ -5,16 +5,20 @@ never inline in route handlers.
 """
 
 
-def eligible_sits(sits: int, n1: int) -> int:
-    """Sits that count toward Close Rate. N1 excluded per business rule."""
-    return sits - n1
+def close_rate(sales: int, sits: int) -> float:
+    """Close Rate percentage: Sales / Sits.
 
+    N1 is a person who cannot be insured for medical reasons. An agent has no
+    control over whether someone qualifies, so an N1 must never count against
+    them — and it doesn't, because the SITS column already excludes them. The
+    N1 field is a separate tally of those visits, not a subset of Sits.
 
-def close_rate(sales: int, sits: int, n1: int) -> float:
-    """Close Rate percentage.
+    This is why N1 is NOT subtracted here. Subtracting it would exclude the
+    same people twice and inflate every agent's score: verified against the
+    Feb-Aug 2026 WAR spreadsheets, whose own Close Rate column matched
+    Sales/Sits in all 54 rows where the two formulas differ, and
+    Sales/(Sits - N1) in none. Office-wide that gap was 57.2% vs 68.0%.
 
-    N1 excluded per business rule: Close Rate = Sales / (Sits - N1)
-    Returns 0 when there are no eligible sits.
+    Returns 0 when there are no sits.
     """
-    es = eligible_sits(sits, n1)
-    return (sales / es * 100) if es > 0 else 0
+    return (sales / sits * 100) if sits > 0 else 0

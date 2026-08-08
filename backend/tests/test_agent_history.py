@@ -75,7 +75,7 @@ async def test_history_404s_for_an_unknown_agent(client, seeded_db):
 
 # ---------------- agent history: content ----------------
 
-async def test_history_buckets_by_reporting_week_and_excludes_n1(client, seeded_db):
+async def test_history_buckets_by_reporting_week_with_plain_close_rate(client, seeded_db):
     token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
     await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sales=3, sits=10, n1=2, gross_alp=300.0)
     await entry(seeded_db, day="2026-02-24", agent_id="AG_1", sales=1, sits=2, gross_alp=100.0)  # same week
@@ -85,8 +85,9 @@ async def test_history_buckets_by_reporting_week_and_excludes_n1(client, seeded_
     assert [w["week_start"] for w in series] == ["2026-02-18", "2026-02-25"]
     first = series[0]
     assert first["gross_alp"] == 400.0
-    # 4 sales / (12 sits - 2 n1) = 40%
-    assert first["close_rate"] == 40.0
+    # 4 sales / 12 sits = 33.3%. N1 is not subtracted — it is already excluded
+    # from Sits at entry, so the old 4/(12-2) = 40% counted it twice.
+    assert first["close_rate"] == 33.3
 
 
 async def test_history_weeks_limit_keeps_most_recent(client, seeded_db):

@@ -1228,13 +1228,12 @@ async def team_view(
             continue
         sales = int(r["sales"])
         sits = int(r["sits"])
-        n1 = int(r.get("n1", 0))
-        # N1 excluded per business rule: Close Rate = Sales / (Sits - N1)
-        es = metrics.eligible_sits(sits, n1)
-        close = metrics.close_rate(sales, sits, n1)
+        # Close Rate = Sales / Sits. N1 (medically unqualified) is already
+        # excluded from Sits at entry, so it is not subtracted again here.
+        close = metrics.close_rate(sales, sits)
         avg_deal = (float(r["gross_alp"]) / sales) if sales > 0 else 0
         alerts = []
-        if es >= 3 and close < 50:
+        if sits >= 3 and close < 50:
             alerts.append("low_close_ratio")
         if sales >= 1 and avg_deal < 1200:
             alerts.append("low_avg_deal")
@@ -1724,13 +1723,13 @@ async def weekly_series(
         w = by_week[ws]
         sales = int(w["sales"])
         sits = int(w["sits"])
-        n1 = int(w["n1"])
         sets_ = int(w["sets"])
         series.append({
             "week_start": ws,
             **{m: (round(w[m], 2) if m.endswith("alp") else int(w[m])) for m in _TREND_SUMS},
-            # N1 excluded per business rule — via metrics.py, never inline.
-            "close_rate": round(metrics.close_rate(sales, sits, n1), 1),
+            # Close Rate via metrics.py, never inline. N1 is already excluded
+            # from Sits at entry, so it is not subtracted again.
+            "close_rate": round(metrics.close_rate(sales, sits), 1),
             "show_rate": round((sits / sets_ * 100) if sets_ > 0 else 0.0, 1),
             "alp_per_sale": round(w["gross_alp"] / sales, 2) if sales else 0.0,
             "agent_count": len(w["agents"]),

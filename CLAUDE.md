@@ -60,7 +60,7 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 | 3 | Sales | `sales` |
 | 4 | OTS Sits | `ots_sits` |
 | 5 | OTS Sales | `ots_sales` |
-| 6 | N1 ← EXCLUDED FROM ALL CLOSE RATE MATH | `n1` |
+| 6 | N1 ← medically unqualified; already excluded from Sits | `n1` |
 | 7 | Referrals | `refs_obtained` |
 | 8 | Ref Sits | `ref_sits` |
 | 9 | Ref Sales | `ref_sales` |
@@ -74,7 +74,15 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 - Reporting cycle: 6:00 AM to 5:59 AM America/Detroit (not midnight-to-midnight) — see `sales_day_for()`
 - Wednesday 2:00 PM = weekly submission cutoff (`POST /api/admin/wednesday-reset`, RGA-only)
 - 9 PM gate = yellow warning banner; "Midnight Miracle" = the 12 AM–6 AM entry window (`gate_state()`)
-- Close Rate formula: `Sales / (Sits - N1)`  // N1 always excluded — implemented in `backend/metrics.py`
+- Close Rate formula: `Sales / Sits` — implemented in `backend/metrics.py`.
+  N1 is a person who cannot be insured for medical reasons. An agent has no
+  control over that, so it must never count against them — and it doesn't,
+  because **N1 people are already left out of the Sits count at entry**. The
+  `n1` field is a separate tally, not a subset of Sits, so it is NOT subtracted
+  again. (Corrected 2026-08-08 per owner: the prior `Sales / (Sits - N1)` rule
+  excluded them twice and inflated every score — the WAR spreadsheets' own
+  Close Rate column matched `Sales / Sits` in all 54 rows where the two differ
+  and `Sales / (Sits - N1)` in none; office-wide 57.2% vs 68.0%.)
 - All metric calculations go in `backend/metrics.py`, never inline in route handlers
 
 ## Commands
@@ -87,11 +95,11 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 ## Coding Conventions
 - TypeScript strict mode in the frontend. No `any` types. No type assertions.
 - Named exports preferred; Expo Router screens are the default-export exception.
-- Every Close Rate calculation must include comment: `# N1 excluded per business rule`
+- Every Close Rate calculation goes through `metrics.close_rate()` — never inline, and never subtract `n1` from `sits`
 - Never hardcode metric names or tier labels — reference the `PulseIn` schema / `LEVELS` map in `backend/server.py`
 
 ## Forbidden Patterns
-- NEVER include N1 in Close Rate or any aggregate calculation
+- NEVER subtract N1 from Sits — Sits already excludes them; subtracting double-counts the exclusion
 - NEVER allow an Agent to see data above their RBAC tier
 - NEVER change the 6AM cycle boundary without explicit instruction
 - NEVER bypass the Wednesday 2PM cutoff gate
@@ -99,7 +107,7 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 - NEVER commit directly to main - feature branches always
 
 ## Known Gotchas
-- N1 looks like a sales metric but is a write-off category. Audit every aggregation.
+- N1 looks like a sales metric but is a medical-disqualification tally. It is NOT part of Sits, so never subtract it from Sits and never add it into production totals.
 - Reporting cycle starts 6AM Detroit time - all date range queries must go through `sales_day_for()`.
 - Users not on the agent roster have role `"pending"` and no `agent_id` — every business-data route must sit behind `require_agent`/`require_level`, which reject them.
 - Google OAuth still flows through Emergent's auth proxy (`EMERGENT_AUTH_URL`); it is not a plain Google client.

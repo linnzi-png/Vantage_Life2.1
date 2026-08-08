@@ -2,9 +2,8 @@
 // comparison and WAR export. Level 4 only.
 //
 // Trends come from /api/vault/trends (aggregated production_entries), not from
-// historical_vault snapshots: snapshots store only ALP/sits/sales, so Close Rate
-// could not exclude N1 from them, and they only exist for weeks that were
-// actually closed out by a Wednesday reset.
+// historical_vault snapshots: snapshots only exist for weeks that were actually
+// closed out by a Wednesday reset, so they miss every imported week.
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Share,
@@ -148,8 +147,8 @@ export default function VaultScreen() {
     const totalAlp = shown.reduce((n, w) => n + w.gross_alp, 0);
     const totalSales = shown.reduce((n, w) => n + w.sales, 0);
     const totalSits = shown.reduce((n, w) => n + w.sits, 0);
-    const totalN1 = shown.reduce((n, w) => n + w.n1, 0);
-    const eligible = totalSits - totalN1; // N1 excluded per business rule
+    // Close Rate = Sales / Sits. N1 (medically unqualified) is already left out
+    // of Sits at entry, so subtracting it again would exclude them twice.
     const last = shown[shown.length - 1];
     const prev = shown.length > 1 ? shown[shown.length - 2] : null;
     const wow = prev && prev.gross_alp > 0
@@ -160,7 +159,7 @@ export default function VaultScreen() {
       totalAlp,
       totalSales,
       avgWeek: totalAlp / shown.length,
-      closeRate: eligible > 0 ? (totalSales / eligible) * 100 : 0,
+      closeRate: totalSits > 0 ? (totalSales / totalSits) * 100 : 0,
       alpPerSale: totalSales > 0 ? totalAlp / totalSales : 0,
       last,
       wow,
@@ -264,7 +263,7 @@ export default function VaultScreen() {
               <Kpi label="PERIOD ALP" value={money(kpi.totalAlp)} />
               <Kpi label="AVG / WEEK" value={money(kpi.avgWeek)} />
               <Kpi label="SALES" value={kpi.totalSales.toLocaleString()} />
-              <Kpi label="CLOSE RATE" value={`${kpi.closeRate.toFixed(1)}%`} hint="N1 excluded" />
+              <Kpi label="CLOSE RATE" value={`${kpi.closeRate.toFixed(1)}%`} hint="Sales / Sits" />
               <Kpi label="ALP / SALE" value={money(kpi.alpPerSale)} />
               <Kpi label="BEST WEEK" value={compact(kpi.best.gross_alp)} hint={kpi.best.week_start} />
             </View>
