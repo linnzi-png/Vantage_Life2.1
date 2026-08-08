@@ -11,6 +11,7 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, useAuth, roleTitle, COLORS, Role } from '../src/lib/auth';
 import { WarReportImport } from '../src/components/WarReportImport';
+import { OfficeMerge } from '../src/components/OfficeMerge';
 import { confirmAsync, notify } from '../src/lib/dialog';
 
 interface Person {
@@ -159,6 +160,8 @@ export default function AdminScreen() {
         </TouchableOpacity>
 
         <WarReportImport />
+
+        <OfficeMerge />
 
         {showAdd ? (
           <View style={styles.card} testID="admin-add-form">
