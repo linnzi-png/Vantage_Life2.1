@@ -2483,6 +2483,23 @@ async def admin_set_flags(payload: AdminSetFlagsIn, user: Dict[str, Any] = Depen
     return {"ok": True, "email": email, **updates}
 
 
+def _foreign_offices(roster_offices: Dict[str, int]) -> List[Dict[str, Any]]:
+    """Offices in a WAR file other than the one most of its agents belong to.
+
+    A file is expected to cover a single office. Anything else means the sheet
+    lists agents from elsewhere, whose production would be attributed to this
+    file's office — the failure that made one office's totals swallow another's.
+    """
+    if len(roster_offices) < 2:
+        return []
+    dominant = max(roster_offices, key=lambda k: roster_offices[k])
+    return [
+        {"office": off, "rows": n}
+        for off, n in sorted(roster_offices.items(), key=lambda kv: -kv[1])
+        if off != dominant
+    ]
+
+
 @api_router.post("/admin/import-war-report")
 async def admin_import_war_report(
     file: UploadFile = File(...),
@@ -2539,6 +2556,11 @@ async def admin_import_war_report(
         raise HTTPException(status_code=400, detail=f"Could not read the spreadsheet: {e}")
 
     office = parsed["office"]
+    # Roster office of every matched agent, counted by row. A WAR sheet is
+    # supposed to cover one office; if its agents mostly belong to another,
+    # the file is mislabelled or mixed, and importing it would attribute their
+    # production to the wrong office. Reported so preview catches it.
+    roster_offices: Dict[str, int] = {}
     inserted = replaced = protected = skipped_unmatched = 0
     created_agents: List[str] = []
     unmatched: Dict[str, Dict[str, Any]] = {}
@@ -2585,6 +2607,7 @@ async def admin_import_war_report(
                 # "MJ RGA"; taking the sheet's version splits one office into
                 # two everywhere entries are grouped by office.
                 entry_office = profile.get("office") or office
+                roster_offices[entry_office] = roster_offices.get(entry_office, 0) + 1
 
             entry = war_import.build_entry(agent_id, entry_office, date_str, m)
             existing = await db.production_entries.find_one(
@@ -2620,6 +2643,11 @@ async def admin_import_war_report(
         "skipped_unmatched": skipped_unmatched,
         "created_agents": created_agents,
         "unmatched": sorted(unmatched.values(), key=lambda u: u["name"]),
+        # Rows per roster office, biggest first, plus the offices that are not
+        # the dominant one. A non-empty foreign_offices means this file mixes
+        # offices — worth stopping on before writing.
+        "roster_offices": dict(sorted(roster_offices.items(), key=lambda kv: -kv[1])),
+        "foreign_offices": _foreign_offices(roster_offices),
     }
 
 
