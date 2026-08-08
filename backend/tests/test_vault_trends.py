@@ -72,18 +72,19 @@ async def test_series_is_ordered_oldest_first(client, seeded_db):
 
 # ---------------- close rate ----------------
 
-async def test_close_rate_excludes_n1(client, seeded_db):
-    """Sales 3, Sits 10, N1 2 → 3 / (10-2) = 37.5%, not 30%."""
+async def test_close_rate_does_not_subtract_n1(client, seeded_db):
+    """Sales 3, Sits 10, N1 2 → 3/10 = 30%. N1 is already out of Sits, so the
+    old 3/(10-2) = 37.5% double-excluded and inflated the score."""
     token = await rga_token(seeded_db)
     await entry(seeded_db, day="2026-02-18", sales=3, sits=10, n1=2)
     week = (await client.get("/api/vault/trends", headers=auth(token))).json()["series"][0]
-    assert week["close_rate"] == 37.5
-    assert week["n1"] == 2
+    assert week["close_rate"] == 30.0
+    assert week["n1"] == 2   # still reported, just not in the denominator
 
 
-async def test_close_rate_is_zero_when_every_sit_is_n1(client, seeded_db):
+async def test_close_rate_is_zero_with_no_sits(client, seeded_db):
     token = await rga_token(seeded_db)
-    await entry(seeded_db, day="2026-02-18", sales=1, sits=4, n1=4)
+    await entry(seeded_db, day="2026-02-18", sales=0, sits=0, n1=4)
     assert (await client.get("/api/vault/trends", headers=auth(token))).json()["series"][0]["close_rate"] == 0
 
 

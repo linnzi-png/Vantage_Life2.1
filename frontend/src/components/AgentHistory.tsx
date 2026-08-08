@@ -89,9 +89,9 @@ export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?:
   const totalAlp = series.reduce((n, w) => n + w.gross_alp, 0);
   const totalSales = series.reduce((n, w) => n + w.sales, 0);
   const totalSits = series.reduce((n, w) => n + w.sits, 0);
-  const totalN1 = series.reduce((n, w) => n + w.n1, 0);
-  const eligible = totalSits - totalN1; // N1 excluded per business rule
-  const closeRate = eligible > 0 ? (totalSales / eligible) * 100 : 0;
+  // Close Rate = Sales / Sits. N1 (medically unqualified) is already left out
+  // of Sits at entry, so subtracting it again would exclude them twice.
+  const closeRate = totalSits > 0 ? (totalSales / totalSits) * 100 : 0;
   const best = series.reduce((m, w) => (w.gross_alp > m.gross_alp ? w : m), series[0]);
 
   const alpPoints: Point[] = series.map((w) => ({ label: shortDate(w.week_start), value: w.gross_alp }));
