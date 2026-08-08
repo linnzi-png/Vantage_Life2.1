@@ -2300,6 +2300,11 @@ class AdminSetStateIn(BaseModel):
     state: str  # two-letter resident state code, e.g. "MI"
 
 
+class AdminMergeOfficeIn(BaseModel):
+    from_office: str
+    to_office: str
+
+
 class AdminSetFlagsIn(BaseModel):
     email: str
     is_admin: Optional[bool] = None
@@ -2460,6 +2465,55 @@ async def admin_set_state(payload: AdminSetStateIn, user: Dict[str, Any] = Depen
         "new_value": state,
     })
     return {"ok": True, "agent_id": payload.agent_id, "state": state}
+
+
+@api_router.get("/admin/offices")
+async def admin_offices(user: Dict[str, Any] = Depends(require_admin)):
+    """Offices on the roster with headcount, so duplicates are visible.
+
+    One office recorded under two names (a WAR sheet header says
+    "Mohamed Aljahmi RGA" where the roster says "MJ RGA") shows up as two tabs
+    everywhere offices are listed, and splits that office's numbers between
+    them. agent_profiles is the source of truth, so the duplicate has to be
+    resolved here rather than worked around downstream.
+    """
+    rows = [
+        r async for r in db.agent_profiles.aggregate([
+            {"$group": {"_id": "$office", "agents": {"$sum": 1}}},
+            {"$sort": {"agents": -1}},
+        ])
+    ]
+    return {"offices": [
+        {"office": r["_id"] or "(none)", "agents": r["agents"]}
+        for r in rows
+    ]}
+
+
+@api_router.post("/admin/merge-office")
+async def admin_merge_office(
+    payload: AdminMergeOfficeIn,
+    user: Dict[str, Any] = Depends(require_admin),
+):
+    """Move every agent from one office name onto another.
+
+    Renames on agent_profiles only. Nothing reads production_entries.office for
+    grouping any more, so historical entries need no rewrite — offices resolve
+    through the roster, which means this corrects past weeks too.
+    """
+    src = payload.from_office.strip()
+    dst = payload.to_office.strip()
+    if not src or not dst:
+        raise HTTPException(status_code=400, detail="Both office names are required")
+    if src == dst:
+        raise HTTPException(status_code=400, detail="Office names are the same")
+    if not await db.agent_profiles.find_one({"office": src}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail=f"No agents in office '{src}'")
+
+    result = await db.agent_profiles.update_many(
+        {"office": src}, {"$set": {"office": dst, "updated_at": now_utc()}}
+    )
+    return {"ok": True, "from_office": src, "to_office": dst,
+            "agents_moved": result.modified_count}
 
 
 @api_router.post("/admin/set-flags")
