@@ -4,13 +4,31 @@ import { COLORS } from '../lib/auth';
 
 export interface OfficeRow { office: string; alp: number; sales: number; avg_deal: number; }
 
-export default function OfficeTabs({ offices }: { offices: OfficeRow[] }) {
-  const [active, setActive] = useState(offices[0]?.office || 'MCM');
-  const cur = offices.find((o) => o.office === active) || offices[0];
+export default function OfficeTabs({ offices, windowLabel }: {
+  offices: OfficeRow[];
+  /** What window these numbers cover, e.g. "WEEKLY" or "2026-06-10". Without it
+   *  the section reads as stale, since the summary above it is always labelled. */
+  windowLabel?: string;
+}) {
+  // Which office the user explicitly picked. Deliberately NOT seeded from
+  // offices[0]: a useState initializer runs once on mount, when offices is still
+  // empty, so the selection used to freeze on a placeholder that matched nothing
+  // — no tab highlighted, while the body silently rendered offices[0]'s numbers.
+  const [picked, setPicked] = useState<string | null>(null);
+
+  // Derive the active office instead of storing it, so it self-corrects when the
+  // list loads or when a period change drops the picked office from the roster.
+  const cur = offices.find((o) => o.office === picked) ?? offices[0];
+  const active = cur?.office;
+
+  if (offices.length === 0) return null;
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>OFFICE MARKET SHARE</Text>
+      <View style={styles.head}>
+        <Text style={styles.title}>OFFICE MARKET SHARE</Text>
+        {windowLabel ? <Text style={styles.window}>{windowLabel}</Text> : null}
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
         {offices.map((o) => {
           const sel = o.office === active;
@@ -18,7 +36,7 @@ export default function OfficeTabs({ offices }: { offices: OfficeRow[] }) {
             <TouchableOpacity
               key={o.office}
               testID={`office-tab-${o.office}`}
-              onPress={() => setActive(o.office)}
+              onPress={() => setPicked(o.office)}
               style={[styles.tab, sel && styles.tabActive]}
             >
               <Text style={[styles.tabText, sel && styles.tabTextActive]}>{o.office.toUpperCase()}</Text>
@@ -50,7 +68,9 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   wrap: { marginTop: 16 },
-  title: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 8 },
+  head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 },
+  title: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
+  window: { color: COLORS.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   tabs: { gap: 6, paddingBottom: 8 },
   tab: {
     paddingVertical: 6,

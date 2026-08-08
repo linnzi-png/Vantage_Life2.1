@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api, useAuth, roleTitle, COLORS, Role } from '../src/lib/auth';
 import { WarReportImport } from '../src/components/WarReportImport';
 import { OfficeMerge } from '../src/components/OfficeMerge';
+import { OrphanRepair } from '../src/components/OrphanRepair';
 import { confirmAsync, notify } from '../src/lib/dialog';
 
 interface Person {
@@ -162,6 +163,8 @@ export default function AdminScreen() {
         <WarReportImport />
 
         <OfficeMerge />
+
+        <OrphanRepair candidates={people} onRepaired={load} />
 
         {showAdd ? (
           <View style={styles.card} testID="admin-add-form">

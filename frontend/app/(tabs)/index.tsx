@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth, roleTitle } from '../../src/lib/auth';
 import StatCard from '../../src/components/StatCard';
-import PlatinumWall, { WallItem } from '../../src/components/PlatinumWall';
+import PlatinumWall, { WallItem, PlatinumRulePost } from '../../src/components/PlatinumWall';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 import OfficeTabs, { OfficeRow } from '../../src/components/OfficeTabs';
 import GateBanner from '../../src/components/GateBanner';
@@ -26,9 +26,12 @@ export default function DashboardScreen() {
   const { user, agent, roleLabel } = useAuth();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [ticker, setTicker] = useState<TickerItem[]>([]);
-  const [vets, setVets] = useState<any[]>([]);
-  const [rookies, setRookies] = useState<any[]>([]);
-  const [platinum, setPlatinum] = useState<any[]>([]);
+  const [vets, setVets] = useState<WallItem[]>([]);
+  const [rookies, setRookies] = useState<WallItem[]>([]);
+  // Top producers whose tenure was never recorded — shown in their own panel
+  // rather than dropped, which is what made the wall look empty.
+  const [unranked, setUnranked] = useState<WallItem[]>([]);
+  const [platinum, setPlatinum] = useState<PlatinumRulePost[]>([]);
   const [offices, setOffices] = useState<OfficeRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
@@ -45,18 +48,29 @@ export default function DashboardScreen() {
     if (p !== 'daily') setViewDay(null); // a rolling window has no single "day"
   };
 
+  // One label for every section, so the wall and the office tiles state the
+  // same window the summary header does. Without it those sections silently
+  // re-scoped from a day to a week to a month and read as stale.
+  const windowLabel = period !== 'daily'
+    ? period.toUpperCase()
+    : viewDay ?? 'TODAY';
+
   const fetchAll = useCallback(async () => {
     try {
       // Daily uses the (optionally historical) day; weekly/monthly use a rolling
-      // window. Ticker and wall are always live.
+      // window. Every section takes the same window so nothing on screen can
+      // disagree with anything else — the wall used to ignore it entirely and
+      // was therefore always empty for a historical day. Ticker stays live.
       const q = period !== 'daily' ? `?period=${period}` : (viewDay ? `?sales_day=${viewDay}` : '');
       const [s, t, p, o] = await Promise.all([
         api<Summary>(`/api/dashboard/summary${q}`),
         api<{ items: TickerItem[] }>('/api/dashboard/ticker'),
-        api<{ vets: any[]; rookies: any[]; platinum_rule?: any[] }>('/api/dashboard/platinum-wall'),
+        api<{ vets: WallItem[]; rookies: WallItem[]; unranked?: WallItem[]; platinum_rule?: PlatinumRulePost[] }>(
+          `/api/dashboard/platinum-wall${q}`),
         api<{ offices: OfficeRow[] }>(`/api/dashboard/offices${q}`),
       ]);
-      setSummary(s); setTicker(t.items); setVets(p.vets); setRookies(p.rookies); setPlatinum(p.platinum_rule || []); setOffices(o.offices);
+      setSummary(s); setTicker(t.items); setVets(p.vets); setRookies(p.rookies);
+      setUnranked(p.unranked || []); setPlatinum(p.platinum_rule || []); setOffices(o.offices);
       if (!viewDay && period === 'daily') setTodayDay(s.sales_day);
     } catch (e) {
       console.warn('Dashboard fetch error:', e);
@@ -174,7 +188,9 @@ export default function DashboardScreen() {
               <PlatinumWall
                 vets={vets}
                 rookies={rookies}
+                unranked={unranked}
                 platinum={platinum}
+                windowLabel={windowLabel}
                 onPress={(it: WallItem) => setContactAgent({
                   name: it.name, role: it.role || 'level_1', io_role: it.io_role,
                   phone: it.phone, email: it.email, office: it.office,
@@ -182,7 +198,7 @@ export default function DashboardScreen() {
               />
             </TourAnchor>
 
-            <OfficeTabs offices={offices} />
+            <OfficeTabs offices={offices} windowLabel={windowLabel} />
 
             {user?.agent_id ? <AgentHistory agentId={user.agent_id} /> : null}
 

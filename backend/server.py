@@ -72,6 +72,18 @@ ADMIN_EMAILS = {
 APPLE_BUNDLE_ID = "com.aopremiere.vantagelife"
 APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
 
+# Bucket for agents whose roster record has no office. They still produce, so
+# dropping them makes office tiles disagree with the agency total; naming the
+# bucket also makes the gap visible enough to fix in the Admin panel.
+UNASSIGNED_OFFICE = "Unassigned"
+
+# Performance-alert thresholds (owner spec). The minimums exist so a low-volume
+# night cannot trip a flag — a single missed sit is not a coaching signal.
+LOW_CLOSE_RATIO_PCT = 50
+MIN_SITS_FOR_RATIO_ALERT = 5
+LOW_AVG_DEAL_USD = 1200
+MIN_SALES_FOR_DEAL_ALERT = 3
+
 # Browser origins allowed to make credentialed calls. Both the Vercel-hosted
 # deployments and the custom production domain must be listed: the frontend is
 # served from www.app.aovantagelife.com in production, and an origin missing
@@ -596,8 +608,12 @@ def resolve_history_day(sales_day: Optional[str]) -> str:
 
 
 def scoreboard_prev_window(period: str) -> Dict[str, Any]:
-    """submitted_at match for the window immediately before the current one, so
-    weekly/monthly views can show a period-over-period delta. Not for 'daily'."""
+    """sales_day match for the window immediately before the current one, so
+    weekly/monthly views can show a period-over-period delta. Not for 'daily'.
+
+    Matches sales_day for the same reason scoreboard_window does — the previous
+    period has to mean the days production belongs to, or the delta compares
+    against whatever happened to be submitted then."""
     now = now_detroit()
     if period == "weekly":
         cur = most_recent_wed_2pm(now)
@@ -605,7 +621,9 @@ def scoreboard_prev_window(period: str) -> Dict[str, Any]:
     else:  # monthly — first day of the previous calendar month
         cur = month_start_detroit(now)
         prev = month_start_detroit(cur - timedelta(days=1))
-    return {"submitted_at": {"$gte": prev.astimezone(timezone.utc), "$lt": cur.astimezone(timezone.utc)}}
+    # Inclusive start, exclusive end — the day the current window opens belongs
+    # to the current window, not the previous one.
+    return {"sales_day": {"$gte": prev.date().isoformat(), "$lt": cur.date().isoformat()}}
 
 
 @api_router.get("/dashboard/summary")
@@ -693,10 +711,22 @@ async def dashboard_ticker(user: Dict[str, Any] = Depends(require_agent)):
 
 
 @api_router.get("/dashboard/platinum-wall")
-async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent)):
+async def dashboard_platinum_wall(
+    sales_day: Optional[str] = None,
+    period: Optional[str] = None,
+    user: Dict[str, Any] = Depends(require_agent),
+):
+    """Top 3 producers by tenure for the selected window.
+
+    Takes the same sales_day/period params as /dashboard/summary. It used to be
+    pinned to the current sales day with no way to ask for anything else, so
+    every historical day and every rolling window came back empty — the wall was
+    the one dashboard section the period selector could not reach.
+    """
     ids = await visible_agent_ids(user)
-    today = current_sales_day_str()
-    q: Dict[str, Any] = {"sales_day": today}
+    # scoreboard_window resolves daily (optionally historical) and the rolling
+    # weekly/monthly ranges identically to the summary above it.
+    q, _ = scoreboard_window(period or "daily", sales_day)
     if ids is not None:
         q["agent_id"] = {"$in": ids}
     pipeline = [
@@ -706,37 +736,38 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent))
     ]
     cur = db.production_entries.aggregate(pipeline)
     rows = [d async for d in cur]
-    vets, rookies = [], []
+    vets, rookies, unranked = [], [], []
     for r in rows:
         agent = await db.agent_profiles.find_one({"agent_id": r["_id"]}, {"_id": 0})
         if not agent:
             continue
-        # Tenure must be explicitly recorded to appear on the wall. A missing
-        # is_rookie field means UNKNOWN — not veteran — so unrecorded agents are
-        # excluded from both buckets (shown as "Tenure unknown" in the Admin
-        # panel) until leadership sets it, rather than defaulting into VETS.
+        # Tenure must be explicitly recorded to rank as a vet or a rookie: a
+        # missing is_rookie means UNKNOWN, not veteran. Those agents used to be
+        # dropped entirely, which hid top producers — most of the roster has no
+        # tenure set, so the wall looked broken. They now surface in their own
+        # bucket instead, which also makes the gap visible enough to fix.
         tenure = agent.get("is_rookie")
-        if tenure is None:
-            continue
         item = {
             "agent_id": agent["agent_id"],
             "name": agent["name"],
-            "office": agent["office"],
+            "office": agent.get("office", ""),
             "gross_alp": float(r["gross_alp"]),
             "sales": int(r["sales"]),
-            "is_rookie": bool(tenure),
+            "is_rookie": bool(tenure) if tenure is not None else None,
             "role": agent.get("role", ""),
             "io_role": agent.get("io_role", ""),
             "phone": agent.get("phone", ""),
             "email": agent.get("email", ""),
         }
-        if tenure:
-            if len(rookies) < 3:
-                rookies.append(item)
+        if tenure is None:
+            bucket = unranked
+        elif tenure:
+            bucket = rookies
         else:
-            if len(vets) < 3:
-                vets.append(item)
-        if len(vets) >= 3 and len(rookies) >= 3:
+            bucket = vets
+        if len(bucket) < 3:
+            bucket.append(item)
+        if len(vets) >= 3 and len(rookies) >= 3 and len(unranked) >= 3:
             break
     # Recent Platinum Rule recognition posts (global scope, newest first)
     platinum = [s async for s in db.shoutouts.find(
@@ -744,7 +775,8 @@ async def dashboard_platinum_wall(user: Dict[str, Any] = Depends(require_agent))
     for s in platinum:
         if isinstance(s.get("ts"), datetime):
             s["ts"] = iso_utc(s["ts"])
-    return {"vets": vets, "rookies": rookies, "platinum_rule": platinum}
+    return {"vets": vets, "rookies": rookies, "unranked": unranked,
+            "platinum_rule": platinum, "period": period or "daily"}
 
 
 @api_router.get("/dashboard/offices")
@@ -756,22 +788,21 @@ async def dashboard_offices(
     ids = await visible_agent_ids(user)
     # Weekly/monthly use a rolling window; daily/default keeps the single-day
     # (optionally historical) behavior.
-    if period and period != "daily":
-        window, _ = scoreboard_window(period)  # validates; raises 400 on unknown
-    else:
-        window = {"sales_day": resolve_history_day(sales_day)}
-    # Discover offices from the actual agent_profiles so new RGAs appear automatically
-    office_filter: Dict[str, Any] = {}
+    window, _ = scoreboard_window(period or "daily", sales_day)
+    # Discover offices from agent_profiles so new RGAs appear automatically.
+    # An agent with a blank office is bucketed under UNASSIGNED_OFFICE rather
+    # than dropped: their production still counts toward the summary above, so
+    # discarding them here made the office tiles silently under-sum the headline.
+    profile_q: Dict[str, Any] = {}
     if ids is not None:
-        office_filter["agent_id"] = {"$in": ids}
-    offices = [o for o in await db.agent_profiles.distinct("office", office_filter) if o]
+        profile_q["agent_id"] = {"$in": ids}
+    ids_by_office: Dict[str, List[str]] = {}
+    async for a in db.agent_profiles.find(profile_q, {"_id": 0, "agent_id": 1, "office": 1}):
+        ids_by_office.setdefault(a.get("office") or UNASSIGNED_OFFICE, []).append(a["agent_id"])
 
     out = []
-    for office in sorted(offices):
-        agent_q: Dict[str, Any] = {"office": office}
-        if ids is not None:
-            agent_q["agent_id"] = {"$in": ids}
-        office_agent_ids = [d["agent_id"] async for d in db.agent_profiles.find(agent_q, {"_id": 0, "agent_id": 1})]
+    for office in sorted(ids_by_office):
+        office_agent_ids = ids_by_office[office]
         if not office_agent_ids:
             out.append({"office": office, "alp": 0, "sales": 0, "avg_deal": 0})
             continue
@@ -1163,19 +1194,35 @@ def month_start_detroit(dt_local: datetime) -> datetime:
     return DETROIT_TZ.localize(datetime(dt_local.year, dt_local.month, 1, 0, 0))
 
 
-def scoreboard_window(period: str) -> Tuple[Dict[str, Any], Optional[datetime]]:
+def scoreboard_window(period: str, sales_day: Optional[str] = None) -> Tuple[Dict[str, Any], Optional[datetime]]:
     """Return (Mongo match fragment, window start in UTC) for a period.
 
-    Daily matches the current sales_day (start is None). Weekly/monthly match
-    submitted_at >= the window start. Raises 400 on an unknown period."""
+    Every period matches on sales_day — the day production belongs to — never on
+    submitted_at. Keying the rolling windows off submission time meant a deal
+    sold Tuesday but entered Wednesday morning landed in the wrong week, and it
+    made backfilled history invisible: imported entries carry submitted_at of
+    their historical date, so anything older than the current window vanished
+    from Weekly/Monthly while Daily showed it fine.
+
+    The Wednesday 2 PM cutoff still decides WHICH week is current
+    (most_recent_wed_2pm) — only the field being matched has changed. Daily
+    honours an optional historical sales_day.
+
+    Raises 400 on an unknown period.
+    """
     if period not in SCOREBOARD_PERIODS:
         raise HTTPException(status_code=400, detail="period must be daily, weekly, or monthly")
     if period == "daily":
-        return {"sales_day": current_sales_day_str()}, None
+        return {"sales_day": resolve_history_day(sales_day)}, None
+
     now = now_detroit()
-    start = most_recent_wed_2pm(now) if period == "weekly" else month_start_detroit(now)
-    start_utc = start.astimezone(timezone.utc)
-    return {"submitted_at": {"$gte": start_utc}}, start_utc
+    start_local = most_recent_wed_2pm(now) if period == "weekly" else month_start_detroit(now)
+    # The window runs from its start day through the current sales day. ISO date
+    # strings compare lexicographically, so a plain string range is correct.
+    day_from = start_local.date().isoformat()
+    day_to = current_sales_day_str()
+    return ({"sales_day": {"$gte": day_from, "$lte": day_to}},
+            start_local.astimezone(timezone.utc))
 
 
 @api_router.get("/team")
@@ -1232,10 +1279,13 @@ async def team_view(
         # excluded from Sits at entry, so it is not subtracted again here.
         close = metrics.close_rate(sales, sits)
         avg_deal = (float(r["gross_alp"]) / sales) if sales > 0 else 0
+        # Thresholds per the owner's spec: close ratio under 50% needs at least
+        # 5 sits, average deal under $1,200 needs at least 3 sales. The minimums
+        # keep a new agent's first night from tripping a flag.
         alerts = []
-        if sits >= 3 and close < 50:
+        if sits >= MIN_SITS_FOR_RATIO_ALERT and close < LOW_CLOSE_RATIO_PCT:
             alerts.append("low_close_ratio")
-        if sales >= 1 and avg_deal < 1200:
+        if sales >= MIN_SALES_FOR_DEAL_ALERT and avg_deal < LOW_AVG_DEAL_USD:
             alerts.append("low_avg_deal")
         out.append({
             "agent_id": a["agent_id"],
@@ -1663,7 +1713,7 @@ async def agent_office_map() -> Dict[str, str]:
     resolve offices through agent_profiles; this keeps trends consistent.
     """
     return {
-        a["agent_id"]: (a.get("office") or "Unassigned")
+        a["agent_id"]: (a.get("office") or UNASSIGNED_OFFICE)
         async for a in db.agent_profiles.find({}, {"_id": 0, "agent_id": 1, "office": 1})
     }
 
@@ -2300,6 +2350,11 @@ class AdminSetStateIn(BaseModel):
     state: str  # two-letter resident state code, e.g. "MI"
 
 
+class AdminSetUplineIn(BaseModel):
+    agent_id: str
+    upline_agent_id: Optional[str] = None  # null detaches (valid only for RGA)
+
+
 class AdminMergeOfficeIn(BaseModel):
     from_office: str
     to_office: str
@@ -2465,6 +2520,94 @@ async def admin_set_state(payload: AdminSetStateIn, user: Dict[str, Any] = Depen
         "new_value": state,
     })
     return {"ok": True, "agent_id": payload.agent_id, "state": state}
+
+
+@api_router.get("/admin/orphans")
+async def admin_orphans(user: Dict[str, Any] = Depends(require_admin)):
+    """Agents unreachable by any team rollup.
+
+    visible_agent_ids() walks DOWN agent_profiles.upline_id, so an agent whose
+    upline_id is null — or points at an agent that no longer exists — can never
+    be reached, and one broken link severs that agent's whole subtree. Every
+    agent minted by the WAR import starts this way. Nothing surfaced them
+    before, so they were invisible in every GA/MGA view with no way to notice.
+
+    level_4 is excluded: a root RGA legitimately has no upline.
+    """
+    everyone = [
+        a async for a in db.agent_profiles.find(
+            {}, {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1,
+                 "upline_id": 1, "created_by_import": 1})
+    ]
+    known = {a["agent_id"] for a in everyone}
+    orphans = []
+    for a in everyone:
+        if a.get("role") == "level_4":
+            continue  # a root RGA has no upline by design
+        up = a.get("upline_id")
+        if not up:
+            reason = "no_upline"
+        elif up not in known:
+            reason = "dangling_upline"
+        else:
+            continue
+        orphans.append({
+            "agent_id": a["agent_id"],
+            "name": a.get("name", ""),
+            "office": a.get("office") or UNASSIGNED_OFFICE,
+            "role": a.get("role", ""),
+            "upline_id": up,
+            "reason": reason,
+            "created_by_import": bool(a.get("created_by_import")),
+        })
+    orphans.sort(key=lambda o: o["name"])
+    return {"orphans": orphans, "total_agents": len(everyone)}
+
+
+@api_router.post("/admin/set-upline")
+async def admin_set_upline(
+    payload: AdminSetUplineIn,
+    user: Dict[str, Any] = Depends(require_admin),
+):
+    """Repair an agent's upline.
+
+    There was previously no way to change an upline through the API at all —
+    add-person is create-only and every other admin write touches a single
+    unrelated field — so an orphaned agent could only be fixed with direct
+    database access.
+    """
+    agent = await db.agent_profiles.find_one(
+        {"agent_id": payload.agent_id}, {"_id": 0, "agent_id": 1, "role": 1})
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    upline_id = (payload.upline_agent_id or "").strip() or None
+    if upline_id is None:
+        # Detaching is only ever right for a root RGA; for anyone else it
+        # recreates the exact invisibility this endpoint exists to fix.
+        if agent.get("role") != "level_4":
+            raise HTTPException(
+                status_code=400,
+                detail="Only an RGA may have no upline — everyone else needs one to appear in team rollups.",
+            )
+    else:
+        if upline_id == payload.agent_id:
+            raise HTTPException(status_code=400, detail="An agent cannot be their own upline")
+        if not await db.agent_profiles.find_one({"agent_id": upline_id}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail="Upline agent not found")
+        # A cycle would make downline_agent_ids unable to reach either branch
+        # from above, silently hiding both.
+        if payload.agent_id in await _ancestor_chain(upline_id):
+            raise HTTPException(
+                status_code=400,
+                detail="That would create a loop — the chosen upline already reports to this agent.",
+            )
+
+    await db.agent_profiles.update_one(
+        {"agent_id": payload.agent_id},
+        {"$set": {"upline_id": upline_id, "updated_at": now_utc()}},
+    )
+    return {"ok": True, "agent_id": payload.agent_id, "upline_id": upline_id}
 
 
 @api_router.get("/admin/offices")
@@ -2645,7 +2788,11 @@ async def admin_import_war_report(
                 await db.agent_profiles.insert_one({
                     "agent_id": agent_id,
                     "name": name,
-                    "office": office,
+                    # Deliberately NOT the spreadsheet's office name: a WAR sheet
+                    # header reads "Mohamed Aljahmi RGA" where the roster reads
+                    # "MJ RGA", and stamping it here is what split one office
+                    # into two. Left unassigned for an admin to place.
+                    "office": UNASSIGNED_OFFICE,
                     "role": "level_1",
                     "upline_id": None,
                     "created_at": now_utc(),
