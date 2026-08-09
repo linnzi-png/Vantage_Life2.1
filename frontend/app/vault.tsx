@@ -200,6 +200,7 @@ export default function VaultScreen() {
       <Stack.Screen options={{ title: 'COMPANY HEALTH', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
+        <TourAnchor id="vault-health">
         {/* Office tabs — one per office with production data. */}
         {offices.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
@@ -231,6 +232,7 @@ export default function VaultScreen() {
             </TouchableOpacity>
           ))}
         </View>
+        </TourAnchor>
 
         {loading ? (
           <View style={styles.loading}><ActivityIndicator color={COLORS.primary} /></View>
@@ -280,7 +282,7 @@ export default function VaultScreen() {
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>CLOSE RATE BY WEEK</Text>
-              <Text style={styles.cardNote}>Sales ÷ (Sits − N1) — N1 excluded per business rule.</Text>
+              <Text style={styles.cardNote}>Sales ÷ Sits.</Text>
               <LineChart data={closePoints} width={chartW} color={COLORS.gold} formatValue={(n) => `${n}%`} />
             </View>
           </>
