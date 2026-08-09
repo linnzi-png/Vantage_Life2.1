@@ -5,24 +5,51 @@ import { COLORS } from '../lib/auth';
 
 export interface WallItem {
   agent_id: string; name: string; office: string; gross_alp: number; sales: number;
-  is_rookie?: boolean; role?: string; io_role?: string; phone?: string; email?: string;
+  // null = tenure never recorded, which is most of the roster.
+  is_rookie?: boolean | null; role?: string; io_role?: string; phone?: string; email?: string;
 }
 export interface PlatinumRulePost { shoutout_id: string; agent_name: string; office: string; reason: string; posted_by?: string; }
 
 const PLATINUM = '#E5E4E2';
 
 export default function PlatinumWall(
-  { vets, rookies, platinum = [], onPress }:
-  { vets: WallItem[]; rookies: WallItem[]; platinum?: PlatinumRulePost[]; onPress?: (item: WallItem) => void },
+  { vets, rookies, unranked = [], platinum = [], windowLabel, onPress }:
+  {
+    vets: WallItem[]; rookies: WallItem[];
+    /** Top producers whose tenure was never recorded. Shown rather than hidden
+     *  so nobody silently disappears from the wall — see the Unranked panel. */
+    unranked?: WallItem[];
+    platinum?: PlatinumRulePost[];
+    windowLabel?: string;
+    onPress?: (item: WallItem) => void;
+  },
 ) {
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>PLATINUM WALL</Text>
+      <View style={styles.head}>
+        <Text style={styles.title}>PLATINUM WALL</Text>
+        {windowLabel ? <Text style={styles.window}>{windowLabel}</Text> : null}
+      </View>
       <View style={styles.row}>
         <Panel title="TOP 3 VETS" color={COLORS.gold} icon="ribbon" items={vets} testID="platinum-vets" onPress={onPress} />
         <View style={{ width: 8 }} />
         <Panel title="TOP 3 ROOKIES" color={COLORS.orange} icon="rocket" items={rookies} testID="platinum-rookies" onPress={onPress} />
       </View>
+      {unranked.length ? (
+        <View style={{ marginTop: 8 }}>
+          <Panel
+            title="TOP 3 — TENURE NOT SET"
+            color={COLORS.textDim}
+            icon="help-circle"
+            items={unranked}
+            testID="platinum-unranked"
+            onPress={onPress}
+          />
+          <Text style={styles.hint}>
+            Set Veteran or Rookie in Admin to rank these agents.
+          </Text>
+        </View>
+      ) : null}
       {platinum.length ? (
         <View style={[styles.panel, { borderTopColor: PLATINUM, marginTop: 8 }]} testID="platinum-rule-strip">
           <View style={styles.panelHeader}>
@@ -66,7 +93,7 @@ function Panel({ title, color, icon, items, testID, onPress }: any) {
           <Text style={styles.alp}>${Math.round(it.gross_alp).toLocaleString()}</Text>
         </TouchableOpacity>
       )) : (
-        <Text style={styles.empty}>No data yet today.</Text>
+        <Text style={styles.empty}>No production in this period.</Text>
       )}
     </View>
   );
@@ -74,7 +101,10 @@ function Panel({ title, color, icon, items, testID, onPress }: any) {
 
 const styles = StyleSheet.create({
   wrap: { marginTop: 16 },
-  title: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 8 },
+  head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 },
+  title: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
+  window: { color: COLORS.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  hint: { color: COLORS.textMuted, fontSize: 10, marginTop: 6, fontStyle: 'italic' },
   row: { flexDirection: 'row' },
   panel: {
     flex: 1,

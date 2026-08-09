@@ -60,17 +60,18 @@ async def test_invalid_period_rejected(client, seeded_db, detroit_now):
     assert r.status_code == 400
 
 
-async def test_weekly_uses_wednesday_2pm_cutoff(client, seeded_db, detroit_now):
-    detroit_now(2026, 7, 2, 10, 0)  # Thursday — active week began Wed 7/1 2 PM
+async def test_weekly_window_is_by_sales_day(client, seeded_db, detroit_now):
+    """Wednesday 2 PM still decides which week is active; the window itself
+    matches sales_day, so when a deal was entered does not move it between
+    weeks. Both entries were sold Wed 7/1, inside the active week."""
+    detroit_now(2026, 7, 2, 10, 0)  # Thursday — active week began Wed 7/1
     token = await rga_token(seeded_db)
-    # Before the cutoff (Wed 10 AM) — excluded from the weekly window.
     await add_entry(seeded_db, sales_day="2026-07-01",
                     submitted_at=det_utc(2026, 7, 1, 10, 0), gross_alp=999)
-    # After the cutoff (Wed 8 PM) — included.
     await add_entry(seeded_db, sales_day="2026-07-01",
                     submitted_at=det_utc(2026, 7, 1, 20, 0), gross_alp=500)
     r = await client.get("/api/team?period=weekly", headers=auth(token))
-    assert row_for(r.json())["gross_alp"] == 500
+    assert row_for(r.json())["gross_alp"] == 1499
 
 
 async def test_weekly_resets_to_zero_at_cutoff(client, seeded_db, detroit_now):
