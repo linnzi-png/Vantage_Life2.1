@@ -200,7 +200,11 @@ export default function DashboardScreen() {
 
             <OfficeTabs offices={offices} windowLabel={windowLabel} />
 
-            {user?.agent_id ? <AgentHistory agentId={user.agent_id} /> : null}
+            {user?.agent_id ? (
+              <TourAnchor id="dash-history">
+                <AgentHistory agentId={user.agent_id} />
+              </TourAnchor>
+            ) : null}
 
             <View style={{ height: 40 }} />
           </>

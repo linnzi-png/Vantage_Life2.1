@@ -10,7 +10,9 @@
 import { Role } from './auth';
 
 // Bump to re-show all tours once after a meaningful revision.
-export const TOUR_VERSION = 1;
+// v2: Close Rate corrected to Sales / Sits, Company Health dashboard,
+// Team week picker, Production History charts.
+export const TOUR_VERSION = 2;
 
 export type TourAnchorId =
   | 'dash-header'
@@ -18,15 +20,18 @@ export type TourAnchorId =
   | 'dash-stats'
   | 'dash-wall'
   | 'dash-ticker'
+  | 'dash-history'
   | 'pulse-stepper'
   | 'pulse-upline'
   | 'shoutouts-nominate'
   | 'team-roster'
+  | 'team-weeks'
   | 'team-missing'
   | 'team-nominations'
   | 'noms-header'
   | 'manager-intro'
   | 'audit-intro'
+  | 'vault-health'
   | 'vault-weeks'
   | 'more-tools'
   | 'more-walkthrough';
@@ -85,7 +90,7 @@ const BASICS_FULL: TourStep[] = [
     screen: '/',
     anchor: 'dash-stats',
     title: 'LIVE PRODUCTION',
-    body: 'Total ALP, Sits, and Sales update live, with the swing versus yesterday. One rule to know everywhere in this app: Close Rate is Sales ÷ (Sits − N1). N1 write-offs never count against your close rate.',
+    body: 'Total ALP, Sits, and Sales update live, with the swing versus yesterday. One rule to know everywhere in this app: Close Rate is Sales ÷ Sits. N1 visits (medically unqualified) are tallied separately and already left out of your Sits — they never count against you.',
   },
   {
     id: 'platinum-wall',
@@ -93,6 +98,13 @@ const BASICS_FULL: TourStep[] = [
     anchor: 'dash-wall',
     title: 'THE PLATINUM WALL',
     body: 'Top Vets, top Rookies, and Platinum Rule honorees. Tap any name to open their contact card — call or text them straight from the app.',
+  },
+  {
+    id: 'production-history',
+    screen: '/',
+    anchor: 'dash-history',
+    title: 'PRODUCTION HISTORY',
+    body: 'Scroll to the bottom of your dashboard for PRODUCTION HISTORY — your last 13 weeks of ALP, sales, and close rate, charted week by week.',
   },
   {
     id: 'ticker',
@@ -154,7 +166,14 @@ const basicsBrief = (welcomeBody: string, includeUpline: boolean): TourStep[] =>
     screen: '/',
     anchor: 'dash-stats',
     title: 'LIVE ROLLUPS',
-    body: 'ALP, Sits, and Sales roll up live across everyone visible to you. Close Rate everywhere is Sales ÷ (Sits − N1) — N1 write-offs are always excluded.',
+    body: 'ALP, Sits, and Sales roll up live across everyone visible to you. Close Rate everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close rate down.',
+  },
+  {
+    id: 'production-history',
+    screen: '/',
+    anchor: 'dash-history',
+    title: 'PRODUCTION HISTORY',
+    body: 'At the bottom of the dashboard: PRODUCTION HISTORY — 13 weeks of ALP, sales, and close rate, charted week by week.',
   },
   {
     id: 'nightly-pulse',
@@ -189,7 +208,14 @@ const TEAM_STEPS: TourStep[] = [
     screen: '/team',
     anchor: 'team-roster',
     title: 'YOUR TEAM, LIVE',
-    body: 'Your full downline rolls up in the TEAM tab — Gross and Net ALP, sales, close rate, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row for a contact card.',
+    body: "Your full downline rolls up in the TEAM tab — Gross and Net ALP, sales, close rate, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row for a contact card with that agent's 13-week production history.",
+  },
+  {
+    id: 'team-weeks',
+    screen: '/team',
+    anchor: 'team-weeks',
+    title: 'REWIND THE WEEK',
+    body: 'These chips pin any past reporting week — LIVE is now; tap a date to see the board exactly as that week closed. A pinned week is a static snapshot; tap LIVE to come back.',
   },
   {
     id: 'missing-tonight',
@@ -223,6 +249,13 @@ const MGA_STEPS: TourStep[] = [
     body: 'You close the loop: once a nomination hits the endorsement threshold, POST TO PLATINUM WALL publishes it agency-wide on the Platinum Wall.',
   },
   {
+    id: 'downline-history',
+    screen: '/team',
+    anchor: 'team-roster',
+    title: 'COACH FROM THE TREND',
+    body: "Open anyone on your roster and read their 13-week production history before the call — ALP, sales, and close rate, charted. History is downline-scoped: you see your whole hierarchy, and nobody above it.",
+  },
+  {
     id: 'hierarchy-scope',
     screen: '/',
     anchor: 'dash-stats',
@@ -237,7 +270,7 @@ const RGA_STEPS: TourStep[] = [
     screen: '/more',
     anchor: 'more-tools',
     title: 'EXECUTIVE TOOLS',
-    body: 'Your command deck lives in MORE: the Manager Command Panel, the Audit Log, and the Historical Vault.',
+    body: 'Your command deck lives in MORE: the Manager Command Panel, the Audit Log, and Company Health.',
   },
   {
     id: 'eraser',
@@ -254,18 +287,25 @@ const RGA_STEPS: TourStep[] = [
     body: 'Nothing here is silent: every adjustment is recorded — original value, new value, delta, reason, who made it, and when.',
   },
   {
-    id: 'vault',
+    id: 'company-health',
+    screen: '/vault',
+    anchor: 'vault-health',
+    title: 'COMPANY HEALTH',
+    body: 'Your per-office pulse: pick an office, pick a window (8 to 26 weeks or all time), and read the KPIs — period ALP, Close Rate (Sales ÷ Sits), ALP per sale — with ALP, sales, and close-rate trends charted below.',
+  },
+  {
+    id: 'vault-snapshots',
     screen: '/vault',
     anchor: 'vault-weeks',
-    title: 'HISTORICAL VAULT',
-    body: 'Every archived production week. Tap two weeks to compare them side-by-side with deltas, and EXPORT any week as a WAR-format backup.',
+    title: 'ARCHIVED WEEK SNAPSHOTS',
+    body: 'Below the charts live the archived week snapshots, created by each Wednesday reset. Tap two to compare them side-by-side with deltas, and EXPORT any week as a WAR-format backup.',
   },
   {
     id: 'wednesday-reset',
     screen: '/vault',
     anchor: null,
     title: 'THE WEDNESDAY RESET',
-    body: "Every Wednesday at 2:00 PM Detroit time the production week locks: entries archive into the Vault and a fresh week opens. The reset itself is a Chief-Executive-level platform operation — there's no in-app button to trigger it.",
+    body: "Every Wednesday at 2:00 PM Detroit time the production week locks: entries archive into the week snapshots and a fresh week opens. The reset itself is a Chief-Executive-level platform operation — there's no in-app button to trigger it.",
   },
   {
     id: 'replay',

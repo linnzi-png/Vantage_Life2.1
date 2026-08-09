@@ -176,6 +176,7 @@ export default function TeamScreen() {
       <View style={styles.periodBar}>
         <PeriodSelector value={period} onChange={changePeriod} testID="team-period" />
         {weekOptions.length > 0 ? (
+          <TourAnchor id="team-weeks">
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -201,6 +202,7 @@ export default function TeamScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+          </TourAnchor>
         ) : null}
       </View>
 

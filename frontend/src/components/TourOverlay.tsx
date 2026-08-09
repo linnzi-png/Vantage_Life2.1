@@ -32,6 +32,10 @@ const TAB_BAR_BASE = 60; // matches tabBarStyle height in app/(tabs)/_layout.tsx
 const MEASURE_DELAY = 300; // let the fade route transition settle first
 const MEASURE_INTERVAL = 150;
 const MEASURE_TIMEOUT = 2000;
+// Screens keep loading after the first measure (week chips, alert cards, …),
+// which shifts the anchor. Keep re-measuring while the step is shown so the
+// highlight follows the element instead of freezing at its first position.
+const TRACK_INTERVAL = 400;
 const FRAME_PAD = 6;
 const CARD_MARGIN = 16;
 const CARD_MAX_WIDTH = 380;
@@ -81,38 +85,59 @@ export function TourOverlay() {
     const anchorId = step.anchor;
     let cancelled = false;
     let elapsed = 0;
+    let found = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const schedule = () => {
+    const retryOrGiveUp = () => {
+      // Pre-first-measure only: after the timeout, show the centered card.
       elapsed += MEASURE_INTERVAL;
       if (elapsed >= MEASURE_TIMEOUT) {
-        // Anchor absent (empty state / conditional render) — centered card.
         setSettled(true);
         return;
       }
-      timer = setTimeout(tick, MEASURE_INTERVAL);
+      timer = setTimeout(loop, MEASURE_INTERVAL);
     };
-    const tick = () => {
+    const loop = () => {
       if (cancelled) return;
       const node = getAnchor(anchorId);
       if (!node) {
-        schedule();
+        if (!found) {
+          retryOrGiveUp();
+        } else {
+          // Anchor unmounted mid-step — drop to the centered card.
+          setRect(null);
+          timer = setTimeout(loop, TRACK_INTERVAL);
+        }
         return;
       }
       node.measureInWindow((x, y, width, height) => {
         if (cancelled) return;
         if (!(width > 0 && height > 0)) {
-          schedule();
+          if (!found) retryOrGiveUp();
+          else timer = setTimeout(loop, TRACK_INTERVAL);
           return;
         }
-        // A target scrolled out of view won't scroll itself back — fall
-        // straight through to the centered card instead of spotlighting
-        // something offscreen.
-        const visible = y < winH && y + height > 0 && x < winW && x + width > 0;
-        if (visible) setRect({ x, y, width, height });
+        found = true;
         setSettled(true);
+        // A target out of view won't scroll itself back — use the centered
+        // card instead of spotlighting something offscreen.
+        const visible = y < winH && y + height > 0 && x < winW && x + width > 0;
+        setRect((prev) => {
+          if (!visible) return null;
+          if (
+            prev &&
+            Math.abs(prev.x - x) < 1 &&
+            Math.abs(prev.y - y) < 1 &&
+            Math.abs(prev.width - width) < 1 &&
+            Math.abs(prev.height - height) < 1
+          ) {
+            return prev; // unchanged — avoid a render
+          }
+          return { x, y, width, height };
+        });
+        timer = setTimeout(loop, TRACK_INTERVAL);
       });
     };
-    timer = setTimeout(tick, MEASURE_DELAY);
+    timer = setTimeout(loop, MEASURE_DELAY);
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
