@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Interactive guided walkthrough of the VantageLife app for every hierarchy level — Agent, GA/SA, MGA, and RGA — plus the full feature list.">
+<title>VantageLife — Interactive Guided Walkthrough</title>
+<style>
+  /* VantageLife app tokens — single-theme dark by design (matches the product). */
+  :root {
+    --bg: #0D0D0D; --surface: #141414; --surface2: #1B1B1B;
+    --border: rgba(255,255,255,0.08);
+    --primary: #319842; --secondary: #00558C;
+    --gold: #FFD700; --orange: #FF8C00; --red: #FF3B30; --yellow: #EAB308;
+    --platinum: #E5E4E2;
+    --text: #FFFFFF; --dim: #A1A1AA; --muted: #6B7280;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; line-height: 1.45;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 80px; }
+
+  .kicker { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: var(--primary); text-transform: uppercase; }
+  .kicker.dim { color: var(--dim); }
+
+  /* ---- Header ---- */
+  header.site { display: flex; align-items: center; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--border); }
+  .mark { width: 44px; height: 44px; border-radius: 4px; background: var(--primary); display: grid; place-items: center; font-weight: 900; font-size: 26px; color: #000; }
+  .brand { font-size: 22px; font-weight: 900; letter-spacing: 1.5px; }
+  .brand em { font-style: normal; color: var(--primary); }
+  .tagline { color: var(--dim); font-size: 12px; letter-spacing: .6px; margin-top: 2px; }
+
+  .intro { margin: 26px 0 18px; max-width: 62ch; }
+  .intro h1 { font-size: clamp(26px, 4.5vw, 38px); font-weight: 900; letter-spacing: -0.5px; line-height: 1.12; text-wrap: balance; margin: 6px 0 10px; }
+  .intro p { color: var(--dim); font-size: 15px; }
+  .intro a { color: var(--primary); font-weight: 700; text-decoration: none; border-bottom: 1px solid rgba(49,152,66,.4); }
+  .intro a:focus-visible, button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* ---- Role picker ---- */
+  .roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 20px 0 26px; }
+  .role { display: flex; align-items: center; gap: 12px; text-align: left; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--tint); border-radius: 6px; padding: 13px 14px; cursor: pointer; color: var(--text); font: inherit; transition: border-color .15s, background .15s; }
+  .role:hover { background: var(--surface2); }
+  .role.on { border-color: var(--tint); background: var(--surface2); }
+  .role .badge { width: 36px; height: 36px; border-radius: 4px; border: 1px solid var(--tint); color: var(--tint); background: color-mix(in srgb, var(--tint) 13%, transparent); display: grid; place-items: center; font-weight: 900; font-size: 13px; flex: none; }
+  .role b { display: block; font-size: 14px; font-weight: 900; letter-spacing: .6px; }
+  .role span { display: block; color: var(--dim); font-size: 11px; margin-top: 2px; }
+
+  /* ---- Demo stage ---- */
+  .stage { display: flex; justify-content: center; padding: 8px 0 10px; }
+  .phone { position: relative; width: 384px; max-width: 100%; height: 748px; background: var(--bg); border: 1px solid rgba(255,255,255,0.14); border-radius: 26px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+  .screen { position: absolute; inset: 0 0 58px 0; padding: 14px 14px 8px; display: none; flex-direction: column; gap: 10px; overflow: hidden; }
+  .screen.on { display: flex; }
+  .stack-screen { inset: 0 0 0 0; } /* manager/audit/vault/nominations cover the tab bar area visually via own header */
+
+  .shead { display: flex; align-items: center; gap: 10px; padding-bottom: 4px; }
+  .shead .back { color: var(--dim); font-size: 16px; }
+  .shead .stitle { font-weight: 900; letter-spacing: 1.2px; font-size: 14px; color: var(--dim); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+  .card.top-accent { border-top: 2px solid var(--primary); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* dashboard */
+  .dash-head { display: flex; align-items: center; justify-content: space-between; }
+  .dash-brand { font-size: 17px; font-weight: 900; letter-spacing: 1.4px; }
+  .dash-brand em { font-style: normal; color: var(--primary); }
+  .dash-sub { color: var(--dim); font-size: 10.5px; margin-top: 2px; }
+  .dash-sub em { font-style: normal; color: var(--primary); }
+  .day-pill { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 4px; padding: 5px 9px; font-size: 10.5px; font-weight: 700; }
+  .seg { display: flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+  .seg span { flex: 1; text-align: center; padding: 7px 0; font-size: 11px; font-weight: 800; color: var(--dim); letter-spacing: .4px; }
+  .seg span.on { color: var(--primary); background: rgba(49,152,66,.12); }
+  .sect { color: var(--dim); font-size: 10.5px; font-weight: 900; letter-spacing: 2px; }
+  .stats { display: flex; gap: 7px; }
+  .stat { flex: 1; background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--ac); border-radius: 6px; padding: 9px 10px; }
+  .stat .lab { font-size: 9px; font-weight: 900; letter-spacing: 1.2px; color: var(--dim); text-transform: uppercase; }
+  .stat .val { font-size: 19px; font-weight: 900; margin-top: 3px; letter-spacing: -.5px; }
+  .stat .delta { font-size: 9.5px; color: var(--primary); font-weight: 800; margin-top: 2px; }
+  .wall-row { display: flex; gap: 7px; }
+  .wall-col { flex: 1; }
+  .wall-col h4 { font-size: 9.5px; font-weight: 900; letter-spacing: 1.2px; margin-bottom: 6px; }
+  .wall-col.vets h4 { color: var(--gold); } .wall-col.rooks h4 { color: var(--orange); }
+  .wall-item { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; border-top: 1px solid var(--border); }
+  .wall-item b { font-weight: 800; } .wall-item span { color: var(--primary); font-weight: 900; }
+  .mini-chart { display: flex; align-items: flex-end; gap: 3px; height: 46px; margin-top: 8px; }
+  .mini-chart i { flex: 1; background: linear-gradient(180deg, rgba(49,152,66,.9), rgba(49,152,66,.25)); border-radius: 2px 2px 0 0; }
+  .ticker { position: absolute; left: 0; right: 0; bottom: 58px; height: 32px; background: #000; border-top: 1px solid var(--border); display: flex; align-items: center; overflow: hidden; }
+  .ticker .live { background: var(--primary); color: #000; font-size: 10px; font-weight: 900; letter-spacing: 1.4px; padding: 0 9px; height: 100%; display: flex; align-items: center; flex: none; }
+  .ticker .feed { white-space: nowrap; font-size: 10.5px; color: var(--dim); animation: marquee 18s linear infinite; padding-left: 12px; }
+  .ticker .feed b { color: var(--text); } .ticker .feed em { font-style: normal; color: var(--primary); font-weight: 900; }
+  @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .ticker .feed { animation: none; } }
+
+  /* pulse */
+  .pulse-head { display: flex; justify-content: space-between; align-items: center; }
+  .h1s { font-size: 19px; font-weight: 900; margin-top: 2px; }
+  .streak { border: 1px solid var(--border); border-radius: 4px; padding: 5px 9px; font-size: 10.5px; font-weight: 800; }
+  .total-lab { color: var(--dim); font-size: 9.5px; font-weight: 900; letter-spacing: 1.6px; }
+  .total-val { font-size: 30px; font-weight: 900; letter-spacing: -1px; margin-top: 2px; }
+  .total-meta { color: var(--dim); font-size: 11px; margin-top: 2px; }
+  .dots { display: flex; gap: 3px; margin-bottom: 9px; }
+  .dots i { flex: 1; height: 3px; border-radius: 1px; background: var(--border); }
+  .dots i.on { background: var(--primary); }
+  .step-num { color: var(--dim); font-size: 9.5px; font-weight: 900; letter-spacing: 1.5px; }
+  .step-lab { font-size: 19px; font-weight: 900; margin-top: 3px; }
+  .step-hint { color: var(--dim); font-size: 11px; margin-top: 3px; }
+  .fake-input { background: #000; border: 1px solid var(--border); border-radius: 4px; padding: 10px 12px; font-size: 26px; font-weight: 900; color: var(--muted); margin-top: 10px; }
+  .btn-row { display: flex; gap: 7px; margin-top: 11px; }
+  .btn { flex: 1; text-align: center; padding: 10px 0; border-radius: 4px; font-size: 11.5px; font-weight: 900; letter-spacing: 1px; }
+  .btn.primary { background: var(--primary); color: #000; }
+  .btn.ghost { border: 1px solid var(--border); color: var(--dim); }
+  .upline { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 6px; padding: 11px 12px; }
+  .upline .k { color: var(--primary); font-size: 8.5px; font-weight: 900; letter-spacing: 1.8px; }
+  .upline b { display: block; font-size: 13.5px; font-weight: 800; margin-top: 2px; }
+  .upline .ic { display: flex; gap: 7px; }
+  .upline .ic i { width: 26px; height: 26px; border-radius: 13px; background: var(--surface2); display: grid; place-items: center; font-style: normal; font-size: 12px; }
+
+  /* shoutouts */
+  .pill-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--platinum); border-radius: 5px; padding: 6px 10px; color: var(--platinum); font-size: 9.5px; font-weight: 900; letter-spacing: 1px; background: rgba(229,228,226,.08); }
+  .shout { display: flex; gap: 10px; border: 1px solid var(--border); border-top: 3px solid var(--ac); border-radius: 6px; padding: 11px 12px; background: var(--bgc); }
+  .shout .t { font-size: 10px; font-weight: 900; letter-spacing: 1.4px; color: var(--ac); }
+  .shout b { display: block; font-size: 13px; margin-top: 2px; }
+  .shout small { color: var(--dim); font-size: 11px; display: block; margin-top: 2px; }
+
+  /* team */
+  .chips { display: flex; gap: 6px; overflow: hidden; }
+  .chip { border: 1px solid var(--border); border-radius: 12px; padding: 4px 11px; font-size: 10px; font-weight: 900; color: var(--dim); flex: none; }
+  .chip.live { background: var(--gold); border-color: var(--gold); color: #000; }
+  .missing { display: flex; align-items: center; gap: 9px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--yellow); border-radius: 6px; padding: 10px 11px; }
+  .missing .k { color: var(--yellow); font-size: 9.5px; font-weight: 900; letter-spacing: 1.2px; }
+  .missing small { color: var(--dim); font-size: 10.5px; display: block; margin-top: 2px; }
+  .missing .act { margin-left: auto; color: var(--yellow); font-size: 9.5px; font-weight: 900; letter-spacing: .8px; flex: none; }
+  .sortbar { display: flex; gap: 5px; }
+  .sortbar span { flex: 1; text-align: center; border: 1px solid var(--border); border-radius: 4px; padding: 5px 2px; font-size: 9.5px; font-weight: 800; color: var(--dim); background: var(--surface); }
+  .sortbar span.on { border-color: var(--primary); color: var(--primary); background: rgba(49,152,66,.12); }
+  .search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 8px 11px; color: var(--muted); font-size: 12px; }
+  .row { display: flex; justify-content: space-between; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 11px; }
+  .row b { font-size: 12.5px; font-weight: 800; }
+  .row .meta { color: var(--dim); font-size: 10px; margin-top: 2px; }
+  .row .alp { color: var(--primary); font-weight: 900; font-size: 14px; text-align: right; }
+  .row .m2 { color: var(--dim); font-size: 10px; text-align: right; margin-top: 2px; }
+  .rk { background: var(--orange); color: #000; font-size: 8px; font-weight: 900; border-radius: 2px; padding: 0 3px; margin-left: 5px; vertical-align: 2px; }
+  .alert-chip { display: inline-block; border: 1px solid var(--yellow); color: var(--yellow); border-radius: 3px; font-size: 8px; font-weight: 800; letter-spacing: .5px; padding: 1px 5px; margin-top: 4px; }
+
+  /* nominations */
+  .nom-card { border: 1px solid var(--platinum); border-left: 3px solid var(--platinum); border-radius: 6px; background: var(--surface); padding: 11px 12px; }
+  .nom-top { display: flex; justify-content: space-between; align-items: center; }
+  .nom-top b { font-size: 13.5px; }
+  .cnt { border: 1px solid var(--platinum); color: var(--platinum); border-radius: 10px; font-size: 9.5px; font-weight: 900; padding: 2px 8px; letter-spacing: 1px; }
+  .reason { font-style: italic; font-size: 12px; margin: 7px 0; line-height: 1.5; }
+  .nom-meta { color: var(--muted); font-size: 10.5px; }
+  .nom-actions { display: flex; gap: 7px; margin-top: 10px; flex-wrap: wrap; }
+  .sm-btn { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); background: var(--surface2); border-radius: 5px; padding: 7px 11px; font-size: 9.5px; font-weight: 900; letter-spacing: 1px; color: var(--primary); }
+  .sm-btn.wall { background: var(--platinum); border-color: var(--platinum); color: #000; }
+
+  /* manager / audit */
+  .intro-line { color: var(--dim); font-size: 11.5px; margin-top: 4px; }
+  .audit-row { border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 6px; background: var(--surface); padding: 11px 12px; font-size: 11px; }
+  .audit-row .vals { display: flex; justify-content: space-between; margin: 7px 0; font-weight: 900; font-size: 13px; }
+  .audit-row .vals small { display: block; color: var(--dim); font-size: 8.5px; font-weight: 900; letter-spacing: 1px; }
+
+  /* vault / company health */
+  .office-tabs { display: flex; gap: 6px; }
+  .otab { border: 1px solid var(--border); border-radius: 14px; padding: 5px 13px; font-size: 10px; font-weight: 900; letter-spacing: .8px; color: var(--dim); }
+  .otab.on { background: var(--secondary); border-color: var(--secondary); color: #fff; }
+  .ranges { display: flex; gap: 5px; }
+  .ranges span { flex: 1; text-align: center; border: 1px solid var(--border); border-radius: 4px; padding: 5px 0; font-size: 10px; font-weight: 900; color: var(--dim); }
+  .ranges span.on { background: var(--primary); border-color: var(--primary); color: #000; }
+  .hero-lab { color: var(--dim); font-size: 9.5px; font-weight: 900; letter-spacing: 1.5px; }
+  .hero-val { font-size: 26px; font-weight: 900; letter-spacing: -1px; margin: 2px 0; }
+  .up-pill { display: inline-flex; align-items: center; gap: 4px; background: rgba(49,152,66,.15); color: var(--primary); border-radius: 10px; font-size: 9.5px; font-weight: 800; padding: 2px 8px; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 9px; }
+  .kpi .lab { color: var(--dim); font-size: 8px; font-weight: 900; letter-spacing: 1px; }
+  .kpi .val { font-size: 13.5px; font-weight: 900; margin-top: 2px; }
+  .kpi .hint { color: var(--muted); font-size: 8.5px; margin-top: 1px; }
+  .chart-line { margin-top: 6px; }
+  .snap { display: flex; gap: 7px; }
+  .snap .wk { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 9px 10px; font-size: 10px; }
+  .snap .wk b { display: block; font-size: 13px; color: var(--primary); font-weight: 900; margin: 3px 0; }
+  .snap .wk .exp { color: var(--primary); font-size: 8.5px; font-weight: 900; letter-spacing: .8px; margin-top: 5px; }
+  .snap .wk.selA { border: 2px solid var(--primary); } .snap .wk.selB { border: 2px solid var(--gold); }
+
+  /* more */
+  .profile { display: flex; gap: 11px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--primary); border-radius: 6px; padding: 12px; }
+  .avatar { width: 40px; height: 40px; border-radius: 4px; background: var(--primary); color: #000; display: grid; place-items: center; font-weight: 900; font-size: 19px; }
+  .profile b { font-size: 14px; } .profile small { color: var(--dim); font-size: 10.5px; display: block; }
+  .profile .rt { color: var(--primary); font-size: 10px; font-weight: 900; letter-spacing: 1.2px; margin-top: 3px; }
+  .list { border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; gap: 1px; background: var(--border); }
+  .item { display: flex; align-items: center; gap: 10px; background: var(--surface); padding: 11px 12px; font-size: 12.5px; font-weight: 700; }
+  .item i { font-style: normal; color: var(--primary); width: 16px; text-align: center; }
+  .item .chev { margin-left: auto; color: var(--dim); }
+
+  /* tab bar */
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 58px; background: #000; border-top: 1px solid var(--border); display: flex; }
+  .tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--dim); font-size: 8.5px; font-weight: 800; letter-spacing: .5px; }
+  .tab i { font-style: normal; font-size: 15px; }
+  .tab.on { color: var(--primary); }
+  .tab.hidden { display: none; }
+
+  /* ---- Tour overlay ---- */
+  .spot { position: absolute; z-index: 40; border: 2px solid var(--gold); border-radius: 8px; box-shadow: 0 0 0 2000px rgba(0,0,0,.78); pointer-events: none; transition: all .28s ease; }
+  @media (prefers-reduced-motion: reduce) { .spot { transition: none; } }
+  .scrim-full { position: absolute; inset: 0; background: rgba(0,0,0,.78); z-index: 40; }
+  .tour-card { position: absolute; z-index: 50; left: 12px; right: 12px; background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--primary); border-radius: 6px; padding: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+  .tour-card .k { color: var(--dim); font-size: 9.5px; font-weight: 900; letter-spacing: 2px; }
+  .tour-card h3 { font-size: 16.5px; font-weight: 900; letter-spacing: .5px; margin: 5px 0 7px; }
+  .tour-card p { color: var(--dim); font-size: 12px; line-height: 1.5; }
+  .tour-card .btns { display: flex; gap: 7px; margin-top: 12px; }
+  .tour-card button { flex: 1; padding: 10px 0; border-radius: 4px; font-size: 11.5px; font-weight: 900; letter-spacing: 1px; cursor: pointer; font-family: inherit; }
+  .tour-card .next { background: var(--primary); border: none; color: #000; }
+  .tour-card .back { background: transparent; border: 1px solid var(--border); color: var(--dim); }
+  .tour-card .skip { display: block; margin: 10px auto 0; background: none; border: none; color: var(--muted); font-size: 9.5px; font-weight: 900; letter-spacing: 1.5px; cursor: pointer; font-family: inherit; }
+  .idle { position: absolute; inset: 0; z-index: 60; background: rgba(13,13,13,.88); display: grid; place-items: center; text-align: center; padding: 28px; }
+  .idle h3 { font-size: 20px; font-weight: 900; margin: 8px 0; }
+  .idle p { color: var(--dim); font-size: 13px; max-width: 30ch; margin: 0 auto; }
+
+  .stage-note { text-align: center; color: var(--muted); font-size: 11.5px; margin-top: 14px; }
+
+  /* ---- Feature matrix ---- */
+  .matrix { margin-top: 56px; }
+  .matrix > h2 { font-size: clamp(22px, 3.5vw, 30px); font-weight: 900; letter-spacing: -.4px; margin: 8px 0 6px; text-wrap: balance; }
+  .matrix > p.sub { color: var(--dim); font-size: 14px; max-width: 66ch; }
+  .levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 22px; }
+  .level { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--tint); border-radius: 6px; padding: 16px; }
+  .level .tier { font-size: 10px; font-weight: 900; letter-spacing: 1.6px; color: var(--tint); }
+  .level h3 { font-size: 17px; font-weight: 900; margin: 4px 0 2px; }
+  .level .title { color: var(--dim); font-size: 11px; margin-bottom: 12px; }
+  .level .plus { font-size: 10px; font-weight: 900; letter-spacing: 1.4px; color: var(--dim); margin: 12px 0 6px; }
+  .level ul { list-style: none; }
+  .level li { position: relative; padding: 5px 0 5px 18px; font-size: 12.5px; color: #d8d8dc; border-top: 1px solid var(--border); }
+  .level li:first-child { border-top: none; }
+  .level li::before { content: "▸"; position: absolute; left: 2px; color: var(--tint); font-size: 11px; }
+  .rule-note { margin-top: 18px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--gold); border-radius: 6px; padding: 13px 16px; font-size: 13px; color: var(--dim); }
+  .rule-note b { color: var(--text); }
+  footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; text-align: center; letter-spacing: .5px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="site">
+    <div class="mark">V</div>
+    <div>
+      <div class="brand">VANTAGE<em>LIFE</em> 2.1</div>
+      <div class="tagline">Real-Time Impact Culture · AO Premier</div>
+    </div>
+  </header>
+
+  <section class="intro">
+    <div class="kicker">Interactive guided walkthrough</div>
+    <h1>See exactly how your scoreboard works — at every level.</h1>
+    <p>This is a live simulation of the VantageLife app with sample data. Pick your role below and the walkthrough steps you through the real screens, exactly as it does in the app. The full experience is at
+    <a href="https://www.app.aovantagelife.com">app.aovantagelife.com</a> — your tour starts automatically on first sign-in.</p>
+  </section>
+
+  <div class="roles" id="roles" role="group" aria-label="Choose a role to preview its walkthrough">
+    <button class="role" data-role="agent" style="--tint:#319842"><span class="badge">L1</span><span><b>AGENT</b><span>Personal stats + Nightly Pulse</span></span></button>
+    <button class="role" data-role="ga" style="--tint:#00A0E4"><span class="badge">L2</span><span><b>GA / SA</b><span>CoExecutive Producer · Team view</span></span></button>
+    <button class="role" data-role="mga" style="--tint:#FFD700"><span class="badge">L3</span><span><b>MGA</b><span>Executive Producer · Full hierarchy</span></span></button>
+    <button class="role" data-role="rga" style="--tint:#FF8C00"><span class="badge">L4</span><span><b>RGA</b><span>Chief Executive Producer · Command deck</span></span></button>
+  </div>
+
+  <div class="stage">
+    <div class="phone" id="phone">
+
+      <!-- DASHBOARD -->
+      <div class="screen on" data-screen="dashboard">
+        <div class="dash-head" data-t="dash-header">
+          <div>
+            <div class="dash-brand">VANTAGE<em>LIFE</em></div>
+            <div class="dash-sub" id="dash-name">Jordan Cole · <em id="dash-title">Agent</em></div>
+          </div>
+          <div class="day-pill">📅 <span class="num">2026-08-09</span> ▾</div>
+        </div>
+        <div class="seg" data-t="dash-period"><span class="on">Daily</span><span>Weekly</span><span>Monthly</span></div>
+        <div class="sect" id="dash-scope">TODAY'S TEAM PRODUCTION</div>
+        <div class="stats" data-t="dash-stats">
+          <div class="stat" style="--ac:#319842"><div class="lab">Total Team ALP</div><div class="val num">$45,210</div><div class="delta">▲ +8.5% vs yest.</div></div>
+          <div class="stat" style="--ac:#00558C"><div class="lab">Agency Sits</div><div class="val num">31</div></div>
+          <div class="stat" style="--ac:#FFD700"><div class="lab">Total Sales</div><div class="val num">12</div></div>
+        </div>
+        <div class="card" data-t="dash-wall">
+          <div class="sect" style="margin-bottom:8px">PLATINUM WALL</div>
+          <div class="wall-row">
+            <div class="wall-col vets"><h4>🏆 TOP 3 VETS</h4>
+              <div class="wall-item"><b>M. Alwatan</b><span class="num">$5,200</span></div>
+              <div class="wall-item"><b>D. Okafor</b><span class="num">$4,410</span></div>
+            </div>
+            <div class="wall-col rooks"><h4>⚡ TOP 3 ROOKIES</h4>
+              <div class="wall-item"><b>T. Fields</b><span class="num">$2,980</span></div>
+              <div class="wall-item"><b>K. Pyles</b><span class="num">$2,150</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="card" data-t="dash-history">
+          <div class="sect">PRODUCTION HISTORY · 13W</div>
+          <div class="mini-chart" aria-hidden="true"><i style="height:36%"></i><i style="height:48%"></i><i style="height:41%"></i><i style="height:58%"></i><i style="height:52%"></i><i style="height:66%"></i><i style="height:60%"></i><i style="height:74%"></i><i style="height:69%"></i><i style="height:82%"></i><i style="height:77%"></i><i style="height:90%"></i><i style="height:100%"></i></div>
+        </div>
+        <div class="ticker" data-t="dash-ticker"><div class="live">LIVE</div><div class="feed">● <b>J. Rivers</b> <em class="num">$2,100</em> Detroit · 2 REPS&nbsp;&nbsp;&nbsp;● <b>M. Cole</b> <em class="num">$1,450</em> Troy · 1 REP&nbsp;&nbsp;&nbsp;● <b>A. Mulder</b> <em class="num">$3,300</em> Gojcaj · 2 REPS&nbsp;&nbsp;&nbsp;● <b>J. Rivers</b> <em class="num">$2,100</em> Detroit · 2 REPS&nbsp;&nbsp;&nbsp;● <b>M. Cole</b> <em class="num">$1,450</em> Troy · 1 REP&nbsp;&nbsp;&nbsp;● <b>A. Mulder</b> <em class="num">$3,300</em> Gojcaj · 2 REPS</div></div>
+      </div>
+
+      <!-- PULSE -->
+      <div class="screen" data-screen="pulse">
+        <div class="pulse-head">
+          <div><div class="kicker">NIGHTLY PULSE</div><div class="h1s">Log your sales day</div></div>
+          <div class="streak">🔥 <span class="num">6d</span> streak</div>
+        </div>
+        <div class="card top-accent">
+          <div class="total-lab">TODAY'S RUNNING TOTAL</div>
+          <div class="total-val num">$2,150</div>
+          <div class="total-meta num">1 sale · 3 sits</div>
+        </div>
+        <div class="card" data-t="pulse-stepper">
+          <div class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="step-num">STEP 3 OF 14</div>
+          <div class="step-lab">Sales Closed</div>
+          <div class="step-hint">Applications written tonight</div>
+          <div class="fake-input num">0</div>
+          <div class="btn-row"><div class="btn ghost">BACK</div><div class="btn primary">NEXT →</div></div>
+        </div>
+        <div class="upline" data-t="pulse-upline">
+          <div><div class="k">YOUR COEXECUTIVE PRODUCER</div><b>G. Lead</b></div>
+          <div class="ic"><i>📞</i><i>💬</i><i>›</i></div>
+        </div>
+      </div>
+
+      <!-- SHOUTOUTS -->
+      <div class="screen" data-screen="shoutouts">
+        <div class="pulse-head">
+          <div><div class="kicker">VICTORY CULTURE</div><div class="h1s">PREMIER SHOUTOUTS</div></div>
+          <div class="pill-btn" data-t="shout-nominate">🏅 NOMINATE</div>
+        </div>
+        <div class="shout" style="--ac:#FFD700; --bgc:rgba(255,215,0,.07)">
+          <div>🏆</div>
+          <div><div class="t">PLAYER'S CLUB</div><b>Marcus Alwatan · Detroit</b><small class="num">$10,400 Gross ALP — 2026-08-08</small></div>
+        </div>
+        <div class="shout" style="--ac:#E5E4E2; --bgc:rgba(229,228,226,.06)">
+          <div>🏅</div>
+          <div><div class="t">PLATINUM RULE</div><b>Joylynn Harris · Gojcaj</b><small>"Drove a teammate's clients two hours in the rain." — nominated by T. Munn</small></div>
+        </div>
+        <div class="shout" style="--ac:#FF8C00; --bgc:rgba(255,140,0,.07)">
+          <div>🔥</div>
+          <div><div class="t">PERFORMANCE STREAK</div><b>Kaliyah Pyles · Gojcaj</b><small class="num">14 consecutive on-time pulses</small></div>
+        </div>
+      </div>
+
+      <!-- TEAM -->
+      <div class="screen" data-screen="team">
+        <div class="pulse-head">
+          <div><div class="kicker">HIERARCHY VIEW · LIVE</div><div class="h1s">TEAM PRODUCTION</div></div>
+          <div class="pill-btn" data-t="team-noms">🏅 NOMINATIONS <span style="background:#FF3B30;color:#fff;border-radius:8px;font-size:8.5px;padding:1px 5px">2</span></div>
+        </div>
+        <div class="chips" data-t="team-weeks"><span class="chip live">LIVE</span><span class="chip num">8/5</span><span class="chip num">7/29</span><span class="chip num">7/22</span><span class="chip num">7/15</span><span class="chip num">7/8</span></div>
+        <div class="missing" data-t="team-missing"><span>⚠️</span><div><div class="k">MISSING TONIGHT · 3</div><small>A. Mulder, J. Marquez, T. Fields</small></div><div class="act">ENTER ALL ›</div></div>
+        <div class="sortbar"><span class="on">Gross ALP</span><span>Net ALP</span><span>Sales</span><span>Close %</span><span>Avg Deal</span></div>
+        <div class="search" data-t="team-roster">🔍 Search name, office, title</div>
+        <div class="row"><div><b>Hussein Habhab</b><span class="rk">R</span><div class="meta">Detroit · Agent</div></div><div><div class="alp num">$2,150</div><div class="m2 num">1 sale · 100%</div></div></div>
+        <div class="row"><div><b>Trey Munn</b><div class="meta">Gojcaj · Agent</div><span class="alert-chip">NO PULSE</span></div><div><div class="alp num">$1,433</div><div class="m2 num">1 sale · 50%</div></div></div>
+        <div class="row"><div><b>LaToya Clark</b><div class="meta">Gojcaj · Agent</div></div><div><div class="alp num">$276</div><div class="m2 num">0 sales · 0%</div></div></div>
+      </div>
+
+      <!-- NOMINATIONS -->
+      <div class="screen stack-screen" data-screen="nominations">
+        <div class="shead"><span class="back">‹</span><span class="stitle">NOMINATIONS</span></div>
+        <div><div class="kicker" style="color:var(--platinum)">PLATINUM RULE</div><div class="h1s">NOMINATIONS</div>
+        <div class="intro-line">3 endorsements from leadership flag a nomination for the wall.</div></div>
+        <div class="search" data-t="noms-header">🔍 Search nominee, office, reason</div>
+        <div class="nom-card">
+          <div class="nom-top"><b>Joylynn Harris</b><span class="cnt num">3/3</span></div>
+          <div class="reason">"Stayed after midnight rebuilding a rookie's presentation before their first solo sit."</div>
+          <div class="nom-meta">Nominated by T. Munn · endorsed by G. Lead, M. Chen, D. Okafor</div>
+          <div class="nom-actions"><span class="sm-btn">👍 ENDORSED</span><span class="sm-btn wall" id="post-wall-btn">🏅 POST TO PLATINUM WALL</span></div>
+        </div>
+        <div class="nom-card" style="border-color:var(--border); border-left-color:var(--border)">
+          <div class="nom-top"><b>Kaliyah Pyles</b><span class="cnt num" style="border-color:var(--border);color:var(--dim)">1/3</span></div>
+          <div class="reason">"Covered every no-show sit on her team while nursing a sprained ankle."</div>
+          <div class="nom-actions"><span class="sm-btn">👍 ENDORSE</span></div>
+        </div>
+      </div>
+
+      <!-- MANAGER -->
+      <div class="screen stack-screen" data-screen="manager">
+        <div class="shead"><span class="back">‹</span><span class="stitle">COMMAND PANEL</span></div>
+        <div data-t="manager-intro">
+          <div class="kicker" style="color:var(--orange)">NET ALP ERASER · LEVEL 4</div>
+          <div class="intro-line">Adjustments update Net ALP for internal reporting; Gross ALP on the Platinum Wall stays unchanged.</div>
+        </div>
+        <div class="sect" style="margin-top:6px">SELECT AN AGENT</div>
+        <div class="row"><div><b>Hussein Habhab</b><div class="meta">Detroit · <span class="num">2026-08-09</span></div></div><div><div class="alp num">$2,150</div><div class="m2">NET <span class="num">$2,150</span></div></div></div>
+        <div class="row"><div><b>Trey Munn</b><div class="meta">Gojcaj · <span class="num">2026-08-09</span></div></div><div><div class="alp num">$1,433</div><div class="m2">NET <span class="num">$1,433</span></div></div></div>
+      </div>
+
+      <!-- AUDIT -->
+      <div class="screen stack-screen" data-screen="audit">
+        <div class="shead"><span class="back">‹</span><span class="stitle">AUDIT LOG</span></div>
+        <div data-t="audit-intro">
+          <div class="kicker" style="color:var(--orange)">IMMUTABLE LEDGER</div>
+          <div class="intro-line">Every Net ALP adjustment is recorded with a timestamp and a 10+ character reason.</div>
+        </div>
+        <div class="audit-row">
+          <b>NET ALP ADJUSTMENT</b> · <span style="color:var(--muted)" class="num">Aug 6, 9:12 PM</span>
+          <div style="margin-top:4px">Trey Munn · <span class="num">2026-08-05</span></div>
+          <div class="vals"><span><small>ORIGINAL</small><span class="num">$1,900</span></span><span>→</span><span style="text-align:right"><small>NEW</small><span class="num">$1,433</span></span></div>
+          <small style="color:var(--dim)">"Chargeback on lapsed policy — client cancelled in free-look window." · By MJ</small>
+        </div>
+      </div>
+
+      <!-- VAULT / COMPANY HEALTH -->
+      <div class="screen stack-screen" data-screen="vault">
+        <div class="shead"><span class="back">‹</span><span class="stitle">COMPANY HEALTH</span></div>
+        <div data-t="vault-health" style="display:flex;flex-direction:column;gap:8px">
+          <div class="office-tabs"><span class="otab on">DETROIT</span><span class="otab">GOJCAJ</span><span class="otab">TROY</span></div>
+          <div class="ranges"><span>8W</span><span class="on">13W</span><span>26W</span><span>ALL</span></div>
+        </div>
+        <div class="card top-accent">
+          <div class="hero-lab">WEEK OF <span class="num">2026-08-05</span></div>
+          <div class="hero-val num">$27,410</div>
+          <span class="up-pill">▲ <span class="num">+6.2%</span> vs prior week</span>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><div class="lab">PERIOD ALP</div><div class="val num">$318k</div></div>
+          <div class="kpi"><div class="lab">AVG / WEEK</div><div class="val num">$24.5k</div></div>
+          <div class="kpi"><div class="lab">CLOSE RATE</div><div class="val num">51.4%</div><div class="hint">Sales / Sits</div></div>
+        </div>
+        <div class="card chart-line">
+          <div class="sect">GROSS ALP BY WEEK</div>
+          <svg viewBox="0 0 300 60" width="100%" height="52" aria-hidden="true" style="margin-top:6px">
+            <polyline points="0,46 25,40 50,43 75,34 100,37 125,28 150,31 175,22 200,26 225,17 250,20 275,10 300,6" fill="none" stroke="#319842" stroke-width="2.5"/>
+          </svg>
+        </div>
+        <div data-t="vault-weeks">
+          <div class="sect" style="margin-bottom:7px">ARCHIVED WEEK SNAPSHOTS</div>
+          <div class="snap">
+            <div class="wk selA"><span class="num">2026-08-05</span><b class="num">$27,410</b><span class="num">14 sales · 41 agents</span><div class="exp">⬇ EXPORT</div></div>
+            <div class="wk selB"><span class="num">2026-07-29</span><b class="num">$25,820</b><span class="num">12 sales · 39 agents</span><div class="exp">⬇ EXPORT</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MORE -->
+      <div class="screen" data-screen="more">
+        <div class="profile"><div class="avatar" id="avatar">J</div><div><b id="more-name">Jordan Cole</b><small>jordan@aopremier.com</small><div class="rt" id="more-title">AGENT · DETROIT</div></div></div>
+        <div class="sect" id="tools-head" style="margin-top:4px">EXECUTIVE TOOLS</div>
+        <div class="list" data-t="more-tools" id="tools-list">
+          <div class="item"><i>🔨</i>Manager Command Panel<span class="chev">›</span></div>
+          <div class="item"><i>📋</i>Audit Log<span class="chev">›</span></div>
+          <div class="item"><i>📈</i>Company Health<span class="chev">›</span></div>
+        </div>
+        <div class="sect" style="margin-top:4px">HELP</div>
+        <div class="list" data-t="more-walkthrough"><div class="item"><i>🛟</i>App Walkthrough<span class="chev">›</span></div></div>
+        <div class="sect" style="margin-top:4px">ACCOUNT</div>
+        <div class="list"><div class="item" style="color:var(--red)"><i style="color:var(--red)">⏻</i>Sign Out<span class="chev">›</span></div></div>
+      </div>
+
+      <!-- tab bar -->
+      <div class="tabbar" data-t="tabbar">
+        <div class="tab on" data-tab="dashboard"><i>📊</i>DASHBOARD</div>
+        <div class="tab" data-tab="pulse"><i>📈</i>PULSE</div>
+        <div class="tab" data-tab="shoutouts"><i>📣</i>SHOUTOUTS</div>
+        <div class="tab" data-tab="team" id="team-tab"><i>👥</i>TEAM</div>
+        <div class="tab" data-tab="more"><i>▦</i>MORE</div>
+      </div>
+
+      <!-- tour overlay -->
+      <div class="scrim-full" id="scrim" hidden></div>
+      <div class="spot" id="spot" hidden></div>
+      <div class="tour-card" id="tcard" hidden>
+        <div class="k" id="t-k">STEP 1 OF 13</div>
+        <h3 id="t-title"></h3>
+        <p id="t-body"></p>
+        <div class="btns">
+          <button class="back" id="t-back">BACK</button>
+          <button class="next" id="t-next">NEXT</button>
+        </div>
+        <button class="skip" id="t-skip">SKIP TOUR</button>
+      </div>
+      <div class="idle" id="idle">
+        <div>
+          <div class="kicker">GUIDED WALKTHROUGH</div>
+          <h3 id="idle-h">Pick a role above to begin</h3>
+          <p id="idle-p">Each level gets its own tour — from the Agent basics to the full Chief Executive command deck.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="stage-note">Simulated app with sample data. Use ← → arrow keys to step. The real thing lives at app.aovantagelife.com.</p>
+
+  <!-- ================= FEATURE MATRIX ================= -->
+  <section class="matrix">
+    <div class="kicker">What's inside · by access level</div>
+    <h2>Every level unlocks everything below it — and more.</h2>
+    <p class="sub">Access is enforced by hierarchy tier. Producer titles (Regional Producer, Partner, Senior Partner…) are display names carried on top of these four levels.</p>
+
+    <div class="levels">
+      <div class="level" style="--tint:#319842">
+        <div class="tier">LEVEL 1</div><h3>Agent</h3><div class="title">The nightly engine</div>
+        <ul>
+          <li>Executive Dashboard — live ALP, Sits &amp; Sales with daily / weekly / monthly views and a 30-day read-only history</li>
+          <li>Nightly Pulse — all 14 numbers in a guided stepper, Sets through Gross ALP</li>
+          <li>9 PM gate warnings + the Midnight Miracle window (12–6 AM)</li>
+          <li>Submission streaks &amp; Player's Club ($10K day) recognition</li>
+          <li>Platinum Wall — top Vets, top Rookies, Platinum Rule honorees with tap-to-call contact cards</li>
+          <li>Live agency sales ticker</li>
+          <li>Production History — personal 13-week ALP, sales &amp; close-rate charts</li>
+          <li>Premier Shoutouts feed + nominate anyone for the Platinum Rule</li>
+          <li>One-tap upline contact card</li>
+        </ul>
+      </div>
+
+      <div class="level" style="--tint:#00A0E4">
+        <div class="tier">LEVEL 2</div><h3>GA / SA</h3><div class="title">CoExecutive Producer · Regional Producer</div>
+        <div class="plus">EVERYTHING IN AGENT, PLUS</div>
+        <ul>
+          <li>TEAM tab — full downline roster with Gross/Net ALP, sales, close rate, avg deal &amp; coaching alert flags</li>
+          <li>Sort, search, and per-agent contact cards with their 13-week production history</li>
+          <li>Past-week picker — rewind the board to any archived reporting week</li>
+          <li>MISSING TONIGHT queue — see who hasn't pulsed and ENTER ALL on their behalf (up to 7 days back)</li>
+          <li>Platinum Nominations inbox — review &amp; endorse (3 endorsements flag for the wall)</li>
+        </ul>
+      </div>
+
+      <div class="level" style="--tint:#FFD700">
+        <div class="tier">LEVEL 3</div><h3>MGA</h3><div class="title">Executive Producer</div>
+        <div class="plus">EVERYTHING IN GA / SA, PLUS</div>
+        <ul>
+          <li>POST TO PLATINUM WALL — publish threshold-met nominations agency-wide</li>
+          <li>Full-hierarchy rollups — every leader and agent under you, live</li>
+          <li>Downline coaching view — any agent's 13-week trend across your whole hierarchy</li>
+        </ul>
+      </div>
+
+      <div class="level" style="--tint:#FF8C00">
+        <div class="tier">LEVEL 4</div><h3>RGA</h3><div class="title">Chief Executive Producer</div>
+        <div class="plus">EVERYTHING IN MGA, PLUS</div>
+        <ul>
+          <li>Global scope — the entire agency on every screen</li>
+          <li>Manager Command Panel — Net ALP Eraser with mandatory written reason; Gross ALP stays locked on the wall</li>
+          <li>Audit Log — immutable ledger of every adjustment: who, whom, how much, why, when</li>
+          <li>Company Health — per-office trend dashboard: 8–26-week ranges, KPI grid, ALP / sales / close-rate charts</li>
+          <li>Archived week snapshots — side-by-side comparison &amp; WAR-format export</li>
+          <li>Wednesday 2:00 PM weekly lock — the reset that archives each production week</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="rule-note">
+      <b>One rule, everywhere:</b> Close Rate = <b>Sales ÷ Sits</b>. N1 visits (medically unqualified) are tallied separately and already excluded from Sits — they never count against an agent. · Reporting cycle runs 6:00 AM–5:59 AM Detroit time. · Admin tools (roster management, WAR report import, office merge) are a separate permission independent of level.
+    </div>
+  </section>
+
+  <footer>VANTAGELIFE 2.1 · AO PREMIER · AMERICA/DETROIT</footer>
+</div>
+
+<script>
+(function () {
+  var ROLE_META = {
+    agent: { name: 'Jordan Cole', title: 'Agent',                   scope: "TODAY'S TEAM PRODUCTION",  team: false, tools: false },
+    ga:    { name: 'Gabrielle Lead', title: 'CoExecutive Producer', scope: "TODAY'S TEAM PRODUCTION",  team: true,  tools: false },
+    mga:   { name: 'MJ Vantage', title: 'Executive Producer',       scope: "TODAY'S TEAM PRODUCTION",  team: true,  tools: false },
+    rga:   { name: 'MJ Vantage', title: 'Chief Executive Producer', scope: "TODAY'S GLOBAL PRODUCTION", team: true, tools: true }
+  };
+
+  // Steps mirror the app's real v2 walkthrough registry.
+  function steps(role) {
+    var welcome = {
+      agent: "AO Premier's live victory scoreboard — your sales day, your wins, and your nightly numbers in one place. This quick tour shows you exactly how to use it. About two minutes.",
+      ga: "Your team's live victory scoreboard. This tour covers the basics fast, then goes deep on your team tools. About two minutes.",
+      mga: "Your hierarchy's live victory scoreboard. This tour covers the basics fast, then your Executive Producer tools. About two minutes.",
+      rga: "The agency's live victory scoreboard, global scope. This tour covers the basics fast, then the full executive command deck. About three minutes."
+    }[role];
+
+    var BASICS_FULL = [
+      st('dashboard', null, 'WELCOME TO VANTAGELIFE', welcome),
+      st('dashboard', 'dash-header', 'YOUR DASHBOARD', 'Your name and producer title live up here. The date pill is the open sales day. Tap the pill anytime to look back at a past day, read-only.'),
+      st('dashboard', 'dash-period', 'DAILY · WEEKLY · MONTHLY', 'Flip the scoreboard between today, the rolling week, and the month. The production week closes every Wednesday at 2:00 PM, when totals lock and archive.'),
+      st('dashboard', 'dash-stats', 'LIVE PRODUCTION', 'Total ALP, Sits, and Sales update live, with the swing versus yesterday. One rule to know everywhere in this app: Close Rate is Sales ÷ Sits. N1 visits (medically unqualified) are tallied separately and already left out of your Sits — they never count against you.'),
+      st('dashboard', 'dash-wall', 'THE PLATINUM WALL', 'Top Vets, top Rookies, and Platinum Rule honorees. Tap any name to open their contact card — call or text them straight from the app.'),
+      st('dashboard', 'dash-history', 'PRODUCTION HISTORY', 'Scroll to the bottom of your dashboard for PRODUCTION HISTORY — your last 13 weeks of ALP, sales, and close rate, charted week by week.'),
+      st('dashboard', 'dash-ticker', 'THE LIVE WIRE', 'Every sale in the agency scrolls across this ticker as it lands. When you close tonight, the whole team sees it here.'),
+      st('dashboard', 'tabbar', 'GETTING AROUND', "Everything lives in these tabs. Next, we'll walk through the ones you'll use every day."),
+      st('pulse', 'pulse-stepper', 'YOUR NIGHTLY PULSE', "The one job you own every night: your 14 nightly numbers, entered one at a time — Sets through Gross ALP. Each step tells you exactly what counts. Hit $10K in a day and you join the Player's Club."),
+      st('pulse', null, 'WHEN TO SUBMIT', 'Submit before 9:00 PM — that\'s when the warning banner turns yellow. Miss it? The "Midnight Miracle" window (midnight to 6:00 AM) still posts to the same sales day. Submit on time every night and your streak grows. 🔥'),
+      st('pulse', 'pulse-upline', 'YOUR UPLINE', "Can't get your numbers in tonight? Your upline's contact card sits at the bottom of this screen, one tap away — and they can enter your numbers on your behalf."),
+      st('shoutouts', 'shout-nominate', 'PREMIER SHOUTOUTS', "The victory feed: Player's Club hits, first deals, streaks, and Platinum Rule honors. See someone living the Platinum Rule? Tap NOMINATE and put them up for the wall.")
+    ];
+
+    var BASICS_BRIEF = [
+      st('dashboard', null, 'WELCOME TO VANTAGELIFE', welcome),
+      st('dashboard', 'dash-header', 'THE SALES DAY', 'The date pill is the open sales day. The production week locks every Wednesday at 2:00 PM. Tap the pill to review past days read-only.'),
+      st('dashboard', 'dash-stats', 'LIVE ROLLUPS', 'ALP, Sits, and Sales roll up live across everyone visible to you. Close Rate everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close rate down.'),
+      st('dashboard', 'dash-history', 'PRODUCTION HISTORY', 'At the bottom of the dashboard: PRODUCTION HISTORY — 13 weeks of ALP, sales, and close rate, charted week by week.'),
+      st('pulse', 'pulse-stepper', 'YOUR NIGHTLY PULSE', 'Your own 14 nightly numbers still go in here every night — before the 9:00 PM gate, or in the Midnight Miracle window (midnight–6:00 AM) at the latest.')
+    ];
+    var UPLINE = st('pulse', 'pulse-upline', 'YOUR UPLINE', "Your upline's contact card sits at the bottom of the Pulse screen — one tap to call or text.");
+    var SHOUT_BRIEF = st('shoutouts', 'shout-nominate', 'PREMIER SHOUTOUTS', 'The victory feed. Tap NOMINATE to put anyone up for Platinum Rule honors.');
+
+    var TEAM = [
+      st('team', 'team-roster', 'YOUR TEAM, LIVE', "Your full downline rolls up in the TEAM tab — Gross and Net ALP, sales, close rate, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row for a contact card with that agent's 13-week production history."),
+      st('team', 'team-weeks', 'REWIND THE WEEK', 'These chips pin any past reporting week — LIVE is now; tap a date to see the board exactly as that week closed. A pinned week is a static snapshot; tap LIVE to come back.'),
+      st('team', 'team-missing', 'MISSING TONIGHT', "Agents who haven't submitted their Pulse show up in the MISSING TONIGHT card. Tap ENTER ALL to walk their entries back-to-back — as their upline you can submit for anyone on your team, up to 7 sales days back."),
+      st('team', 'team-noms', 'NOMINATIONS INBOX', 'Platinum Rule nominations from your team land behind this button — the badge counts the ones that have hit the endorsement threshold.'),
+      st('nominations', 'noms-header', 'ENDORSE THE WORTHY', 'Read each nomination and ENDORSE the ones that deserve the wall. Three leadership endorsements flag a nomination as ready.')
+    ];
+
+    var MGA = [
+      st('nominations', 'noms-header', 'POST TO THE WALL', 'You close the loop: once a nomination hits the endorsement threshold, POST TO PLATINUM WALL publishes it agency-wide on the Platinum Wall.'),
+      st('team', 'team-roster', 'COACH FROM THE TREND', "Open anyone on your roster and read their 13-week production history before the call — ALP, sales, and close rate, charted. History is downline-scoped: you see your whole hierarchy, and nobody above it."),
+      st('dashboard', 'dash-stats', 'FULL-HIERARCHY SCOPE', 'Your dashboard and Team view roll up every leader and agent under you — the numbers here are your whole hierarchy, live.')
+    ];
+
+    var RGA = [
+      st('more', 'more-tools', 'EXECUTIVE TOOLS', 'Your command deck lives in MORE: the Manager Command Panel, the Audit Log, and Company Health.'),
+      st('manager', 'manager-intro', 'NET ALP ERASER', "Post a Net ALP correction against any agent's sales day — pick the agent, set the new Net ALP, and give a reason of 10+ characters. Gross ALP on the Platinum Wall stays untouched."),
+      st('audit', 'audit-intro', 'THE AUDIT LOG', 'Nothing here is silent: every adjustment is recorded — original value, new value, delta, reason, who made it, and when.'),
+      st('vault', 'vault-health', 'COMPANY HEALTH', 'Your per-office pulse: pick an office, pick a window (8 to 26 weeks or all time), and read the KPIs — period ALP, Close Rate (Sales ÷ Sits), ALP per sale — with ALP, sales, and close-rate trends charted below.'),
+      st('vault', 'vault-weeks', 'ARCHIVED WEEK SNAPSHOTS', 'Below the charts live the archived week snapshots, created by each Wednesday reset. Tap two to compare them side-by-side with deltas, and EXPORT any week as a WAR-format backup.'),
+      st('vault', null, 'THE WEDNESDAY RESET', "Every Wednesday at 2:00 PM Detroit time the production week locks: entries archive into the week snapshots and a fresh week opens. The reset itself is a Chief-Executive-level platform operation — there's no in-app button to trigger it."),
+      st('more', 'more-walkthrough', 'REPLAY ANYTIME', "That's the full command deck. Replay this walkthrough anytime from right here.")
+    ];
+
+    var OUTRO = st('dashboard', null, "YOU'RE READY", 'Log your Pulse tonight, watch the wall, and get on the ticker. In the app, replay this walkthrough anytime from MORE → HELP → App Walkthrough.');
+
+    if (role === 'agent') return BASICS_FULL.concat([OUTRO]);
+    if (role === 'ga')    return BASICS_BRIEF.concat([UPLINE, SHOUT_BRIEF], TEAM, [OUTRO]);
+    if (role === 'mga')   return BASICS_BRIEF.concat([UPLINE, SHOUT_BRIEF], TEAM, MGA, [OUTRO]);
+    return BASICS_BRIEF.concat([SHOUT_BRIEF], TEAM, MGA, RGA, [OUTRO]); // rga: no upline
+  }
+  function st(screen, target, title, body) { return { screen: screen, target: target, title: title, body: body }; }
+
+  var phone = document.getElementById('phone');
+  var spot = document.getElementById('spot'), scrim = document.getElementById('scrim');
+  var tcard = document.getElementById('tcard'), idle = document.getElementById('idle');
+  var tK = document.getElementById('t-k'), tTitle = document.getElementById('t-title'), tBody = document.getElementById('t-body');
+  var btnBack = document.getElementById('t-back'), btnNext = document.getElementById('t-next'), btnSkip = document.getElementById('t-skip');
+
+  var cur = { role: null, steps: [], i: 0 };
+
+  function setRole(role) {
+    var m = ROLE_META[role];
+    document.getElementById('dash-name').innerHTML = m.name + ' · <em>' + m.title + '</em>';
+    document.getElementById('dash-scope').textContent = m.scope;
+    document.getElementById('more-name').textContent = m.name;
+    document.getElementById('avatar').textContent = m.name.charAt(0);
+    document.getElementById('more-title').textContent = (m.title + ' · DETROIT').toUpperCase();
+    document.getElementById('team-tab').classList.toggle('hidden', !m.team);
+    document.getElementById('tools-list').style.display = m.tools ? '' : 'none';
+    document.getElementById('tools-head').style.display = m.tools ? '' : 'none';
+    document.getElementById('post-wall-btn').style.display = (role === 'mga' || role === 'rga') ? '' : 'none';
+    document.querySelectorAll('.role').forEach(function (b) { b.classList.toggle('on', b.dataset.role === role); });
+  }
+
+  function showScreen(name) {
+    document.querySelectorAll('.screen').forEach(function (s) { s.classList.toggle('on', s.dataset.screen === name); });
+    var tabFor = { dashboard: 'dashboard', pulse: 'pulse', shoutouts: 'shoutouts', team: 'team', more: 'more', nominations: 'team', manager: 'more', audit: 'more', vault: 'more' }[name];
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('on', t.dataset.tab === tabFor); });
+  }
+
+  function render() {
+    var s = cur.steps[cur.i];
+    showScreen(s.screen);
+    tK.textContent = 'STEP ' + (cur.i + 1) + ' OF ' + cur.steps.length;
+    tTitle.textContent = s.title;
+    tBody.textContent = s.body;
+    btnBack.style.visibility = cur.i === 0 ? 'hidden' : 'visible';
+    btnNext.textContent = cur.i === cur.steps.length - 1 ? 'FINISH' : 'NEXT';
+    tcard.hidden = false;
+
+    requestAnimationFrame(function () {
+      var el = s.target ? phone.querySelector('[data-t="' + s.target + '"]') : null;
+      var pr = phone.getBoundingClientRect();
+      if (el) {
+        var r = el.getBoundingClientRect();
+        var pad = 6;
+        spot.style.left = (r.left - pr.left - pad) + 'px';
+        spot.style.top = (r.top - pr.top - pad) + 'px';
+        spot.style.width = (r.width + pad * 2) + 'px';
+        spot.style.height = (r.height + pad * 2) + 'px';
+        spot.hidden = false; scrim.hidden = true;
+        var centerY = (r.top - pr.top) + r.height / 2;
+        positionCard(centerY < pr.height * 0.48 ? 'below' : 'above', r.bottom - pr.top, r.top - pr.top);
+      } else {
+        spot.hidden = true; scrim.hidden = false;
+        tcard.style.top = '50%'; tcard.style.bottom = 'auto';
+        tcard.style.transform = 'translateY(-50%)';
+      }
+    });
+  }
+
+  function positionCard(place, targetBottom, targetTop) {
+    tcard.style.transform = 'none';
+    if (place === 'below') {
+      var top = Math.min(targetBottom + 14, phone.clientHeight - tcard.offsetHeight - 12);
+      tcard.style.top = top + 'px'; tcard.style.bottom = 'auto';
+    } else {
+      var bottom = Math.min(phone.clientHeight - targetTop + 14, phone.clientHeight - tcard.offsetHeight - 12);
+      tcard.style.bottom = Math.max(bottom, 12) + 'px'; tcard.style.top = 'auto';
+    }
+  }
+
+  function start(role) {
+    cur = { role: role, steps: steps(role), i: 0 };
+    setRole(role);
+    idle.style.display = 'none';
+    render();
+  }
+  function end(msgH, msgP) {
+    tcard.hidden = true; spot.hidden = true; scrim.hidden = true;
+    showScreen('dashboard');
+    document.getElementById('idle-h').textContent = msgH;
+    document.getElementById('idle-p').textContent = msgP;
+    idle.style.display = 'grid';
+    document.querySelectorAll('.role').forEach(function (b) { b.classList.remove('on'); });
+    cur.role = null;
+  }
+
+  btnNext.addEventListener('click', function () {
+    if (cur.i >= cur.steps.length - 1) { end("That's the tour. 🎉", 'Pick another level to see how the app grows with the hierarchy — or sign in at app.aovantagelife.com for the real thing.'); return; }
+    cur.i++; render();
+  });
+  btnBack.addEventListener('click', function () { if (cur.i > 0) { cur.i--; render(); } });
+  btnSkip.addEventListener('click', function () { end('Tour skipped', 'Pick any level above to start again.'); });
+  document.querySelectorAll('.role').forEach(function (b) { b.addEventListener('click', function () { start(b.dataset.role); }); });
+  document.addEventListener('keydown', function (e) {
+    if (cur.role === null) return;
+    if (e.key === 'ArrowRight') btnNext.click();
+    if (e.key === 'ArrowLeft') btnBack.click();
+    if (e.key === 'Escape') btnSkip.click();
+  });
+  window.addEventListener('resize', function () { if (cur.role !== null) render(); });
+})();
+</script>
+
+</body>
+</html>

@@ -3,6 +3,7 @@
   "outputDirectory": "frontend/dist",
   "framework": null,
   "rewrites": [
+    { "source": "/tour", "destination": "/tour.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
