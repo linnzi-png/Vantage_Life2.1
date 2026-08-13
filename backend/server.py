@@ -2407,24 +2407,37 @@ async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends
     return {"ok": True, "agent_id": payload.agent_id, "role": payload.role}
 
 
-@api_router.post("/admin/add-person")
-async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Depends(require_admin)):
-    """Onboard a person: creates their agent_profile keyed by email so their very
-    first Google/Apple sign-in links to the right role automatically."""
-    if payload.role not in VALID_ROLES:
+async def _roster_add_person(
+    *,
+    name: str,
+    email: str,
+    phone: str,
+    office: str,
+    role: str,
+    io_role: Optional[str],
+    upline_agent_id: Optional[str],
+    is_rookie: Optional[bool],
+    state: Optional[str],
+    changed_by: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Shared onboarding core for /admin/add-person and /team/add-person: creates
+    the agent_profile keyed by email so their very first Google/Apple sign-in
+    links to the right role automatically. Callers own their permission checks;
+    all business validation lives here so the two paths cannot drift."""
+    if role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
-    if payload.is_rookie is None:
+    if is_rookie is None:
         raise HTTPException(status_code=400, detail="Tenure is required — choose Veteran or Rookie")
-    email = payload.email.lower().strip()
-    name = payload.name.strip()
+    email = email.lower().strip()
+    name = name.strip()
     if not email or "@" not in email or not name:
         raise HTTPException(status_code=400, detail="Name and a valid email are required")
-    if payload.role != "level_4" and not payload.upline_agent_id:
+    if role != "level_4" and not upline_agent_id:
         # Team rollups walk agent_profiles.upline_id (visible_agent_ids BFS) — an
         # agent created without an upline is invisible in every GA/MGA team view.
         raise HTTPException(status_code=400, detail="Upline is required for everyone below RGA tier")
-    if payload.upline_agent_id:
-        upline = await db.agent_profiles.find_one({"agent_id": payload.upline_agent_id}, {"_id": 0, "agent_id": 1})
+    if upline_agent_id:
+        upline = await db.agent_profiles.find_one({"agent_id": upline_agent_id}, {"_id": 0, "agent_id": 1})
         if not upline:
             raise HTTPException(status_code=404, detail="Upline agent not found")
     existing = await db.agent_profiles.find_one({"email": email}, {"_id": 0})
@@ -2435,34 +2448,84 @@ async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Dep
         "agent_id": f"agent_{uuid.uuid4().hex[:10]}",
         "name": name,
         "email": email,
-        "phone": re.sub(r"\D", "", payload.phone or ""),
-        "office": payload.office.strip() or "MJ RGA",
-        "role": payload.role,
-        "upline_id": payload.upline_agent_id,
-        "is_rookie": payload.is_rookie,
+        "phone": re.sub(r"\D", "", phone or ""),
+        "office": office.strip() or "MJ RGA",
+        "role": role,
+        "upline_id": upline_agent_id,
+        "is_rookie": is_rookie,
         "created_at": now,
         "joined_at": now,
     }
-    if payload.io_role:
-        profile["io_role"] = payload.io_role.strip()
-    if payload.state:
-        profile["state"] = payload.state.strip().upper()
+    if io_role:
+        profile["io_role"] = io_role.strip()
+    if state:
+        profile["state"] = state.strip().upper()
     await db.agent_profiles.insert_one(profile)
     profile.pop("_id", None)
     # If they signed in before being rostered they hold a "pending" users doc — link it now.
-    await db.users.update_many({"email": email}, {"$set": {"role": payload.role, "agent_id": profile["agent_id"]}})
+    await db.users.update_many({"email": email}, {"$set": {"role": role, "agent_id": profile["agent_id"]}})
     await db.audit_log.insert_one({
         "audit_id": f"au_{uuid.uuid4().hex[:10]}",
         "ts": now,
         "action": "add_agent",
         "agent_id": profile["agent_id"],
         "agent_name": name,
-        "changed_by": user["user_id"],
-        "changed_by_name": user.get("name"),
-        "role": payload.role,
-        "is_rookie": payload.is_rookie,
-        "upline_id": payload.upline_agent_id,
+        "changed_by": changed_by["user_id"],
+        "changed_by_name": changed_by.get("name"),
+        "role": role,
+        "is_rookie": is_rookie,
+        "upline_id": upline_agent_id,
     })
+    return profile
+
+
+@api_router.post("/admin/add-person")
+async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Depends(require_admin)):
+    """Onboard a person with full control (any office, any upline) — admin only."""
+    profile = await _roster_add_person(
+        name=payload.name, email=payload.email, phone=payload.phone,
+        office=payload.office, role=payload.role, io_role=payload.io_role,
+        upline_agent_id=payload.upline_agent_id, is_rookie=payload.is_rookie,
+        state=payload.state, changed_by=user,
+    )
+    return {"ok": True, "agent": profile}
+
+
+class TeamAddPersonIn(BaseModel):
+    name: str
+    email: str
+    phone: str = ""
+    role: str = "level_1"  # must be strictly below the requester's own level
+    io_role: Optional[str] = None  # display title: Agent, SA, GA, ...
+    is_rookie: Optional[bool] = None  # required — surfaced as a clear 400, like admin add
+    state: Optional[str] = None
+
+
+@api_router.post("/team/add-person")
+async def team_add_person(payload: TeamAddPersonIn, user: Dict[str, Any] = Depends(require_level(2))):
+    """Let any upline (SA and above, level_2+) onboard a new team member DIRECTLY
+    UNDER THEMSELVES. The upline is always the requester — never client-chosen —
+    so the new member automatically rolls up through the requester's existing
+    chain (SA → GA → MGA → RGA) in every team view. Office is inherited from the
+    requester for the same reason. Placement elsewhere is an admin action."""
+    me = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
+    if not me:
+        raise HTTPException(status_code=404, detail="Your agent profile was not found")
+    my_level = int(str(user.get("role", "level_1")).split("_")[1])
+    if payload.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    new_level = int(payload.role.split("_")[1])
+    if new_level >= my_level:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only add team members below your own level — ask an admin for anything else")
+    profile = await _roster_add_person(
+        name=payload.name, email=payload.email, phone=payload.phone,
+        office=str(me.get("office") or "").strip() or UNASSIGNED_OFFICE,
+        role=payload.role, io_role=payload.io_role,
+        upline_agent_id=me["agent_id"],  # forced: directly under the requester
+        is_rookie=payload.is_rookie, state=payload.state, changed_by=user,
+    )
     return {"ok": True, "agent": profile}
 
 

@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
 import { QuickEntryForm, QuickEntryTarget } from '../../src/components/QuickEntryForm';
+import { AddTeamMemberSheet } from '../../src/components/AddTeamMemberSheet';
 import { PeriodSelector, usePersistedPeriod } from '../../src/components/PeriodSelector';
 import { SearchBar } from '../../src/components/SearchBar';
 import { TourAnchor } from '../../src/components/TourAnchor';
@@ -34,6 +35,7 @@ export default function TeamScreen() {
   const [readyNoms, setReadyNoms] = useState(0);
   const [period, changePeriod] = usePersistedPeriod('vl_team_period', 'weekly');
   const [quickEntryTarget, setQuickEntryTarget] = useState<QuickEntryTarget | null>(null);
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [missingQueue, setMissingQueue] = useState<TeamRow[]>([]); // remaining "no_pulse" agents queued for auto-advance
   // null = live rolling window (period). A week_start pins the view to that
   // past reporting week instead, so a manager can review it as it stood.
@@ -141,6 +143,16 @@ export default function TeamScreen() {
           <Text style={styles.kicker}>HIERARCHY VIEW · LIVE</Text>
           <Text style={styles.title}>TEAM PRODUCTION</Text>
         </View>
+        {canEnter ? (
+          <TouchableOpacity
+            style={[styles.nomBtn, { marginRight: 8, borderColor: COLORS.primary, backgroundColor: 'rgba(49,152,66,0.10)' }]}
+            onPress={() => setAddMemberOpen(true)}
+            testID="open-add-member"
+          >
+            <Ionicons name="person-add" size={14} color={COLORS.primary} />
+            <Text style={[styles.nomBtnTxt, { color: COLORS.primary }]}>ADD</Text>
+          </TouchableOpacity>
+        ) : null}
         <TourAnchor id="team-nominations">
           <TouchableOpacity style={styles.nomBtn} onPress={() => router.push('/nominations')} testID="open-nominations">
             <Ionicons name="medal" size={14} color="#E5E4E2" />
@@ -292,6 +304,12 @@ export default function TeamScreen() {
       <AgentContactSheet
         agent={uplineOpen ? upline : null}
         onClose={() => setUplineOpen(false)}
+      />
+      <AddTeamMemberSheet
+        visible={addMemberOpen}
+        onClose={() => setAddMemberOpen(false)}
+        myRole={user?.role}
+        onAdded={fetchAll}
       />
       <QuickEntryForm
         target={quickEntryTarget}
