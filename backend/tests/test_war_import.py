@@ -337,3 +337,23 @@ async def test_entries_are_stamped_with_the_roster_office_not_the_sheet(client, 
     assert r.json()["office"] == "Mohamed Aljahmi RGA"   # what the sheet said
     entry = await seeded_db.production_entries.find_one({"agent_id": "AG_1"})
     assert entry["office"] == "MCM"                       # what the roster says
+
+
+# ---------------- parser: silent rows are reported, not discarded ----------
+#
+# The audit tool needs the names a tab leaves blank in order to tell "not
+# mentioned in this file" from "reported as nothing". The importer's own
+# behaviour is unchanged — only rows with activity are written.
+
+def test_parse_reports_silent_rows_separately_from_active_ones():
+    buf = build_workbook(per_tab={"Wed": [("Busy Agent", SAMPLE), ("Idle Agent", {})]})
+    parsed = war_import.parse_workbook(buf, date(2026, 2, 18))
+    assert [r["name"] for r in parsed["days"]["2026-02-18"]] == ["Busy Agent"]
+    assert parsed["silent"]["2026-02-18"] == ["Idle Agent"]
+
+
+def test_silent_rows_are_reported_even_for_a_tab_with_no_activity():
+    buf = build_workbook(per_tab={"Wed": [("Idle Agent", {})]})
+    parsed = war_import.parse_workbook(buf, date(2026, 2, 18))
+    assert "2026-02-18" not in parsed["days"], "a day nobody produced on writes no entries"
+    assert parsed["silent"]["2026-02-18"] == ["Idle Agent"]

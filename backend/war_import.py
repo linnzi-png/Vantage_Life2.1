@@ -8,7 +8,7 @@ Keep every structural constant here; duplicating the layout in two
 places is how a column shift silently corrupts one path but not the other.
 """
 from datetime import datetime, timezone, date, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 import uuid
 
@@ -134,13 +134,26 @@ def extract_office_name(ws) -> str:
 
 
 def parse_daily_tab(ws) -> List[Dict[str, Any]]:
-    """Extract agent rows with at least one non-zero metric from one daily tab.
+    """Extract agent rows with at least one non-zero metric from one daily tab."""
+    return parse_daily_tab_split(ws)[0]
+
+
+def parse_daily_tab_split(ws) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """Split one daily tab into (rows with activity, names reported as nothing).
+
+    The second list is what the activity filter throws away, and it carries real
+    meaning. A row that is present but blank or zeroed is the office stating
+    that this agent produced nothing that day. Without those names the importer
+    cannot tell "not mentioned in this file" from "reported as nothing", so a
+    retraction in a later report can never clear the earlier report's value and
+    the superseded number survives forever.
 
     The data section begins at the header row whose first cell is "MGA" —
     everything above it is the office summary block, which repeats the same
     metric names and would otherwise be misread as agent rows.
     """
-    results: List[Dict[str, Any]] = []
+    active: List[Dict[str, Any]] = []
+    silent: List[str] = []
     in_data = False
     max_col = max(METRIC_COLUMNS.values())
 
@@ -174,9 +187,11 @@ def parse_daily_tab(ws) -> List[Dict[str, Any]]:
             m[key] = str(v).strip() if v else None
 
         if has_activity(m):
-            results.append(m)
+            active.append(m)
+        else:
+            silent.append(agent_name)
 
-    return results
+    return active, silent
 
 
 def parse_workbook(file_obj, week_start: date) -> Dict[str, Any]:
@@ -184,7 +199,14 @@ def parse_workbook(file_obj, week_start: date) -> Dict[str, Any]:
 
     `file_obj` may be a path or any binary file-like object (an uploaded
     file stream). Returns:
-        {"office": str, "days": {"YYYY-MM-DD": [row, ...]}, "tabs_found": [...]}
+        {"office": str,
+         "days":   {"YYYY-MM-DD": [row, ...]},   # rows with activity
+         "silent": {"YYYY-MM-DD": [name, ...]},  # rows reported as nothing
+         "tabs_found": [...]}
+
+    "silent" is populated for every tab present, including tabs with no active
+    rows at all. Callers decide which days this file is authoritative for —
+    see the supersede guard in the import endpoint.
     """
     wb = openpyxl.load_workbook(file_obj, data_only=True, read_only=True)
     try:
@@ -197,19 +219,23 @@ def parse_workbook(file_obj, week_start: date) -> Dict[str, Any]:
         sheet_map = {s.strip(): s for s in wb.sheetnames}
 
         days: Dict[str, List[Dict[str, Any]]] = {}
+        silent: Dict[str, List[str]] = {}
         tabs_found: List[str] = []
         for tab_name, day_offset in TAB_DAY_OFFSET.items():
             actual_name = sheet_map.get(tab_name.strip())
             if actual_name is None:
                 continue
             tabs_found.append(tab_name.strip())
-            rows = parse_daily_tab(wb[actual_name])
+            rows, quiet = parse_daily_tab_split(wb[actual_name])
+            date_str = (week_start + timedelta(days=day_offset)).strftime("%Y-%m-%d")
+            if quiet:
+                silent[date_str] = quiet
             if not rows:
                 continue
-            date_str = (week_start + timedelta(days=day_offset)).strftime("%Y-%m-%d")
             days[date_str] = rows
 
-        return {"office": office, "days": days, "tabs_found": tabs_found}
+        return {"office": office, "days": days, "silent": silent,
+                "tabs_found": tabs_found}
     finally:
         wb.close()
 

@@ -1893,8 +1893,14 @@ async def vault_export(
 ):
     """Export retained production entries as a WAR-format weekly report — the
     same shape import_war_data.py reads, so the JSON round-trips and serves as
-    a permanent backup. Defaults to the current Wed-to-Wed week. `format=csv`
-    returns a per-agent-per-day spreadsheet instead."""
+    a permanent backup. Defaults to the current Wed-to-Wed week.
+
+    `format=csv` returns a per-agent-per-day spreadsheet for reconciling the
+    app against a WAR report. That view names every agent and their daily
+    numbers in one file, so it is restricted to admins rather than every RGA."""
+    if format == "csv" and not user_is_admin(user):
+        raise HTTPException(status_code=403,
+                            detail="The per-agent spreadsheet export is admin-only")
     def _parse(d: str) -> date:
         try:
             return date.fromisoformat(d)

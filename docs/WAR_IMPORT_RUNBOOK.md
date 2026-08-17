@@ -128,6 +128,25 @@ Two consequences:
 `vantagelife`). `WEEK_START` overrides the week start for files that are not
 named with a date — only useful for a single file at a time.
 
+## Reconciling the two-day overlap
+
+```
+python3 backend/audit_war_overlap.py /path/to/that/offices/reports
+```
+
+Read-only — it touches spreadsheets, never the database. It reports, per office:
+rows that appear in only the older book (a pre-2 PM sale, kept), only the newer
+book (post-2 PM, added), and — the ones worth a human's eye — rows carrying
+numbers in **both** books for the same day. The importer keeps only the newer
+book's row there, which is right when the newer book restates the older one and
+wrong if they are genuinely two halves of a day. The spreadsheets cannot tell
+those apart; someone who knows the office can.
+
+Result for MJ (25 reports, 2026-02-18 → 2026-08-05): 18 rows in both books, 15
+of them carrying identical numbers, and no older-book ALP exceeding the newer
+book's — so replacing loses no money in that office. Gojcaj, Monty and Rust have
+not been run.
+
 ## Troubleshooting
 
 **`ServerSelectionTimeoutError`** — the machine cannot reach MongoDB on port

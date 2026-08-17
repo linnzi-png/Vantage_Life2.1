@@ -73,6 +73,17 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 ## Business Logic (sacred - do not change without explicit instruction)
 - Reporting cycle: 6:00 AM to 5:59 AM America/Detroit (not midnight-to-midnight) — see `sales_day_for()`
 - Wednesday 2:00 PM = weekly submission cutoff (`POST /api/admin/wednesday-reset`, RGA-only)
+- WAR overlap (owner, 2026-08-17): consecutive reports share two days —
+  `Wed (2)`/`Thurs (2)` of one book are the same calendar days as the next
+  book's `Wed`/`Thurs`. The 2 PM cutoff **splits** that Wednesday: a sale in the
+  older book was made **before** 2 PM Eastern, one appearing only in the newer
+  book was made **after**. They are two halves of one day, NOT competing records.
+  A blank row in the newer book therefore does **not** mean the agent produced
+  nothing, and must never be used to delete the older book's entry. In practice
+  the office usually restates the overlap days in the new book (15 of 18 such
+  rows across MJ's 25 reports carry identical numbers), which is why the
+  importer replaces rather than adds. Reconcile with
+  `python3 backend/audit_war_overlap.py <folder>`.
 - 9 PM gate = yellow warning banner; "Midnight Miracle" = the 12 AM–6 AM entry window (`gate_state()`)
 - Close Rate formula: `Sales / Sits` — implemented in `backend/metrics.py`.
   N1 is a person who cannot be insured for medical reasons. An agent has no
