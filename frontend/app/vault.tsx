@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import { api, COLORS } from '../src/lib/auth';
+import { api, apiText, apiBlob, COLORS, useAuth } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { notify } from '../src/lib/dialog';
 import { LineChart, BarChart, Point } from '../src/components/Charts';
@@ -82,6 +82,15 @@ export default function VaultScreen() {
   const [b, setB] = useState<string | null>(null);
   const [cmp, setCmp] = useState<Compare | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
+  const [exportingCsv, setExportingCsv] = useState<string | null>(null);
+  const { user } = useAuth();
+  // Two different grants, deliberately. The workbook is the report the office
+  // has always read, so any admin gets it; the flat CSV is a wider dump and is
+  // narrower. Offering a button the server refuses is worse than hiding it, and
+  // the backend enforces both independently.
+  const canExportWorkbook = user?.is_admin === true;
+  const canExportCsv = user?.can_export === true;
+  const [exportingXlsx, setExportingXlsx] = useState<string | null>(null);
 
   // Offices come from the data — never a hardcoded list.
   useEffect(() => {
@@ -174,24 +183,62 @@ export default function VaultScreen() {
   const closePoints: Point[] = useMemo(
     () => shown.map((w) => ({ label: shortDate(w.week_start), value: w.close_rate })), [shown]);
 
+  const download = async (body: string, filename: string, mime: string) => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const href = URL.createObjectURL(new Blob([body], { type: mime }));
+      const link = document.createElement('a');
+      link.href = href; link.download = filename; link.click();
+      URL.revokeObjectURL(href);
+    } else {
+      await Share.share({ message: body, title: filename });
+    }
+  };
+
   const exportWeek = async (weekStart: string) => {
     setExporting(weekStart);
     try {
       const data = await api<unknown>(`/api/vault/export?week_start=${weekStart}`);
-      const json = JSON.stringify(data, null, 2);
-      const filename = `war_export_${weekStart}.json`;
-      if (Platform.OS === 'web' && typeof document !== 'undefined') {
-        const href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-        const link = document.createElement('a');
-        link.href = href; link.download = filename; link.click();
-        URL.revokeObjectURL(href);
-      } else {
-        await Share.share({ message: json, title: filename });
-      }
+      await download(JSON.stringify(data, null, 2),
+        `war_export_${weekStart}.json`, 'application/json');
     } catch (e: unknown) {
       notify('Export failed', e instanceof Error ? e.message : 'Could not export this week.');
     } finally {
       setExporting(null);
+    }
+  };
+
+  /** The WAR workbook itself, rebuilt from the app's data — same tabs, same
+   *  columns — so it can sit beside an old report. Web only: the native Share
+   *  sheet takes text, not a binary file. */
+  const exportWeekXlsx = async (weekStart: string) => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      notify('Open on the web', 'The WAR workbook downloads from the web app — the phone can only share text.');
+      return;
+    }
+    setExportingXlsx(weekStart);
+    try {
+      const blob = await apiBlob(`/api/vault/export?week_start=${weekStart}&format=xlsx`);
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = href; link.download = `${weekStart}_War_Report.xlsx`; link.click();
+      URL.revokeObjectURL(href);
+    } catch (e: unknown) {
+      notify('Export failed', e instanceof Error ? e.message : 'Could not build the workbook.');
+    } finally {
+      setExportingXlsx(null);
+    }
+  };
+
+  /** One row per agent per day — the shape you reconcile against a WAR report. */
+  const exportWeekCsv = async (weekStart: string) => {
+    setExportingCsv(weekStart);
+    try {
+      const csv = await apiText(`/api/vault/export?week_start=${weekStart}&format=csv`);
+      await download(csv, `war_export_${weekStart}.csv`, 'text/csv');
+    } catch (e: unknown) {
+      notify('Export failed', e instanceof Error ? e.message : 'Could not export this week.');
+    } finally {
+      setExportingCsv(null);
     }
   };
 
@@ -330,6 +377,34 @@ export default function VaultScreen() {
                     <Ionicons name="download-outline" size={12} color={COLORS.primary} />
                     <Text style={styles.exportTxt}>{exporting === w.week_start ? 'EXPORTING…' : 'EXPORT'}</Text>
                   </TouchableOpacity>
+                  {canExportCsv ? (
+                    <TouchableOpacity
+                      onPress={() => exportWeekCsv(w.week_start)}
+                      disabled={exportingCsv === w.week_start}
+                      style={styles.exportBtn}
+                      testID={`vault-export-csv-${w.week_start}`}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="grid-outline" size={12} color={COLORS.gold} />
+                      <Text style={[styles.exportTxt, { color: COLORS.gold }]}>
+                        {exportingCsv === w.week_start ? 'EXPORTING…' : 'AGENT-BY-DAY CSV'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {canExportWorkbook ? (
+                    <TouchableOpacity
+                      onPress={() => exportWeekXlsx(w.week_start)}
+                      disabled={exportingXlsx === w.week_start}
+                      style={styles.exportBtn}
+                      testID={`vault-export-xlsx-${w.week_start}`}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="document-text-outline" size={12} color={COLORS.gold} />
+                      <Text style={[styles.exportTxt, { color: COLORS.gold }]}>
+                        {exportingXlsx === w.week_start ? 'BUILDING…' : 'WAR WORKBOOK (.XLSX)'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </TouchableOpacity>
               );
             })}

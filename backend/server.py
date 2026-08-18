@@ -22,6 +22,7 @@ import pytz
 
 import metrics
 import war_import
+import war_export
 from pathlib import Path
 from pydantic import BaseModel, Field
 from jose import jwt as apple_jwt
@@ -60,6 +61,15 @@ LEVELS = {
     "level_3": "Executive Producer",
     "level_4": "Chief Executive Producer",
     "pending": "Pending Approval",
+}
+# Who may pull the flat per-agent CSV. That view is a plain dump of every agent
+# and their daily numbers, so the list is deliberately narrower than
+# ADMIN_EMAILS. The WAR workbook is NOT gated on this — it is the report the
+# office has always read, and MJ needs it (admin is enough).
+EXPORT_EMAILS = {
+    e.strip().lower()
+    for e in os.environ.get("EXPORT_EMAILS", "linnzi@aoluxor.com").split(",")
+    if e.strip()
 }
 EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 # Bootstrap admins: always admins even without an is_admin flag on their users doc.
@@ -235,6 +245,12 @@ async def require_agent(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
 
 def user_is_admin(user: Dict[str, Any]) -> bool:
     return bool(user.get("is_admin")) or str(user.get("email", "")).lower() in ADMIN_EMAILS
+
+
+def user_may_export(user: Dict[str, Any]) -> bool:
+    """Reconciliation exports are restricted to EXPORT_EMAILS, not to admins
+    generally — see the constant for why."""
+    return str(user.get("email", "")).lower() in EXPORT_EMAILS
 
 
 async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -471,6 +487,10 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
     # Overlay computed admin status so bootstrap admins (ADMIN_EMAILS) see the
     # Admin entry point even without an is_admin flag on their users doc.
     user["is_admin"] = user_is_admin(user)
+    # Separate from is_admin on purpose: the reconciliation exports are a
+    # narrower grant than the admin panel, so the UI must not infer one from
+    # the other and offer a button the server will refuse.
+    user["can_export"] = user_may_export(user)
     user["can_switch_role"] = bool(user.get("can_switch_role"))
     return {"user": user, "agent": agent, "role_label": LEVELS.get(user.get("role", "level_1"), "Agent")}
 
@@ -1889,12 +1909,28 @@ async def vault_export(
     start: Optional[str] = None,
     end: Optional[str] = None,
     format: str = "json",
+    office: Optional[str] = None,
     user: Dict[str, Any] = Depends(require_level(4)),
 ):
     """Export retained production entries as a WAR-format weekly report — the
     same shape import_war_data.py reads, so the JSON round-trips and serves as
-    a permanent backup. Defaults to the current Wed-to-Wed week. `format=csv`
-    returns a per-agent-per-day spreadsheet instead."""
+    a permanent backup. Defaults to the current Wed-to-Wed week.
+
+    `format=xlsx` rebuilds the WAR workbook itself — same tabs, same columns,
+    same header — from the app's own data, so it can be read beside an old
+    report or re-imported unchanged. This is the report the office has always
+    worked from, so any admin may pull it.
+
+    `format=csv` is a flat per-agent-per-day dump, a different thing from the
+    report, and is restricted to EXPORT_EMAILS."""
+    if format not in ("json", "csv", "xlsx"):
+        raise HTTPException(status_code=400, detail="format must be json, csv or xlsx")
+    if format == "xlsx" and not user_is_admin(user):
+        raise HTTPException(status_code=403,
+                            detail="The WAR workbook export is admin-only")
+    if format == "csv" and not user_may_export(user):
+        raise HTTPException(status_code=403,
+                            detail="The per-agent CSV export is restricted")
     def _parse(d: str) -> date:
         try:
             return date.fromisoformat(d)
@@ -1903,7 +1939,9 @@ async def vault_export(
 
     if week_start:
         ws = _parse(week_start)
-        frm, to = ws, ws + timedelta(days=6)
+        # A WAR workbook carries nine daily tabs — "Wed (2)"/"Thurs (2)" reach
+        # into the next week — so the xlsx needs two days more than the summary.
+        frm, to = ws, ws + timedelta(days=8 if format == "xlsx" else 6)
     elif start and end:
         frm, to = _parse(start), _parse(end)
         if to < frm:
@@ -1961,6 +1999,68 @@ async def vault_export(
             content=buf.getvalue(),
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="war_export_{from_iso}_{to_iso}.csv"'},
+        )
+
+    if format == "xlsx":
+        if not week_start:
+            raise HTTPException(status_code=400,
+                                detail="xlsx export needs week_start=YYYY-MM-DD")
+        # A WAR report covers one office. Without a filter the workbook would
+        # mix offices under a single header, which is not a report anyone can
+        # reconcile — so default to the office carrying the most rows.
+        counts: Dict[str, int] = {}
+        for p in flat:
+            counts[p.get("office") or UNASSIGNED_OFFICE] = \
+                counts.get(p.get("office") or UNASSIGNED_OFFICE, 0) + 1
+        sheet_office = office or (max(counts, key=lambda k: counts[k]) if counts else "Unknown")
+
+        # Every agent in that office, listed on every tab whether or not they
+        # produced — real reports carry the whole roster, and a name vanishing
+        # on a quiet day is exactly what makes two files hard to compare.
+        roster_docs = [
+            a async for a in db.agent_profiles.find(
+                {"office": sheet_office},
+                {"_id": 0, "agent_id": 1, "name": 1, "state": 1, "office": 1},
+            )
+        ]
+        if ids is not None:
+            allowed = set(ids)
+            roster_docs = [a for a in roster_docs if a["agent_id"] in allowed]
+
+        names = {a["agent_id"]: a.get("name", a["agent_id"]) async for a in
+                 db.agent_profiles.find({}, {"_id": 0, "agent_id": 1, "name": 1})}
+        roles = {a["agent_id"]: (a.get("role"), a.get("io_role")) async for a in
+                 db.agent_profiles.find({}, {"_id": 0, "agent_id": 1, "role": 1, "io_role": 1})}
+
+        roster = []
+        for a in sorted(roster_docs, key=lambda x: x.get("name") or ""):
+            chain = await _ancestor_chain(a["agent_id"])
+            person = {"name": a.get("name", a["agent_id"]), "state": a.get("state"),
+                      "mga": None, "ga": None, "sa": None}
+            for up in chain:
+                role, io_role = roles.get(up, (None, None))
+                if person["sa"] is None and io_role == "SA":
+                    person["sa"] = names.get(up)
+                elif person["ga"] is None and role == "level_2":
+                    person["ga"] = names.get(up)
+                elif person["mga"] is None and role == "level_3":
+                    person["mga"] = names.get(up)
+            roster.append(person)
+
+        rows_by_day: Dict[str, Dict[str, Any]] = {}
+        for p in flat:
+            if (p.get("office") or UNASSIGNED_OFFICE) != sheet_office:
+                continue
+            rows_by_day.setdefault(p["date"], {})[p["agent"]] = p
+
+        buf = await asyncio.to_thread(
+            war_export.build_workbook, sheet_office, frm, roster, rows_by_day)
+        safe = re.sub(r"[^A-Za-z0-9]+", "_", sheet_office).strip("_") or "office"
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition":
+                     f'attachment; filename="{from_iso}_{safe}_War_Report.xlsx"'},
         )
 
     weekly_tabs = []
