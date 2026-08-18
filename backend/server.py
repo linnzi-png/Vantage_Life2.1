@@ -62,10 +62,10 @@ LEVELS = {
     "level_4": "Chief Executive Producer",
     "pending": "Pending Approval",
 }
-# Who may pull the reconciliation exports (per-agent CSV, WAR workbook). These
-# name every agent and their daily numbers in one downloadable file, which is a
-# wider view than the dashboards give, so the list is deliberately narrower than
-# ADMIN_EMAILS — being an admin does not by itself grant it.
+# Who may pull the flat per-agent CSV. That view is a plain dump of every agent
+# and their daily numbers, so the list is deliberately narrower than
+# ADMIN_EMAILS. The WAR workbook is NOT gated on this — it is the report the
+# office has always read, and MJ needs it (admin is enough).
 EXPORT_EMAILS = {
     e.strip().lower()
     for e in os.environ.get("EXPORT_EMAILS", "linnzi@aoluxor.com").split(",")
@@ -1916,17 +1916,21 @@ async def vault_export(
     same shape import_war_data.py reads, so the JSON round-trips and serves as
     a permanent backup. Defaults to the current Wed-to-Wed week.
 
-    `format=csv` returns a flat per-agent-per-day sheet. `format=xlsx` rebuilds
-    the WAR workbook itself — same tabs, same columns, same header — from the
-    app's own data, so it can be read beside an old WAR report or re-imported
-    unchanged. Both name every agent and their daily numbers in one downloadable
-    file, so both are restricted to EXPORT_EMAILS."""
+    `format=xlsx` rebuilds the WAR workbook itself — same tabs, same columns,
+    same header — from the app's own data, so it can be read beside an old
+    report or re-imported unchanged. This is the report the office has always
+    worked from, so any admin may pull it.
+
+    `format=csv` is a flat per-agent-per-day dump, a different thing from the
+    report, and is restricted to EXPORT_EMAILS."""
     if format not in ("json", "csv", "xlsx"):
         raise HTTPException(status_code=400, detail="format must be json, csv or xlsx")
-    if format in ("csv", "xlsx") and not user_may_export(user):
-        raise HTTPException(
-            status_code=403,
-            detail="The per-agent reconciliation exports are restricted")
+    if format == "xlsx" and not user_is_admin(user):
+        raise HTTPException(status_code=403,
+                            detail="The WAR workbook export is admin-only")
+    if format == "csv" and not user_may_export(user):
+        raise HTTPException(status_code=403,
+                            detail="The per-agent CSV export is restricted")
     def _parse(d: str) -> date:
         try:
             return date.fromisoformat(d)

@@ -84,9 +84,11 @@ export default function VaultScreen() {
   const [exporting, setExporting] = useState<string | null>(null);
   const [exportingCsv, setExportingCsv] = useState<string | null>(null);
   const { user } = useAuth();
-  // Deliberately not is_admin: the reconciliation exports are a narrower grant
-  // than the admin panel, and offering a button the server refuses is worse
-  // than not showing it. The backend enforces this independently.
+  // Two different grants, deliberately. The workbook is the report the office
+  // has always read, so any admin gets it; the flat CSV is a wider dump and is
+  // narrower. Offering a button the server refuses is worse than hiding it, and
+  // the backend enforces both independently.
+  const canExportWorkbook = user?.is_admin === true;
   const canExportCsv = user?.can_export === true;
   const [exportingXlsx, setExportingXlsx] = useState<string | null>(null);
 
@@ -389,7 +391,7 @@ export default function VaultScreen() {
                       </Text>
                     </TouchableOpacity>
                   ) : null}
-                  {canExportCsv ? (
+                  {canExportWorkbook ? (
                     <TouchableOpacity
                       onPress={() => exportWeekXlsx(w.week_start)}
                       disabled={exportingXlsx === w.week_start}

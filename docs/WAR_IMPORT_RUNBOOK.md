@@ -141,10 +141,9 @@ Historical Vault → any week card:
   daily tabs so `Wed (2)`/`Thurs (2)` still overlap the next week. It re-imports
   through the same parser, which is asserted by a test.
 
-The last two are restricted to `EXPORT_EMAILS` (default: one address), which is
-deliberately narrower than `ADMIN_EMAILS` — they name every agent and their
-daily numbers in one downloadable file. Set `EXPORT_EMAILS` on Railway to change
-who can pull them.
+Two different grants. The **workbook** is the report the office has always read,
+so any admin (`ADMIN_EMAILS`) can pull it. The **flat CSV** is a wider dump and
+is restricted to `EXPORT_EMAILS` (default: one address). Set either on Railway.
 
 Two columns a real report carries are left blank rather than guessed: **Show
 Rate**, whose formula has never been specified for this app, and the **LOST

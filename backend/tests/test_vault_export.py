@@ -93,17 +93,22 @@ async def test_csv_export_is_refused_to_an_rga_not_on_the_export_list(client, se
     assert r.status_code == 403
 
 
-async def test_export_list_is_narrower_than_admin(client, seeded_db):
-    """Being an admin must not by itself unlock the reconciliation exports —
-    ADMIN_EMAILS carries MJ, EXPORT_EMAILS is meant to carry one person."""
+async def test_admin_gets_the_workbook_but_not_the_flat_csv(client, seeded_db):
+    """Two grants, not one. MJ needs the WAR workbook; the flat per-agent dump
+    is narrower and stays on EXPORT_EMAILS."""
     import server
     assert server.EXPORT_EMAILS < server.ADMIN_EMAILS or \
         server.EXPORT_EMAILS != server.ADMIN_EMAILS
     token = await make_session(seeded_db, role="level_4", agent_id="RGA_1",
                                email="mj@aopremier.com")   # admin, not on EXPORT_EMAILS
-    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
-                         headers=auth(token))
-    assert r.status_code == 403
+    csv_r = await client.get("/api/vault/export?start=2026-07-01&end=2026-07-01&format=csv",
+                             headers=auth(token))
+    assert csv_r.status_code == 403, "the flat CSV dump stays narrow"
+
+    # The workbook is the report the office has always read — admin is enough.
+    xlsx_r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
+                              headers=auth(token))
+    assert xlsx_r.status_code == 200
 
 
 async def test_json_export_still_works_for_a_non_admin_rga(client, seeded_db):
@@ -197,6 +202,13 @@ async def test_xlsx_spans_nine_days_like_a_real_report(client, seeded_db):
                          headers=auth(token))
     parsed = war_import.parse_workbook(io.BytesIO(r.content), date(2026, 7, 1))
     assert "2026-07-09" in parsed["days"], "the 8th day must land on the Wed (2) tab"
+
+
+async def test_workbook_still_refused_to_a_non_admin_rga(client, seeded_db):
+    token = await _rga(seeded_db)          # level_4, not an admin
+    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
+                         headers=auth(token))
+    assert r.status_code == 403
 
 
 async def test_xlsx_requires_a_week_start(client, seeded_db):
