@@ -58,8 +58,11 @@ ROSTER = [
     ("Jeannieliza Solis",   "jennysolis1624@gmail.com",       "GA",    "level_2", False, "Mohamed Aljahmi"),
     ("Aleskander Murshed",  "alex.murshed@gmail.com",         "SA",    "level_2", False, "Ali Musa"),
     ("Adam Youssef",        "adamyoussef366@gmail.com",       "SA",    "level_2", False, "Ali Musa"),
-    ("Annie Ransom",        "williambenline@cavu-ao.com",     "SA",    "level_2", False, "David Fulfer"),
+    # Annie Ransom (AO0119) is deliberately absent: per the owner (2026-08-18)
+    # she is fully excluded from the app.
     ("Troy Williams",       "troywilliams50560@gmail.com",    "GA",    "level_2", False, "Ashley Rust"),
+    # SA per the owner (2026-08-18), overriding the sheet row's blank SA column.
+    ("Landy Sitto",         "landy.sitto.ail@gmail.com",      "SA",    "level_2", False, "Ali Musa"),
     # ── Agents — MJ book (upline = SA/GA column of their sheet row)
     ("Kyle Stikeleather",   "kylestikeleather@gmail.com",     "Agent", "level_1", True,  "Henry Long"),
     ("Ahmed Mawri",         "adam.globelifeao@gmail.com",     "Agent", "level_1", True,  "Henry Long"),
@@ -80,7 +83,6 @@ ROSTER = [
     ("Hadi Awada",          "hawada.aogl@gmail.com",          "Agent", "level_1", True,  "Aleskander Murshed"),
     ("Aiman Almaweri",      "reachalex.ao@outlook.com",       "Agent", "level_1", True,  "Aleskander Murshed"),
     ("Emily Ortner",        "emcathmchugh@gmail.com",         "Agent", "level_1", True,  "Ali Eltanoukhi"),
-    ("Landy Sitto",         "landy.sitto.ail@gmail.com",      "Agent", "level_1", False, "Ali Musa"),
     ("Tyler Litcher",       "lichtertyler@gmail.com",         "Agent", "level_1", False, "Ali Musa"),
     ("Essa Aljahmi",        "ealjahmi618@gmail.com",          "Agent", "level_1", True,  "Ali Musa"),
     # ── Agents — Montzer Alwatan book (tenure column blank on the sheet)
@@ -113,6 +115,11 @@ ROOT_OFFICE = {"Joseph Gojcaj": "Gojcaj RGA", "Ashley Rust": "Rust RGA"}
 # Sheet name → the name the database actually stores for the same person.
 ALIASES = {"Mohamed Aljahmi": "MJ Aljahmi"}
 
+# Office renames applied before importing (per owner, 2026-08-18). Same scope
+# as /admin/merge-office: agent_profiles only — everything downstream resolves
+# offices through the roster.
+RENAME_OFFICES = {"Montzer Alwatan RGA": "Alwatan RGA"}
+
 
 def now_utc():
     return datetime.now(timezone.utc)
@@ -144,6 +151,16 @@ def find_upline(db, created, name):
 
 
 def run(db, roster, apply=False):
+    for src, dst in RENAME_OFFICES.items():
+        n = db.agent_profiles.count_documents({"office": src})
+        if not n:
+            continue
+        tag = "RENAME OFFICE" if apply else "would rename office"
+        print(f"{tag}: {src!r} -> {dst!r} ({n} profiles)")
+        if apply:
+            db.agent_profiles.update_many(
+                {"office": src}, {"$set": {"office": dst, "updated_at": now_utc()}})
+
     created, skipped, blocked = [], [], []
     for name, email, io_role, role, is_rookie, upline_name in roster:
         email = email.strip().lower()

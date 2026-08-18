@@ -24,9 +24,20 @@ SMALL = [
 
 
 def test_dry_run_writes_nothing(db):
+    seed(db, "M1", "Serage Jamil", "jamilserage@gmail.com", role="level_2",
+         office="Montzer Alwatan RGA")
     created, skipped, blocked = cli.run(db, SMALL, apply=False)
     assert len(created) == 3 and not skipped and not blocked
-    assert db.agent_profiles.count_documents({}) == 0
+    assert db.agent_profiles.count_documents({}) == 1
+    # dry run leaves the office rename unapplied too
+    assert db.agent_profiles.find_one({"agent_id": "M1"})["office"] == "Montzer Alwatan RGA"
+
+
+def test_apply_renames_office(db):
+    seed(db, "M1", "Serage Jamil", "jamilserage@gmail.com", role="level_2",
+         office="Montzer Alwatan RGA")
+    cli.run(db, [], apply=True)
+    assert db.agent_profiles.find_one({"agent_id": "M1"})["office"] == "Alwatan RGA"
 
 
 def test_apply_orders_topdown_and_inherits_office(db):
@@ -83,7 +94,11 @@ def test_duplicate_upline_prefers_email_holder(db):
 
 def test_full_roster_integrity():
     names = [r[0] for r in cli.ROSTER]
-    assert len(names) == len(set(names)) == 51  # 50 missing + Ashlynn Orng
+    # 50 missing − Annie Ransom (excluded per the owner) + Ashlynn Orng
+    assert len(names) == len(set(names)) == 50
+    assert "Annie Ransom" not in names
+    landy = next(r for r in cli.ROSTER if r[0] == "Landy Sitto")
+    assert landy[2] == "SA" and landy[3] == "level_2" and landy[5] == "Ali Musa"
     # every upline is either None, in the DB already, or defined earlier in the list
     defined = set()
     forward_ok = True

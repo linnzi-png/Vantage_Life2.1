@@ -44,7 +44,7 @@ async def test_dry_run_reports_without_writing(client, seeded_db, sync_db):
     assert r.status_code == 200
     body = r.json()
     assert body["fixed"] is False
-    assert body["roster_size"] == 159
+    assert body["roster_size"] == 158  # 159 sheet rows minus the owner-excluded Annie Ransom
     assert {"name": "Landy Sitto", "db_email": "landy.sitto.ali@gmail.com",
             "sheet_email": "landy.sitto.ail@gmail.com"} in body["mismatches"]
     # dry run: nothing written

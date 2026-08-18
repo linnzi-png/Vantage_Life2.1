@@ -138,7 +138,9 @@ def test_match_by_email_when_name_spelling_differs(db):
 
 def test_default_csv_loads_full_roster():
     roster = cli.load_roster(cli.DEFAULT_CSV)
-    assert len(roster) == 159
+    # 159 sheet rows minus Annie Ransom, excluded from the app per the owner.
+    assert len(roster) == 158
     emails = [r["email"] for r in roster]
     assert all(e == e.strip().lower() for e in emails)
     assert "landy.sitto.ail@gmail.com" in emails
+    assert "williambenline@cavu-ao.com" not in emails

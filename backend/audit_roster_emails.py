@@ -62,6 +62,11 @@ MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017/")
 DB_NAME = os.environ.get("MONGO_DB") or os.environ.get("DB_NAME") or "vantagelife"
 DEFAULT_CSV = Path(__file__).parent / "data" / "roster" / "agent_roster_2026-08-18.csv"
 
+# Sheet rows deliberately ignored by the audit. The CSV stays a faithful
+# snapshot of the office's sheet; exclusions are owner decisions, not data.
+# Annie Ransom (AO0119): fully excluded from the app per the owner, 2026-08-18.
+EXCLUDED_EMAILS = {"williambenline@cavu-ao.com"}
+
 
 def now_utc():
     return datetime.now(timezone.utc)
@@ -79,7 +84,7 @@ def load_roster(csv_path: Path):
         for row in csv.DictReader(f):
             email = row["email"].strip().lower()
             name = row["name"].strip()
-            if not name or "@" not in email:
+            if not name or "@" not in email or email in EXCLUDED_EMAILS:
                 continue
             rows.append({"app_id": row.get("app_id", "").strip(),
                          "name": name, "email": email})
