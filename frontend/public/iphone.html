@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Interactive iPhone setup and sign-in guide for VantageLife 2.1 — the full TestFlight install and login flow, every error you might hit, and exactly how to fix each one.">
+<title>VantageLife iPhone Guide</title>
+<style>
+  /* VantageLife app tokens — single-theme dark by design (matches the product). */
+  :root {
+    --bg: #0D0D0D; --surface: #141414; --surface2: #1B1B1B;
+    --border: rgba(255,255,255,0.08);
+    --primary: #319842; --secondary: #00558C;
+    --gold: #FFD700; --orange: #FF8C00; --red: #FF3B30; --yellow: #EAB308;
+    --blue: #0A84FF;
+    --text: #FFFFFF; --dim: #A1A1AA; --muted: #6B7280;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; line-height: 1.45;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 28px 20px 80px; }
+  .kicker { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: var(--primary); text-transform: uppercase; }
+
+  header.site { display: flex; align-items: center; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--border); }
+  .mark { width: 44px; height: 44px; border-radius: 4px; background: var(--primary); display: grid; place-items: center; font-weight: 900; font-size: 26px; color: #000; }
+  .brand { font-size: 22px; font-weight: 900; letter-spacing: 1.5px; }
+  .brand em { font-style: normal; color: var(--primary); }
+  .tagline { color: var(--dim); font-size: 12px; letter-spacing: .6px; margin-top: 2px; }
+
+  .intro { margin: 26px 0 20px; max-width: 64ch; }
+  .intro h1 { font-size: clamp(26px, 4.5vw, 38px); font-weight: 900; letter-spacing: -0.5px; line-height: 1.12; text-wrap: balance; margin: 6px 0 10px; }
+  .intro p { color: var(--dim); font-size: 15px; }
+  .intro b { color: var(--text); }
+
+  /* layout: phone + guide side by side on wide screens */
+  .stage { display: flex; gap: 26px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+  .phone-col { flex: none; }
+  .guide-col { flex: 1; min-width: 300px; max-width: 430px; position: sticky; top: 20px; }
+  @media (max-width: 820px) { .guide-col { position: static; max-width: 384px; margin: 0 auto; } }
+
+  .phone { position: relative; width: 384px; max-width: 100%; height: 780px; background: #000; border: 1px solid rgba(255,255,255,0.16); border-radius: 30px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+  .statusbar { position: absolute; top: 0; left: 0; right: 0; height: 34px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; font-size: 12.5px; font-weight: 700; z-index: 5; pointer-events: none; }
+  .statusbar .right { letter-spacing: 1px; }
+  .screen { position: absolute; inset: 0; display: none; flex-direction: column; padding-top: 40px; overflow: hidden; }
+  .screen.on { display: flex; }
+
+  /* tappable elements pulse subtly so "interactive" reads at a glance */
+  .tap { cursor: pointer; position: relative; }
+  .tap::after { content: ""; position: absolute; inset: -3px; border: 2px solid rgba(255,215,0,.85); border-radius: 10px; pointer-events: none; opacity: 0; animation: tapPulse 1.8s ease-in-out infinite; }
+  @keyframes tapPulse { 0%,100% { opacity: 0; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .tap::after { animation: none; opacity: .9; } }
+
+  /* ---------- Screen: Gmail inbox (dark) ---------- */
+  .inbox { background: #111318; flex: 1; }
+  .inbox-head { padding: 10px 16px 12px; }
+  .inbox-search { background: #1f2127; border-radius: 20px; padding: 10px 16px; color: #9aa0a6; font-size: 14px; }
+  .inbox-label { color: #9aa0a6; font-size: 11px; font-weight: 700; letter-spacing: .8px; padding: 10px 18px 4px; }
+  .mail { display: flex; gap: 12px; padding: 12px 16px; align-items: flex-start; border-radius: 12px; margin: 0 6px; }
+  .mail .av { width: 40px; height: 40px; border-radius: 20px; display: grid; place-items: center; font-weight: 800; color: #fff; flex: none; font-size: 16px; }
+  .mail .from { font-weight: 700; font-size: 14.5px; color: #e8eaed; display: flex; justify-content: space-between; }
+  .mail .from small { color: #9aa0a6; font-weight: 500; font-size: 12px; }
+  .mail .subj { color: #e8eaed; font-size: 13.5px; margin-top: 1px; }
+  .mail .prev { color: #9aa0a6; font-size: 12.5px; margin-top: 1px; }
+  .mail.unread .subj { font-weight: 700; }
+  .badge-new { display: inline-block; background: rgba(49,152,66,.2); color: #4cc063; border: 1px solid rgba(49,152,66,.5); font-size: 9px; font-weight: 900; letter-spacing: 1px; border-radius: 3px; padding: 1px 6px; vertical-align: 1px; margin-left: 6px; }
+
+  /* ---------- Screen: launch email ---------- */
+  .lmail { background: #111318; flex: 1; overflow: hidden; }
+  .lmail-bar { display: flex; gap: 18px; padding: 8px 16px; color: #9aa0a6; font-size: 16px; white-space: nowrap; }
+  .lmail-paper { background: #f6f5f2; color: #1a1a1a; margin: 4px 10px 0; border-top: 4px solid #319842; padding: 18px 18px 24px; height: 100%; overflow: hidden; font-size: 13.5px; }
+  .lmail-brand { font-weight: 900; font-size: 19px; letter-spacing: .5px; }
+  .lmail-brand em { font-style: normal; color: #319842; }
+  .lmail-brand small { font-size: 9px; letter-spacing: 2px; color: #666; font-weight: 700; margin-left: 6px; }
+  .pill-live { display: inline-block; border: 1.5px solid #319842; color: #319842; border-radius: 14px; font-size: 10px; font-weight: 800; letter-spacing: 2px; padding: 3px 12px; margin: 14px 0 8px; }
+  .lmail h2 { font-size: 30px; line-height: 1.02; font-weight: 900; letter-spacing: -.5px; margin-bottom: 10px; }
+  .lmail p { color: #444; line-height: 1.55; margin-bottom: 10px; }
+  .btn-join { display: block; background: #3e7d3f; color: #fff; text-align: center; font-weight: 800; letter-spacing: 1.5px; font-size: 13px; border-radius: 6px; padding: 14px 10px; margin: 14px 0 10px; }
+  .lmail .andr { border-left: 3px solid #8a6d1a; background: #efede8; padding: 10px 12px; font-size: 12px; color: #555; }
+  .lmail .andr b { font-size: 10px; letter-spacing: 1.5px; color: #8a6d1a; display: block; margin-bottom: 3px; }
+
+  /* ---------- Screen: Safari revoked (light) ---------- */
+  .safari { background: #f2f2f6; color: #111; flex: 1; }
+  .safari-url { margin: 10px 14px; background: #fff; border-radius: 22px; padding: 12px 16px; text-align: center; font-weight: 700; font-size: 15px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .rev-card { margin: 60px auto 0; width: 78%; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
+  .rev-card .art { height: 150px; background: linear-gradient(120deg, #2aa3dd, #1a6f9e); }
+  .rev-card p { padding: 18px 16px 22px; font-size: 13.5px; color: #333; text-align: center; line-height: 1.5; }
+  .safari-foot { text-align: center; color: #8e8e93; font-size: 11px; margin-top: 22px; }
+
+  /* ---------- Screen: TestFlight page ---------- */
+  .tf { flex: 1; background: #000; overflow: hidden; }
+  .tf-hero { background: linear-gradient(135deg, #3e6a8f, #2c4a66); text-align: center; padding: 26px 0 22px; }
+  .tf-icon { width: 92px; height: 92px; border-radius: 22px; background: #fff; margin: 0 auto 12px; display: grid; place-items: center; }
+  .tf-icon .globe { width: 62px; height: 62px; border-radius: 50%; background: conic-gradient(from 200deg, #2bb3a3, #2f7fc1, #46c98d, #2bb3a3); position: relative; }
+  .tf-icon .globe::after { content: "↗"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 26px; font-weight: 900; }
+  .tf-hero h2 { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 14px; }
+  .tf-btns { display: flex; gap: 10px; justify-content: center; }
+  .tf-btn { background: rgba(255,255,255,.16); color: #fff; border-radius: 22px; padding: 11px 26px; font-weight: 700; font-size: 15px; }
+  .tf-meta { display: flex; justify-content: space-around; background: #17181a; margin: 12px 12px 0; border-radius: 12px; padding: 12px 6px; }
+  .tf-meta div { text-align: center; }
+  .tf-meta .lab { color: #8e8e93; font-size: 9.5px; font-weight: 800; letter-spacing: 1px; }
+  .tf-meta .val { font-size: 19px; font-weight: 800; margin-top: 2px; }
+  .tf-meta .sub { color: #8e8e93; font-size: 11px; }
+  .tf-sect { color: #fff; font-weight: 800; font-size: 17px; margin: 16px 14px 8px; }
+  .tf-card { background: #17181a; color: #d5d5d9; border-radius: 12px; margin: 0 12px; padding: 12px 14px; font-size: 13px; line-height: 1.5; }
+  .tf-card .more { color: #0a84ff; }
+
+  /* ---------- Screen: Ready To Test ---------- */
+  .rtt { flex: 1; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 30px; }
+  .rtt h2 { font-size: 32px; font-weight: 800; margin-bottom: 16px; }
+  .rtt p { color: #d5d5d9; font-size: 16px; line-height: 1.5; margin-bottom: 24px; }
+  .rtt .redeem { background: #0a84ff; color: #fff; font-weight: 700; font-size: 17px; border-radius: 24px; padding: 12px 38px; }
+
+  /* ---------- Screen: login ---------- */
+  .login { flex: 1; background: var(--bg); padding: 8px 18px 0; overflow: hidden; }
+  .login .brandrow { display: flex; align-items: center; gap: 10px; margin: 8px 0 16px; }
+  .login .mark2 { width: 34px; height: 34px; border-radius: 4px; background: var(--primary); display: grid; place-items: center; color: #000; font-weight: 900; font-size: 19px; }
+  .login .b1 { font-weight: 900; letter-spacing: 1.2px; font-size: 15px; }
+  .login .b1 em { font-style: normal; color: var(--primary); }
+  .login .b2 { color: var(--dim); font-size: 10px; letter-spacing: .5px; }
+  .login .k { color: var(--primary); font-weight: 900; font-size: 10.5px; letter-spacing: 2.4px; }
+  .login h2 { font-size: 27px; font-weight: 900; letter-spacing: -.5px; margin: 3px 0 6px; }
+  .login .sub { color: var(--dim); font-size: 12.5px; margin-bottom: 14px; }
+  .gbtn, .abtn { display: flex; align-items: center; justify-content: center; gap: 9px; background: #fff; color: #000; font-weight: 800; font-size: 14px; border-radius: 5px; padding: 13px 0; margin-bottom: 9px; }
+  .gbtn .glogo { width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(#ea4335 0 25%, #fbbc05 0 50%, #34a853 0 75%, #4285f4 0); }
+  .divider { display: flex; align-items: center; gap: 8px; margin: 12px 0; color: var(--muted); font-size: 9.5px; letter-spacing: 1.6px; font-weight: 800; }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .lvl { display: flex; align-items: center; gap: 11px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--tint); border-radius: 6px; padding: 10px 12px; margin-bottom: 7px; }
+  .lvl .bdg { width: 30px; height: 30px; border-radius: 4px; border: 1px solid var(--tint); color: var(--tint); display: grid; place-items: center; font-weight: 900; font-size: 11px; }
+  .lvl b { display: block; font-size: 12.5px; letter-spacing: .5px; }
+  .lvl span { display: block; color: var(--dim); font-size: 10px; }
+  .login .foot { color: var(--muted); font-size: 9.5px; text-align: center; margin-top: 10px; }
+
+  /* ---------- Screen: Google account picker ---------- */
+  .gpick { flex: 1; background: #202124; color: #e8eaed; padding: 10px 0 0; overflow: hidden; }
+  .gpick .sheet-head { text-align: center; padding: 12px 20px 16px; border-bottom: 1px solid rgba(255,255,255,.09); }
+  .gpick .sheet-head .g { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
+  .gpick .sheet-head p { color: #9aa0a6; font-size: 13px; margin-top: 6px; }
+  .gacct { display: flex; gap: 14px; align-items: center; padding: 13px 22px; }
+  .gacct .av { width: 36px; height: 36px; border-radius: 18px; display: grid; place-items: center; font-weight: 800; color: #fff; flex: none; }
+  .gacct b { display: block; font-size: 14px; font-weight: 600; }
+  .gacct span { display: block; color: #9aa0a6; font-size: 12.5px; }
+  .gacct .tag { margin-left: auto; font-size: 9px; font-weight: 900; letter-spacing: 1px; border-radius: 3px; padding: 2px 7px; flex: none; }
+  .tag.ok { color: #4cc063; border: 1px solid rgba(76,192,99,.5); background: rgba(49,152,66,.12); }
+  .tag.warn { color: #f0b429; border: 1px solid rgba(240,180,41,.5); background: rgba(240,180,41,.1); }
+
+  /* ---------- Screen: invalid state JSON ---------- */
+  .jsonerr { flex: 1; background: #0b0b0c; }
+  .jsonerr .sheetbar { display: flex; align-items: center; gap: 12px; margin: 10px 12px; background: #1c1c1e; border-radius: 22px; padding: 10px 16px; }
+  .jsonerr .x { width: 26px; height: 26px; border-radius: 13px; background: #2c2c2e; display: grid; place-items: center; font-size: 13px; }
+  .jsonerr .host { flex: 1; text-align: center; font-weight: 700; font-size: 14px; color: #e5e5ea; }
+  .jsonerr pre { color: #d5d5d9; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.6; padding: 14px 16px; white-space: pre-wrap; word-break: break-all; }
+
+  /* ---------- Screen: Account Pending ---------- */
+  .pend { flex: 1; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 26px; }
+  .pend .clock { width: 66px; height: 66px; border: 4px solid var(--gold); border-radius: 50%; position: relative; margin-bottom: 18px; }
+  .pend .clock::before { content: ""; position: absolute; left: 50%; top: 50%; width: 3.5px; height: 20px; background: var(--gold); transform: translate(-50%, -100%); border-radius: 2px; }
+  .pend .clock::after { content: ""; position: absolute; left: 50%; top: 50%; width: 14px; height: 3.5px; background: var(--gold); border-radius: 2px; }
+  .pend h2 { font-size: 34px; font-weight: 900; margin-bottom: 14px; }
+  .pend p { color: var(--dim); font-size: 15.5px; line-height: 1.55; margin-bottom: 14px; }
+  .pend p b { color: #d8d8dc; font-weight: 700; }
+  .pend .hint { color: var(--gold); font-size: 14.5px; font-weight: 600; line-height: 1.5; margin-bottom: 20px; }
+  .pend .signout { border: 1px solid var(--border); background: var(--surface); color: #fff; font-weight: 800; border-radius: 6px; padding: 12px 34px; font-size: 15px; }
+
+  /* ---------- Screen: notifications over dashboard ---------- */
+  .notif { flex: 1; background: var(--bg); position: relative; }
+  .dash-dim { filter: brightness(.32); padding: 6px 14px; }
+  .ndialog { position: absolute; left: 26px; right: 26px; top: 50%; transform: translateY(-56%); background: rgba(34,34,36,.97); border-radius: 16px; padding: 18px 16px 12px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  .ndialog h3 { font-size: 16.5px; font-weight: 700; line-height: 1.3; margin-bottom: 8px; }
+  .ndialog p { color: #b9b9be; font-size: 12.5px; line-height: 1.45; margin-bottom: 12px; }
+  .nbtn { display: block; width: 100%; border-radius: 22px; padding: 11px 0; font-size: 15px; font-weight: 600; margin-bottom: 8px; background: #3a3a3c; color: #fff; }
+  .nbtn.dont { background: var(--blue); font-weight: 700; }
+
+  /* ---------- Screen: dashboard (compact) ---------- */
+  .dash { flex: 1; background: var(--bg); padding: 6px 14px; overflow: hidden; }
+  .dash-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .dash-brand { font-size: 16px; font-weight: 900; letter-spacing: 1.4px; }
+  .dash-brand em { font-style: normal; color: var(--primary); }
+  .dash-sub { color: var(--dim); font-size: 10px; }
+  .dash-sub em { font-style: normal; color: var(--primary); }
+  .day-pill { border: 1px solid var(--border); border-radius: 4px; padding: 4px 9px; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .seg { display: flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; margin-bottom: 9px; }
+  .seg span { flex: 1; text-align: center; padding: 6px 0; font-size: 10.5px; font-weight: 800; color: var(--dim); }
+  .seg span.on { color: var(--primary); background: rgba(49,152,66,.12); }
+  .sect { color: var(--dim); font-size: 10px; font-weight: 900; letter-spacing: 2px; margin-bottom: 7px; }
+  .stats { display: flex; gap: 6px; margin-bottom: 9px; }
+  .stat { flex: 1; background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--ac); border-radius: 6px; padding: 8px 9px; }
+  .stat .lab { font-size: 8.5px; font-weight: 900; letter-spacing: 1px; color: var(--dim); text-transform: uppercase; }
+  .stat .val { font-size: 17px; font-weight: 900; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .stat .d { font-size: 9px; color: var(--primary); font-weight: 800; }
+  .wallcard { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 11px; margin-bottom: 9px; }
+  .wallrow { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; border-top: 1px solid var(--border); }
+  .wallrow b { font-weight: 800; } .wallrow span { color: var(--primary); font-weight: 900; font-variant-numeric: tabular-nums; }
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; background: #000; border-top: 1px solid var(--border); display: flex; }
+  .tabbar div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--dim); font-size: 8px; font-weight: 800; letter-spacing: .5px; }
+  .tabbar div.on { color: var(--primary); }
+  .tabbar i { font-style: normal; font-size: 14px; }
+  .success-toast { position: absolute; left: 22px; right: 22px; top: 52px; background: rgba(49,152,66,.15); border: 1px solid var(--primary); border-radius: 8px; color: #7fd390; font-weight: 800; font-size: 12px; text-align: center; padding: 10px; letter-spacing: .5px; }
+
+  /* ---------- Guide card ---------- */
+  .gcard { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--primary); border-radius: 8px; padding: 18px; }
+  .gcard.err { border-top-color: var(--red); }
+  .gcard .stepk { color: var(--dim); font-size: 10px; font-weight: 900; letter-spacing: 2px; }
+  .gcard.err .stepk { color: var(--red); }
+  .gcard h3 { font-size: 19px; font-weight: 900; letter-spacing: .3px; margin: 6px 0 8px; }
+  .gcard p { color: var(--dim); font-size: 13.5px; line-height: 1.55; margin-bottom: 8px; }
+  .gcard p b { color: #e6e6ea; }
+  .fixbox { background: rgba(49,152,66,.09); border: 1px solid rgba(49,152,66,.4); border-radius: 6px; padding: 11px 13px; margin: 10px 0; }
+  .fixbox .fk { color: var(--primary); font-size: 10px; font-weight: 900; letter-spacing: 1.6px; margin-bottom: 4px; }
+  .fixbox p { color: #cfd6cf; font-size: 13px; margin: 0; }
+  .fixbox ol { margin: 4px 0 0 18px; color: #cfd6cf; font-size: 13px; line-height: 1.6; }
+  .gbtns { display: flex; gap: 8px; margin-top: 14px; }
+  .gbtns button { flex: 1; padding: 11px 0; border-radius: 5px; font-size: 12px; font-weight: 900; letter-spacing: 1px; cursor: pointer; font-family: inherit; border: none; }
+  .gbtns .primary { background: var(--primary); color: #000; }
+  .gbtns .ghost { background: transparent; border: 1px solid var(--border); color: var(--dim); }
+  .gcard .hinttap { margin-top: 10px; color: var(--gold); font-size: 11.5px; font-weight: 700; }
+  .errchips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+  .errchip { border: 1px solid rgba(255,59,48,.5); background: rgba(255,59,48,.08); color: #ff8a82; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; border-radius: 14px; padding: 5px 12px; cursor: pointer; font-family: inherit; }
+
+  /* progress rail */
+  .rail { display: flex; gap: 5px; margin-bottom: 14px; }
+  .rail i { flex: 1; height: 4px; border-radius: 2px; background: var(--border); }
+  .rail i.done { background: var(--primary); }
+  .rail i.err { background: var(--red); }
+
+  /* ---------- Troubleshooting matrix ---------- */
+  .matrix { margin-top: 60px; }
+  .matrix h2 { font-size: clamp(22px, 3.5vw, 30px); font-weight: 900; letter-spacing: -.4px; margin: 8px 0 6px; text-wrap: balance; }
+  .matrix > p { color: var(--dim); font-size: 14px; max-width: 66ch; }
+  .tcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 20px; }
+  .tcard { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--red); border-radius: 6px; padding: 15px 16px; }
+  .tcard .tk { color: #ff8a82; font-size: 10px; font-weight: 900; letter-spacing: 1.6px; }
+  .tcard h3 { font-size: 15.5px; font-weight: 900; margin: 5px 0 6px; }
+  .tcard .why { color: var(--dim); font-size: 12.5px; line-height: 1.55; margin-bottom: 8px; }
+  .tcard .fix { color: #cfd6cf; font-size: 12.5px; line-height: 1.55; border-top: 1px solid var(--border); padding-top: 8px; }
+  .tcard .fix b { color: var(--primary); font-size: 10px; letter-spacing: 1.4px; display: block; margin-bottom: 3px; }
+  .tcard button { margin-top: 10px; background: transparent; border: 1px solid var(--border); color: var(--dim); border-radius: 4px; padding: 7px 12px; font-size: 10.5px; font-weight: 900; letter-spacing: 1px; cursor: pointer; font-family: inherit; }
+  .tcard button:hover { color: var(--gold); border-color: var(--gold); }
+
+  .onboard { margin-top: 22px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 6px; padding: 16px 18px; }
+  .onboard h3 { font-size: 16px; font-weight: 900; margin-bottom: 6px; }
+  .onboard p { color: var(--dim); font-size: 13.5px; line-height: 1.6; }
+  .onboard code { background: #000; border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; color: #7fd390; font-size: 12.5px; }
+  .onboard a.mailbtn { display: inline-block; margin-top: 12px; background: var(--primary); color: #000; font-weight: 900; letter-spacing: 1px; font-size: 12px; border-radius: 5px; padding: 11px 18px; text-decoration: none; }
+  button:focus-visible, a:focus-visible, .tap:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; text-align: center; letter-spacing: .5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <div class="mark">V</div>
+    <div>
+      <div class="brand">VANTAGE<em>LIFE</em> 2.1</div>
+      <div class="tagline">iPhone Setup &amp; Sign-In Guide · AO Premier</div>
+    </div>
+  </header>
+
+  <section class="intro">
+    <div class="kicker">Interactive demo · install to dashboard</div>
+    <h1>Get on your scoreboard — and get unstuck if anything goes sideways.</h1>
+    <p>This simulated iPhone walks the <b>entire journey</b>: Apple's TestFlight invite → get TestFlight → the launch email → install → sign in → dashboard. Tap the glowing elements on the phone to move forward — and tap the <b style="color:#ff8a82">red chips</b> to see every error agents have hit, why it happens, and the exact fix. Nothing here touches your real account.</p>
+  </section>
+
+  <div class="stage">
+    <div class="phone-col">
+      <div class="phone" id="phone">
+        <div class="statusbar"><span id="clock">9:41</span><span class="right">●●● ⌁ ▮</span></div>
+
+        <!-- INBOX -->
+        <div class="screen" data-s="inbox">
+          <div class="inbox">
+            <div class="inbox-head"><div class="inbox-search">🔍&nbsp; Search in mail</div></div>
+            <div class="inbox-label">PRIMARY</div>
+            <div class="mail unread tap" data-go="email" role="button" tabindex="0">
+              <div class="av" style="background:#319842">L</div>
+              <div style="flex:1">
+                <div class="from">Linnzi <small>Aug 17</small></div>
+                <div class="subj">The new AO Premier agent app is here <span class="badge-new">NEWEST</span></div>
+                <div class="prev">betatest@hypervividstudios.com — VantageLife is here. Logging your numbers…</div>
+              </div>
+            </div>
+            <div class="mail tap" data-go="appleinvite" role="button" tabindex="0">
+              <div class="av" style="background:#fff;color:#000">TF</div>
+              <div style="flex:1">
+                <div class="from">Linnzi Ek via TestFlight <small>Aug 6</small></div>
+                <div class="subj">Linnzi Ek has invited you to test VantageLife 2.1.</div>
+                <div class="prev">VantageLife 2.1 · By Linnzi Ek for iOS — View in TestFlight (older invite)</div>
+              </div>
+            </div>
+            <div class="mail">
+              <div class="av" style="background:#6b7280">P</div>
+              <div style="flex:1">
+                <div class="from">Premier Weekly <small>Aug 1</small></div>
+                <div class="subj">WAR report recap</div>
+                <div class="prev">Great week, team —</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LAUNCH EMAIL -->
+        <div class="screen" data-s="email">
+          <div class="lmail">
+            <div class="lmail-bar tap" data-go="inbox" role="button" tabindex="0" style="width:60px">‹ Back</div>
+            <div style="padding:2px 16px 8px">
+              <div style="color:#e8eaed;font-weight:700;font-size:15px">The new AO Premier agent app is here</div>
+              <div style="color:#9aa0a6;font-size:11.5px;margin-top:2px">Linnzi &lt;betatest@hypervividstudios.com&gt; · Aug 17</div>
+            </div>
+            <div class="lmail-paper">
+              <div class="lmail-brand">VANTAGE<em>LIFE</em><small>AO PREMIER AGENTS</small></div>
+              <div class="pill-live">NOW LIVE</div>
+              <h2>YOUR APP<br>IS HERE</h2>
+              <p><b>Hi Jordan,</b></p>
+              <p>VantageLife is here. Logging your numbers takes about ten seconds — every entry counts toward your board.</p>
+              <div class="btn-join tap" data-go="testflight" role="button" tabindex="0">JOIN VIA TESTFLIGHT →</div>
+              <div class="andr"><b>ANDROID · SCAN OR TAP</b>Scan the QR code in this email, or tap "Open the Android build." First time sideloading? The step-by-step guide covers the Play Protect screen.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- APPLE TESTFLIGHT INVITE EMAIL -->
+        <div class="screen" data-s="appleinvite">
+          <div class="lmail">
+            <div class="lmail-bar tap" data-go="inbox" role="button" tabindex="0" style="width:60px">‹ Back</div>
+            <div style="padding:2px 16px 10px">
+              <div style="color:#e8eaed;font-weight:700;font-size:16px">Linnzi Ek has invited you to test VantageLife 2.1.</div>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+                <div style="width:34px;height:34px;border-radius:17px;background:#fff;color:#000;display:grid;place-items:center;font-weight:800;font-size:12px">TF</div>
+                <div><div style="color:#e8eaed;font-weight:700;font-size:13px">Linnzi Ek via TestFlight ✔</div><div style="color:#9aa0a6;font-size:11px">Aug 6 · to me</div></div>
+              </div>
+            </div>
+            <div style="background:#1a1c20;margin:0 10px;border-radius:8px;text-align:center;padding:26px 18px">
+              <div style="width:96px;height:96px;border-radius:22px;background:#fff;margin:0 auto 14px;display:grid;place-items:center">
+                <div style="width:64px;height:64px;border-radius:50%;background:conic-gradient(from 200deg,#2bb3a3,#2f7fc1,#46c98d,#2bb3a3);position:relative"><span style="position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:26px;font-weight:900">↗</span></div>
+              </div>
+              <div style="color:#e8eaed;font-size:21px;font-weight:600;line-height:1.3;margin-bottom:18px">VantageLife 2.1<br>By Linnzi Ek for iOS.</div>
+              <div class="tap" data-go="tfsteps" role="button" tabindex="0" style="background:#3b6fdb;color:#fff;border-radius:8px;padding:14px 0;font-weight:700;font-size:15px">View in TestFlight</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TESTFLIGHT.APPLE.COM STEPS PAGE -->
+        <div class="screen" data-s="tfsteps">
+          <div style="flex:1;background:#000;overflow:hidden;padding:6px 12px 0">
+            <div style="background:linear-gradient(135deg,#5a95c8,#3a70a0);border-radius:14px 14px 0 0;text-align:center;padding:20px 0 16px">
+              <div style="width:74px;height:74px;border-radius:16px;background:#16181c;margin:0 auto;display:grid;place-items:center;border:1px solid rgba(255,255,255,.2)"><span style="color:#5ab0f7;font-size:32px">✈</span></div>
+            </div>
+            <div style="background:#fff;color:#111;border-radius:0 0 14px 14px;padding:14px 16px 16px">
+              <div style="color:#8e8e93;font-size:11px;font-weight:800;letter-spacing:.5px">STEP 1</div>
+              <div style="font-size:22px;font-weight:800;margin:2px 0 6px">Get TestFlight</div>
+              <div style="font-size:12.5px;color:#444;line-height:1.5;margin-bottom:10px">Help developers test beta versions of their apps using the TestFlight app. Download TestFlight on the App Store.</div>
+              <div style="display:inline-block;border:1px solid #0a84ff;color:#0a84ff;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600">View in App Store</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#3e6a8f,#2c4a66);border-radius:14px 14px 0 0;text-align:center;padding:18px 0 14px;margin-top:12px">
+              <div style="width:70px;height:70px;border-radius:16px;background:#fff;margin:0 auto;display:grid;place-items:center"><div style="width:48px;height:48px;border-radius:50%;background:conic-gradient(from 200deg,#2bb3a3,#2f7fc1,#46c98d,#2bb3a3);position:relative"><span style="position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:20px;font-weight:900">↗</span></div></div>
+            </div>
+            <div style="background:#fff;color:#111;border-radius:0 0 14px 14px;padding:14px 16px 16px">
+              <div style="color:#8e8e93;font-size:11px;font-weight:800;letter-spacing:.5px">STEP 2</div>
+              <div style="font-size:22px;font-weight:800;margin:2px 0 6px">View VantageLife 2.1 Beta</div>
+              <div class="tap" data-go="inbox-return" role="button" tabindex="0" style="display:inline-block;border:1px solid #0a84ff;color:#0a84ff;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600">View in TestFlight</div>
+            </div>
+            <div style="text-align:center;color:#8e8e93;font-size:11.5px;font-weight:600;margin-top:10px">testflight.apple.com</div>
+          </div>
+        </div>
+
+        <!-- REVOKED -->
+        <div class="screen" data-s="revoked">
+          <div class="safari">
+            <div class="safari-url">testflight.apple.com</div>
+            <div class="rev-card">
+              <div class="art"></div>
+              <p>This invitation has been revoked or is invalid. Request a new invitation from the developer.</p>
+            </div>
+            <div class="safari-foot">Copyright © 2026 Apple Inc. All rights reserved.</div>
+          </div>
+        </div>
+
+        <!-- TESTFLIGHT -->
+        <div class="screen" data-s="testflight">
+          <div class="tf">
+            <div class="tf-hero">
+              <div class="tf-icon"><div class="globe"></div></div>
+              <h2>VantageLife 2.1</h2>
+              <div class="tf-btns">
+                <div class="tf-btn tap" id="tf-install" role="button" tabindex="0">Install</div>
+                <div class="tf-btn" style="opacity:.7">Send Feedback</div>
+              </div>
+            </div>
+            <div class="tf-meta">
+              <div><div class="lab">DEVELOPER</div><div class="val">👤</div><div class="sub">Linnzi Ek</div></div>
+              <div><div class="lab">VERSION</div><div class="val">1.0.0</div><div class="sub">Build 33</div></div>
+              <div><div class="lab">EXPIRES</div><div class="val">86</div><div class="sub">Days</div></div>
+            </div>
+            <div class="tf-sect">What to Test</div>
+            <div class="tf-card">On the opening screen you'll see "Sign in with Apple" plus a row of demo logins labeled by level (L1… <span class="more">more</span></div>
+            <div class="tf-sect">App Description</div>
+            <div class="tf-card">VantageLife is a real-time sales tracking and intelligence platform designed for insurance sales tea… <span class="more">more</span></div>
+          </div>
+        </div>
+
+        <!-- WHAT TO TEST SHEET -->
+        <div class="screen" data-s="whattotest">
+          <div style="flex:1;background:#000;padding:18px 20px 0;overflow:hidden">
+            <div style="font-size:24px;font-weight:800;margin-bottom:14px">From the Developer</div>
+            <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
+              <div style="width:52px;height:52px;border-radius:12px;background:#fff;display:grid;place-items:center"><div style="width:36px;height:36px;border-radius:50%;background:conic-gradient(from 200deg,#2bb3a3,#2f7fc1,#46c98d,#2bb3a3);position:relative"><span style="position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:15px;font-weight:900">↗</span></div></div>
+              <div><div style="font-weight:800;font-size:16px">VantageLife 2.1</div><div style="color:#8e8e93;font-size:12.5px">Version 1.0.0 (33) · Expires in 86 days</div></div>
+            </div>
+            <div style="font-weight:800;font-size:17px;margin-bottom:8px">What to Test</div>
+            <div style="color:#d5d5d9;font-size:13.5px;line-height:1.55">On the opening screen you'll see "Sign in with Apple" plus a row of demo logins labeled by level (L1 Agent, L2 GA, L3 MGA, L4 RGA). Those demo buttons are there for Team Expo testers — tap any one to enter the app as that role. Apple sign-in only works if your email address is already in our agent database; if it isn't, you'll land on an error screen. That's expected behavior, not a bug.</div>
+            <div class="tap" data-go="sharefb" role="button" tabindex="0" style="background:#0a84ff;color:#fff;border-radius:24px;text-align:center;font-weight:700;font-size:16px;padding:13px 0;margin-top:20px">Continue</div>
+          </div>
+        </div>
+
+        <!-- SHARE FEEDBACK SHEET -->
+        <div class="screen" data-s="sharefb">
+          <div style="flex:1;background:#000;padding:18px 20px 0;overflow:hidden;display:flex;flex-direction:column">
+            <div style="font-size:24px;font-weight:800;margin-bottom:6px">Share Feedback</div>
+            <div style="color:#b9b9be;font-size:14px;line-height:1.5;margin-bottom:16px">Take a screenshot and send to the developer directly from this beta app.</div>
+            <div style="background:#e9e9ec;border-radius:16px;flex:1;max-height:330px;display:grid;place-items:center">
+              <div style="width:120px;height:230px;background:#2c2c2e;border-radius:22px;border:5px solid #1c1c1e;position:relative">
+                <div style="position:absolute;left:-9px;top:70px;width:16px;height:16px;border-radius:8px;background:#0a84ff"></div>
+                <div style="position:absolute;right:-9px;top:70px;width:16px;height:16px;border-radius:8px;background:#0a84ff"></div>
+              </div>
+            </div>
+            <div class="tap" data-go="login" role="button" tabindex="0" style="background:#0a84ff;color:#fff;border-radius:24px;text-align:center;font-weight:700;font-size:16px;padding:13px 0;margin-top:16px">Continue</div>
+            <div style="text-align:center;color:#8e8e93;font-weight:600;font-size:14px;padding:10px 0 0">Learn More</div>
+          </div>
+        </div>
+
+        <!-- READY TO TEST -->
+        <div class="screen" data-s="readytotest">
+          <div class="rtt">
+            <h2>Ready To Test</h2>
+            <p>Before you can start testing, a developer has to invite you to test one of their TestFlight apps. To accept an invite, tap on the link in the email or enter invitation redeem code.</p>
+            <div class="redeem">Redeem</div>
+          </div>
+        </div>
+
+        <!-- LOGIN -->
+        <div class="screen" data-s="login">
+          <div class="login">
+            <div class="brandrow">
+              <div class="mark2">V</div>
+              <div><div class="b1">VANTAGE<em>LIFE</em> 2.1</div><div class="b2">Real-Time Impact Culture · AO Premier</div></div>
+            </div>
+            <div class="k">EXECUTIVE MASTER BUILD</div>
+            <h2>Sign in to your scoreboard.</h2>
+            <div class="sub">The 174-person sales force lives here. Pulse, Platinum Wall, and the Eraser tool — all in one.</div>
+            <div class="gbtn tap" data-go="gpick" role="button" tabindex="0"><span class="glogo"></span>Sign in with Google</div>
+            <div class="abtn tap" data-go="pend-blank" role="button" tabindex="0"> Sign in with Apple</div>
+            <div class="divider">OR DEMO BY LEVEL</div>
+            <div class="lvl" style="--tint:#319842"><div class="bdg">L1</div><div><b>AGENT</b><span>Personal stats + Pulse entry</span></div></div>
+            <div class="lvl" style="--tint:#00A0E4"><div class="bdg">L2</div><div><b>GA</b><span>Co-Executive Producer · Team view</span></div></div>
+            <div class="lvl" style="--tint:#FFD700"><div class="bdg">L3</div><div><b>MGA</b><span>Executive Producer · Full agency hierarchy</span></div></div>
+            <div class="foot">By continuing you agree to AO Premier's standards of accountability.</div>
+          </div>
+        </div>
+
+        <!-- GOOGLE PICKER -->
+        <div class="screen" data-s="gpick">
+          <div class="gpick">
+            <div class="sheet-head">
+              <div class="g" style="font-family:Arial"><span style="color:#4285f4">G</span><span style="color:#ea4335">o</span><span style="color:#fbbc05">o</span><span style="color:#4285f4">g</span><span style="color:#34a853">l</span><span style="color:#ea4335">e</span></div>
+              <p>Choose an account to continue to VantageLife</p>
+            </div>
+            <div class="gacct tap" data-go="notif" role="button" tabindex="0">
+              <div class="av" style="background:#319842">J</div>
+              <div><b>Jordan Cole</b><span>jordan.cole.ao@gmail.com</span></div>
+              <div class="tag ok">ON FILE</div>
+            </div>
+            <div class="gacct tap" data-go="pend-email" role="button" tabindex="0">
+              <div class="av" style="background:#8e44ad">J</div>
+              <div><b>Jordan Cole</b><span>jcole.personal@gmail.com</span></div>
+              <div class="tag warn">NOT ON ROSTER</div>
+            </div>
+            <div class="gacct"><div class="av" style="background:#3a3a3c">＋</div><div><b>Use another account</b><span>&nbsp;</span></div></div>
+          </div>
+        </div>
+
+        <!-- INVALID STATE JSON -->
+        <div class="screen" data-s="jsonerr">
+          <div class="jsonerr">
+            <div class="sheetbar"><div class="x">✕</div><div class="host">…kend.emergentagent.com</div><div class="x">⧉</div></div>
+            <pre>{"detail":
+{"error":"invalid_request","error_description":"Invalid state parameter"}}</pre>
+          </div>
+        </div>
+
+        <!-- PENDING (blank email — Apple) -->
+        <div class="screen" data-s="pend-blank">
+          <div class="pend">
+            <div class="clock"></div>
+            <h2>Account Pending</h2>
+            <p>&nbsp;isn't linked to an AO Premier agent profile yet. Reach out to your office to get added — once you're on the roster, signing in again will take you straight to your dashboard.</p>
+            <div class="hint">Signed in with Apple? Sign out and try Google using the email your upline has on file.</div>
+            <div class="signout tap" data-go="login" role="button" tabindex="0">Sign Out</div>
+          </div>
+        </div>
+
+        <!-- PENDING (email shown — not on roster) -->
+        <div class="screen" data-s="pend-email">
+          <div class="pend">
+            <div class="clock"></div>
+            <h2>Account Pending</h2>
+            <p><b>jcole.personal@gmail.com</b> isn't linked to an AO Premier agent profile yet. Reach out to your office to get added — once you're on the roster, signing in again will take you straight to your dashboard.</p>
+            <div class="hint">Signed in with Apple? Sign out and try Google using the email your upline has on file.</div>
+            <div class="signout tap" data-go="login" role="button" tabindex="0">Sign Out</div>
+          </div>
+        </div>
+
+        <!-- NOTIFICATIONS -->
+        <div class="screen" data-s="notif">
+          <div class="notif">
+            <div class="dash-dim">
+              <div class="dash-head"><div><div class="dash-brand">VANTAGE<em>LIFE</em></div><div class="dash-sub">Jordan Cole · <em>Agent</em></div></div><div class="day-pill">📅 2026-08-18</div></div>
+              <div class="seg"><span class="on">Daily</span><span>Weekly</span><span>Monthly</span></div>
+              <div class="sect">TODAY'S TEAM PRODUCTION</div>
+              <div class="stats">
+                <div class="stat" style="--ac:#319842"><div class="lab">Team ALP</div><div class="val">$45,210</div></div>
+                <div class="stat" style="--ac:#00558C"><div class="lab">Sits</div><div class="val">31</div></div>
+                <div class="stat" style="--ac:#FFD700"><div class="lab">Sales</div><div class="val">12</div></div>
+              </div>
+            </div>
+            <div class="ndialog">
+              <h3>"VantageLife" Would Like to Send You Notifications</h3>
+              <p>Notifications may include alerts, sounds, and icon badges. These can be configured in Settings.</p>
+              <div class="nbtn tap" data-go="dash" role="button" tabindex="0">Allow</div>
+              <div class="nbtn">Allow in Scheduled Summary</div>
+              <div class="nbtn dont">Don't Allow</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DASHBOARD -->
+        <div class="screen" data-s="dash">
+          <div class="dash">
+            <div class="success-toast">✓ YOU'RE IN — WELCOME TO THE SCOREBOARD</div>
+            <div style="height:44px"></div>
+            <div class="dash-head"><div><div class="dash-brand">VANTAGE<em>LIFE</em></div><div class="dash-sub">Jordan Cole · <em>Agent</em></div></div><div class="day-pill">📅 2026-08-18</div></div>
+            <div class="seg"><span class="on">Daily</span><span>Weekly</span><span>Monthly</span></div>
+            <div class="sect">TODAY'S TEAM PRODUCTION</div>
+            <div class="stats">
+              <div class="stat" style="--ac:#319842"><div class="lab">Team ALP</div><div class="val">$45,210</div><div class="d">▲ +8.5%</div></div>
+              <div class="stat" style="--ac:#00558C"><div class="lab">Sits</div><div class="val">31</div></div>
+              <div class="stat" style="--ac:#FFD700"><div class="lab">Sales</div><div class="val">12</div></div>
+            </div>
+            <div class="wallcard">
+              <div class="sect" style="margin-bottom:4px">PLATINUM WALL</div>
+              <div class="wallrow"><b>🏆 M. Alwatan</b><span>$5,200</span></div>
+              <div class="wallrow"><b>⚡ T. Fields</b><span>$2,980</span></div>
+            </div>
+            <div class="tabbar">
+              <div class="on"><i>📊</i>DASHBOARD</div><div><i>📈</i>PULSE</div><div><i>📣</i>SHOUTOUTS</div><div><i>▦</i>MORE</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="guide-col">
+      <div class="rail" id="rail"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="gcard" id="gcard">
+        <div class="stepk" id="g-step">STEP 1 OF 6</div>
+        <h3 id="g-title"></h3>
+        <div id="g-body"></div>
+        <div class="gbtns" id="g-btns"></div>
+        <div class="errchips" id="g-chips"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TROUBLESHOOTING ================= -->
+  <section class="matrix">
+    <div class="kicker" style="color:#ff8a82">Troubleshooting · every known snag</div>
+    <h2>If something looks wrong, it's one of these five.</h2>
+    <p>Tap "Show me" to load the exact screen on the phone above, with its fix.</p>
+
+    <div class="tcards">
+      <div class="tcard">
+        <div class="tk">ERROR 1</div><h3>"Invitation revoked or invalid"</h3>
+        <div class="why">You tapped a TestFlight link from an <b>older email</b> — old invite links die when a new build goes out. Also appears if the link itself was wrong.</div>
+        <div class="fix"><b>FIX</b>Go back to your inbox and open the <b>newest</b> "The new AO Premier agent app is here" email from betatest@hypervividstudios.com. Tap JOIN VIA TESTFLIGHT there — it always carries the current build.</div>
+        <button data-jump="revoked">Show me</button>
+      </div>
+      <div class="tcard">
+        <div class="tk">ERROR 2</div><h3>TestFlight says "Ready To Test"</h3>
+        <div class="why">You opened the TestFlight app directly. On its own it shows nothing — the invite has to arrive <b>through the email link</b>. Don't type anything into Redeem.</div>
+        <div class="fix"><b>FIX</b>Switch to your inbox, open the newest "The new AO Premier agent app is here" email, tap JOIN VIA TESTFLIGHT — it deep-links into TestFlight with VantageLife attached.</div>
+        <button data-jump="readytotest">Show me</button>
+      </div>
+      <div class="tcard">
+        <div class="tk">ERROR 3</div><h3>No invite email at all</h3>
+        <div class="why">If no link ever works and you can't find any invitation, you're probably <b>not on the tester list yet</b> — we have no email on file for you.</div>
+        <div class="fix"><b>FIX</b>Send your onboarding email (form below): name, email, phone, and upline to betatest@hypervividstudios.com. Then watch that inbox for the fresh invite.</div>
+        <button data-jump="inbox">Show me</button>
+      </div>
+      <div class="tcard">
+        <div class="tk">ERROR 4</div><h3>Code page: "Invalid state parameter"</h3>
+        <div class="why">During Google sign-in the browser lands on a raw code page reading <b>"invalid_request … Invalid state parameter."</b> This was a launch-week platform bug — it has been fixed for all affected agents.</div>
+        <div class="fix"><b>FIX</b>Close the browser sheet (✕), return to VantageLife, and tap Sign in with Google again — a fresh attempt goes through. Still stuck? Email betatest@hypervividstudios.com.</div>
+        <button data-jump="jsonerr">Show me</button>
+      </div>
+      <div class="tcard">
+        <div class="tk">ERROR 5</div><h3>"Account Pending" after sign-in</h3>
+        <div class="why">Two causes: you signed in with <b>Apple</b> (or the wrong Google account), so the email doesn't match the roster — or you don't have an <b>active profile</b> in the app yet.</div>
+        <div class="fix"><b>FIX</b>Tap Sign Out, then Sign in with <b>Google</b> using the email your upline has on file. No profile yet? Send the onboarding email below — once you're on the roster, signing in again goes straight to your dashboard.</div>
+        <button data-jump="pend-email">Show me</button>
+      </div>
+    </div>
+
+    <div class="onboard">
+      <h3>Need to be added? One email gets you onboarded.</h3>
+      <p>Write to <code>betatest@hypervividstudios.com</code> with exactly four things: your <b style="color:#fff">first and last name</b>, the <b style="color:#fff">email address</b> to invite, your <b style="color:#fff">phone number</b>, and your <b style="color:#fff">upline</b>. You'll get a fresh TestFlight invitation at that address.</p>
+      <a class="mailbtn" href="mailto:betatest@hypervividstudios.com?subject=VantageLife%20Access%20Request&body=First%20and%20last%20name%3A%20%0AEmail%20address%20to%20invite%3A%20%0APhone%20number%3A%20%0AUpline%3A%20">OPEN A PRE-FILLED EMAIL →</a>
+    </div>
+  </section>
+
+  <footer>VANTAGELIFE 2.1 · AO PREMIER · AMERICA/DETROIT — SIMULATED DEVICE · SAMPLE DATA ONLY</footer>
+</div>
+
+<script>
+(function () {
+  // ---- guide content per state ----
+  // step: index on the 6-segment happy-path rail (null for error states)
+  var GUIDE = {
+    inbox: {
+      step: 0, title: "START WITH APPLE'S INVITE",
+      body: '<p>Two emails matter, in order. <b>First:</b> the invitation from Apple — sender <b>"Linnzi Ek via TestFlight"</b>, subject <b>"Linnzi Ek has invited you to test VantageLife 2.1."</b> It sets up TestFlight and the beta.</p><p>👉 Tap the <b>Linnzi Ek via TestFlight</b> email.</p>',
+      chips: [['revoked', 'Invite says revoked/invalid?'], ['inbox-none', 'No invite email at all?']]
+    },
+    'inbox-none': {
+      err: true, title: 'NO INVITE EMAIL AT ALL', k: 'ERROR · NOT ON THE LIST',
+      body: '<p>If you can\'t find any invitation and no link ever works, we likely have <b>no email on file for you</b> — you were never added to the tester list.</p>',
+      fix: '<div class="fk">THE FIX — GET ONBOARDED</div><ol><li>Email <b style="color:#7fd390">betatest@hypervividstudios.com</b></li><li>Include: first &amp; last name, email address, phone number, and your upline</li><li>Watch that inbox for the fresh TestFlight invitation</li></ol>',
+      back: ['inbox', 'BACK TO INBOX']
+    },
+    appleinvite: {
+      step: 1, title: "APPLE'S TESTFLIGHT INVITATION",
+      body: '<p>This is the email from Apple. Tap the blue <b>View in TestFlight</b> button — it opens the TestFlight setup page in your browser.</p><p>👉 Tap <b>View in TestFlight</b>.</p>',
+      chips: [['revoked', 'Button says revoked/invalid?']]
+    },
+    tfsteps: {
+      step: 2, title: 'GET TESTFLIGHT, THEN VIEW THE BETA',
+      body: '<p>Two cards on this Apple page: <b>Step 1 — Get TestFlight</b> (install it from the App Store if you don\'t have it yet), then <b>Step 2 — View VantageLife 2.1 Beta</b> to accept the invite in TestFlight.</p><p><b>After that, go back to your inbox</b> — the launch email has the link to the current build.</p><p>👉 Tap <b>View in TestFlight</b> on Step 2.</p>',
+      chips: []
+    },
+    'inbox-return': {
+      step: 3, title: 'NOW OPEN THE LAUNCH EMAIL',
+      body: '<p>Back in your inbox, open the <b>newest</b> launch email — from <b>betatest@hypervividstudios.com</b>, subject <b>"The new AO Premier agent app is here."</b> It always links the current build.</p><p>👉 Tap the email from <b>Linnzi</b> with the "NEWEST" badge.</p>',
+      chips: [['revoked', 'Tapped an old invite instead?']]
+    },
+    email: {
+      step: 4, title: 'THE LAUNCH EMAIL',
+      body: '<p>Sent by Linnzi from <b>betatest@hypervividstudios.com</b>. iPhone users: tap <b>JOIN VIA TESTFLIGHT →</b>. (Android users use the QR code / Android build link in the same email.)</p><p>👉 Tap the green button on the phone.</p>',
+      chips: []
+    },
+    revoked: {
+      err: true, title: '"INVITATION REVOKED OR INVALID"', k: 'ERROR · STALE LINK',
+      body: '<p>This Safari page means the link you tapped came from an <b>older email</b> (or was the wrong link). TestFlight invite links expire when a new one goes out.</p>',
+      fix: '<div class="fk">THE FIX</div><p>Go back to your inbox and open the <b style="color:#fff">newest</b> "The new AO Premier agent app is here" email (from betatest@hypervividstudios.com) — its JOIN VIA TESTFLIGHT button always has the current build.</p>',
+      back: ['inbox-return', 'BACK TO INBOX — DO IT RIGHT']
+    },
+    testflight: {
+      step: 5, title: 'INSTALL FROM TESTFLIGHT',
+      body: '<p>The launch email lands you on VantageLife 2.1 in TestFlight. Tap <b>Install</b>, wait for the spinner, and the button becomes <b>Open</b>.</p><p>👉 Tap <b>Install</b>, then tap <b>Open</b>.</p>',
+      chips: [['readytotest', 'TestFlight looks empty?']]
+    },
+    whattotest: {
+      step: 5, title: 'READ "WHAT TO TEST"',
+      body: '<p>First open shows notes from the developer. Two things worth knowing: the <b>demo logins are for Team Expo testers</b>, and <b>Apple sign-in only matches if your email is in the agent database</b> — landing on an error screen with Apple is expected, not broken.</p><p>👉 Tap <b>Continue</b>.</p>',
+      chips: []
+    },
+    sharefb: {
+      step: 5, title: 'SHARE FEEDBACK (FYI)',
+      body: '<p>TestFlight explains its feedback tool: take a screenshot inside the beta and you can send it straight to the developer. Handy if you ever want to report something.</p><p>👉 Tap <b>Continue</b> — next stop, sign-in.</p>',
+      chips: []
+    },
+    readytotest: {
+      err: true, title: 'TESTFLIGHT SAYS "READY TO TEST"', k: 'ERROR · OPENED TESTFLIGHT DIRECTLY',
+      body: '<p>Opening the TestFlight app on its own shows this empty screen — the invite only arrives <b>through the email links</b>. Don\'t type anything into Redeem.</p><p>This is also what you\'ll see if your invite link wasn\'t correct, or if we have no email on file for you.</p>',
+      fix: '<div class="fk">THE FIX</div><p>Go to your inbox → newest "The new AO Premier agent app is here" email → <b style="color:#fff">JOIN VIA TESTFLIGHT</b>. It deep-links into TestFlight with VantageLife attached. Never invited? Send the onboarding email (below the phone).</p>',
+      back: ['inbox-return', 'BACK TO INBOX — DO IT RIGHT']
+    },
+    login: {
+      step: 6, title: 'SIGN IN — USE GOOGLE',
+      body: '<p>The rule that prevents 90% of problems: <b>Sign in with Google, using the exact email your upline has on file.</b></p><p>Sign in with Apple completes, but if Apple hides your email (or it isn\'t the roster one), you\'ll land on Account Pending.</p><p>👉 Tap <b>Sign in with Google</b>. Or tap Apple to see what can happen.</p>',
+      chips: [['pend-blank', 'What if I use Apple?']]
+    },
+    gpick: {
+      step: 6, title: 'PICK THE RIGHT ACCOUNT',
+      body: '<p>Phones often hold several Google accounts. Choose the one <b>your upline has on file</b> — that\'s what links you to your agent profile and your production data.</p><p>👉 Tap the <b>ON FILE</b> account. Or pick the personal one and see what happens.</p>',
+      chips: [['jsonerr', 'Saw a weird code page here?']]
+    },
+    jsonerr: {
+      err: true, title: '"INVALID STATE PARAMETER"', k: 'ERROR · SIGN-IN GLITCH (FIXED)',
+      body: '<p>A raw code page reading <b>"invalid_request … Invalid state parameter"</b> could appear right after choosing your Google account. This was a launch-week platform bug — <b>it has been fixed</b> for all affected agents.</p>',
+      fix: '<div class="fk">THE FIX (IF IT EVER RETURNS)</div><ol><li>Tap ✕ to close the browser sheet</li><li>Back in VantageLife, tap <b style="color:#7fd390">Sign in with Google</b> again — a fresh attempt goes through</li><li>Still stuck? Email betatest@hypervividstudios.com</li></ol>',
+      back: ['login', 'TRY SIGN-IN AGAIN']
+    },
+    'pend-blank': {
+      err: true, title: 'ACCOUNT PENDING (APPLE SIGN-IN)', k: 'ERROR · EMAIL DIDN\'T MATCH',
+      body: '<p>Notice the message has <b>no email address</b> in it — Apple hid your email, so there was nothing to match against the AO Premier roster. The yellow hint on screen says it all.</p>',
+      fix: '<div class="fk">THE FIX</div><p>Tap <b style="color:#fff">Sign Out</b>, then <b style="color:#fff">Sign in with Google</b> using the email your upline has on file.</p>',
+      back: null
+    },
+    'pend-email': {
+      err: true, title: 'ACCOUNT PENDING (NOT ON ROSTER)', k: 'ERROR · WRONG EMAIL OR NO PROFILE',
+      body: '<p>You signed in fine — but <b>this email isn\'t linked to an agent profile</b>. Either it\'s not the address your upline has on file, or you don\'t have an active profile in the app yet.</p>',
+      fix: '<div class="fk">THE FIX</div><ol><li>Tap Sign Out → Sign in with Google using your <b style="color:#7fd390">on-file email</b></li><li>No profile at all? Email <b style="color:#7fd390">betatest@hypervividstudios.com</b> with your name, email, phone, and upline</li><li>Once you\'re on the roster, signing in again goes straight to the dashboard</li></ol>',
+      back: null
+    },
+    notif: {
+      step: 7, title: 'ALLOW NOTIFICATIONS',
+      body: '<p>First launch after sign-in, iOS asks about notifications. <b>Tap Allow</b> — this is how the 9 PM Pulse reminder reaches you so your streak never breaks.</p><p>👉 Tap <b>Allow</b>.</p>',
+      chips: []
+    },
+    dash: {
+      step: 7, k: 'COMPLETE', title: "YOU'RE IN 🎉",
+      body: '<p>That\'s the whole flow — you\'re on your scoreboard. The in-app guided walkthrough starts automatically on your first sign-in and walks your level\'s features.</p><p>From here: log your Nightly Pulse before 9 PM, watch the wall, get on the ticker.</p>',
+      chips: [], restart: true
+    }
+  };
+
+  var phone = document.getElementById('phone');
+  var rail = document.getElementById('rail');
+  var gcard = document.getElementById('gcard');
+  var gStep = document.getElementById('g-step'), gTitle = document.getElementById('g-title');
+  var gBody = document.getElementById('g-body'), gBtns = document.getElementById('g-btns'), gChips = document.getElementById('g-chips');
+  var cur = 'inbox';
+  // remembers the last happy-path state so error views can return sensibly
+  var lastGood = 'inbox';
+
+  function show(state) {
+    var g = GUIDE[state];
+    if (!g) return;
+    // screens: inbox-none reuses the inbox screen visual
+    var screenName = (state === 'inbox-none' || state === 'inbox-return') ? 'inbox' : state;
+    document.querySelectorAll('.screen').forEach(function (s) {
+      s.classList.toggle('on', s.dataset.s === screenName);
+    });
+    cur = state;
+    if (!g.err) lastGood = state;
+
+    // rail
+    var segs = rail.querySelectorAll('i');
+    segs.forEach(function (seg, i) {
+      seg.className = '';
+      if (g.err) { if (i === 0) seg.className = 'err'; }
+      else if (g.step != null && i <= g.step) seg.className = 'done';
+    });
+
+    gcard.classList.toggle('err', !!g.err);
+    gStep.textContent = g.err ? (g.k || 'ERROR') : (g.k || ('STEP ' + (g.step + 1) + ' OF 8'));
+    gTitle.textContent = g.title;
+    gBody.innerHTML = g.body + (g.fix ? '<div class="fixbox">' + g.fix + '</div>' : '');
+
+    // buttons
+    gBtns.innerHTML = '';
+    if (g.err) {
+      if (g.back) addBtn(g.back[1], 'primary', function () { show(g.back[0]); });
+      else addBtn('USE THE SIGN OUT BUTTON ON SCREEN ↑', 'ghost', function () { show('login'); });
+    } else if (g.restart) {
+      addBtn('RESTART THE DEMO', 'primary', function () { show('inbox'); });
+    } else {
+      // happy path: back + "do it for me" next
+      var order = ['inbox', 'appleinvite', 'tfsteps', 'inbox-return', 'email', 'testflight', 'whattotest', 'sharefb', 'login', 'gpick', 'notif', 'dash'];
+      var i = order.indexOf(state);
+      if (i > 0) addBtn('BACK', 'ghost', function () { show(order[i - 1]); });
+      if (i >= 0 && i < order.length - 1) addBtn('NEXT →', 'primary', function () { show(order[i + 1]); });
+    }
+
+    // chips
+    gChips.innerHTML = '';
+    (g.chips || []).forEach(function (c) {
+      var b = document.createElement('button');
+      b.className = 'errchip'; b.textContent = '⚠ ' + c[1];
+      b.addEventListener('click', function () { show(c[0]); });
+      gChips.appendChild(b);
+    });
+  }
+  function addBtn(label, cls, fn) {
+    var b = document.createElement('button');
+    b.className = cls; b.textContent = label;
+    b.addEventListener('click', fn);
+    gBtns.appendChild(b);
+  }
+
+  // Install -> (spinner) -> Open, matching the real TestFlight sequence
+  var tfBtn = document.getElementById('tf-install');
+  tfBtn.addEventListener('click', function () {
+    if (tfBtn.dataset.phase === 'open') { show('whattotest'); return; }
+    if (tfBtn.dataset.phase === 'busy') return;
+    tfBtn.dataset.phase = 'busy';
+    tfBtn.textContent = '◌';
+    setTimeout(function () { tfBtn.dataset.phase = 'open'; tfBtn.textContent = 'Open'; }, 900);
+  });
+
+  // taps inside the phone
+  phone.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-go]');
+    if (t) show(t.dataset.go);
+  });
+  phone.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var t = e.target.closest('[data-go]');
+    if (t) { e.preventDefault(); show(t.dataset.go); }
+  });
+
+  // troubleshooting jump buttons
+  document.querySelectorAll('[data-jump]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var s = b.dataset.jump;
+      show(s === 'inbox' ? 'inbox-none' : s);
+      document.querySelector('.stage').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
+  show('inbox');
+})();
+</script>
+</body>
+</html>

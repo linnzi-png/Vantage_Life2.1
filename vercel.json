@@ -4,6 +4,7 @@
   "framework": null,
   "rewrites": [
     { "source": "/tour", "destination": "/tour.html" },
+    { "source": "/iphone", "destination": "/iphone.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
