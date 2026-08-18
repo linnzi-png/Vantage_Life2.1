@@ -85,4 +85,21 @@ async def test_report_shape_missing_and_extra(client, seeded_db, sync_db):
     assert body["missing"][0].keys() == {"app_id", "name", "email"}
     assert {"name": "Tyler Grant", "email": "tylergrant@cmail.live",
             "role": "level_1"} in body["extra"]
-    assert body["ok"] == 0 and body["ambiguous"] == []
+    assert body["ok"] == 0 and body["ambiguous"] == [] and body["conflicts"] == []
+
+
+async def test_report_surfaces_conflicts(client, seeded_db, sync_db):
+    sync_db.agent_profiles.insert_one(
+        {"agent_id": "A1", "name": "Timothy Noe", "email": "", "role": "level_1"})
+    sync_db.agent_profiles.insert_one(
+        {"agent_id": "A2", "name": "Timothy Noe Test",
+         "email": "noetimothy1114@gmail.com", "role": "level_4"})
+    token = await admin_token(seeded_db)
+
+    r = await client.post("/api/admin/roster-audit/fix", headers=auth(token))
+    body = r.json()
+    conflict = next(c for c in body["conflicts"] if c["name"] == "Timothy Noe")
+    assert conflict["holders"] == [
+        {"name": "Timothy Noe Test", "role": "level_4", "agent_id": "A2"}]
+    # even on the fix route, a conflicted email is never written
+    assert sync_db.agent_profiles.find_one({"agent_id": "A1"})["email"] == ""

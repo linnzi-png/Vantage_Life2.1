@@ -27,6 +27,12 @@ What it reports (and what --fix changes):
              the in-app Add Person flow or extend import_roster.py.
   AMBIGUOUS  more than one profile plausibly matches a sheet row — never
              auto-fixed, listed for a human decision
+  CONFLICT   the sheet email is already stored on a DIFFERENT profile than
+             the one matching this person's name — never auto-fixed. Writing
+             it would leave two profiles sharing one login email, and which
+             one a sign-in resolves to is undefined (find_one order). Seen in
+             prod as leftover test profiles holding a real agent's email at
+             an elevated tier — resolve the other profile first.
   EXTRA      in agent_profiles but not on the sheet (demo seeds, other
              offices, or people the office dropped) — report only
 
@@ -36,6 +42,12 @@ Run from repo root:
     MONGO_URL="mongodb+srv://..." python backend/audit_roster_emails.py
     MONGO_URL="mongodb+srv://..." python backend/audit_roster_emails.py --fix
     python backend/audit_roster_emails.py path/to/other_roster.csv
+
+Resolving a CONFLICT: strip the email off the profile that should not hold it
+(e.g. a leftover test account), then re-run --fix so the real agent gets it:
+    python backend/audit_roster_emails.py --release-email <agent_id>
+The released profile keeps its data but can no longer be signed into; any
+login session linked to it drops back to "pending". Audit-logged.
 """
 import csv
 import os
@@ -93,7 +105,7 @@ def match_profiles(entry, profiles):
 def audit(db, roster, fix=False, changed_by="cli:audit_roster_emails"):
     profiles = list(db.agent_profiles.find({}, {"_id": 0}))
     findings = {"ok": [], "mismatch": [], "not_lower": [], "missing": [],
-                "ambiguous": [], "extra": []}
+                "ambiguous": [], "conflict": [], "extra": []}
     matched_agent_ids = set()
 
     # Stored emails the login lookup can never hit (it lowercases its side).
@@ -128,6 +140,12 @@ def audit(db, roster, fix=False, changed_by="cli:audit_roster_emails"):
         if stored == entry["email"]:
             findings["ok"].append(entry)
             continue
+        holders = [p for p in profiles
+                   if p["agent_id"] != profile["agent_id"]
+                   and str(p.get("email", "")).strip().lower() == entry["email"]]
+        if holders:
+            findings["conflict"].append((entry, profile, holders))
+            continue
         findings["mismatch"].append((entry, profile))
         if fix:
             db.agent_profiles.update_one(
@@ -159,9 +177,44 @@ def audit(db, roster, fix=False, changed_by="cli:audit_roster_emails"):
     return findings
 
 
+def release_email(db, agent_id: str, changed_by="cli:audit_roster_emails"):
+    """Strip the login email off one profile (keeps every other field), and
+    drop any login session linked to it back to pending. For retiring a
+    duplicate/test profile that holds a real agent's address."""
+    profile = db.agent_profiles.find_one({"agent_id": agent_id}, {"_id": 0})
+    if not profile:
+        raise SystemExit(f"No agent_profile with agent_id {agent_id!r}")
+    old = str(profile.get("email", ""))
+    db.agent_profiles.update_one(
+        {"agent_id": agent_id},
+        {"$set": {"email": "", "updated_at": now_utc()}})
+    unlinked = 0
+    if old:
+        unlinked = db.users.update_many(
+            {"email": old.strip().lower(), "agent_id": agent_id},
+            {"$set": {"role": "pending", "agent_id": None}}).modified_count
+    db.audit_log.insert_one({
+        "ts": now_utc(),
+        "action": "release_email",
+        "agent_id": agent_id,
+        "agent_name": profile.get("name"),
+        "changed_by": changed_by,
+        "original_value": old,
+        "new_value": "",
+    })
+    return profile, old, unlinked
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     fix = "--fix" in sys.argv
+    release_id = None
+    if "--release-email" in sys.argv:
+        idx = sys.argv.index("--release-email")
+        if idx + 1 >= len(sys.argv):
+            raise SystemExit("--release-email needs an agent_id")
+        release_id = sys.argv[idx + 1]
+        args = [a for a in args if a != release_id]
     csv_path = Path(args[0]) if args else DEFAULT_CSV
     roster = load_roster(csv_path)
     print(f"Roster: {len(roster)} people from {csv_path}")
@@ -170,6 +223,11 @@ def main():
     client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=15000)
     client.admin.command("ping")
     db = client[DB_NAME]
+
+    if release_id:
+        profile, old, unlinked = release_email(db, release_id)
+        print(f"Released email {old!r} from {profile.get('name')} ({release_id}); "
+              f"{unlinked} login(s) dropped to pending.")
 
     f = audit(db, roster, fix=fix)
     mode = "FIXED" if fix else "would fix (dry-run, pass --fix to apply)"
@@ -192,6 +250,11 @@ def main():
     for entry, hits in f["ambiguous"]:
         opts = "; ".join(f"{h.get('name')}<{h.get('email')}>" for h in hits)
         print(f"  {entry['name']} sheet:{entry['email']}  candidates: {opts}")
+
+    print(f"\nEMAIL HELD BY A DIFFERENT PROFILE (NEVER auto-fixed — resolve the other profile first): {len(f['conflict'])}")
+    for entry, profile, holders in f["conflict"]:
+        who = "; ".join(f"{h.get('name')} (role={h.get('role')}, agent_id={h.get('agent_id')})" for h in holders)
+        print(f"  {entry['name']:30s} sheet email {entry['email']} is already on: {who}")
 
     print(f"\nIN DATABASE BUT NOT ON SHEET (report only): {len(f['extra'])}")
     for p in f["extra"]:

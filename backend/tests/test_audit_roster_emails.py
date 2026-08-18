@@ -93,6 +93,40 @@ def test_ambiguous_multiple_candidates_not_fixed(db):
     assert emails == {"old1@gmail.com", "old2@gmail.com"}  # untouched
 
 
+def test_conflict_when_sheet_email_held_by_other_profile_never_fixed(db):
+    # Prod scenario: a leftover "Test" profile holds the real agent's email at
+    # level_4. Fixing would leave two profiles sharing one login email, and
+    # which one a sign-in resolves to is undefined — so it must be refused.
+    seed_profile(db, "A1", "Timothy Noe", "", role="level_1")
+    seed_profile(db, "A2", "Timothy Noe Test", "noetimothy1114@gmail.com", role="level_4")
+    entry = {"app_id": "AO0082", "name": "Timothy Noe", "email": "noetimothy1114@gmail.com"}
+    f = cli.audit(db, [entry], fix=True)
+    assert len(f["conflict"]) == 1
+    _e, matched, holders = f["conflict"][0]
+    assert matched["agent_id"] == "A1" and holders[0]["agent_id"] == "A2"
+    assert not f["mismatch"]
+    assert db.agent_profiles.find_one({"agent_id": "A1"})["email"] == ""  # untouched
+    assert db.audit_log.count_documents({}) == 0
+
+
+def test_release_email_strips_and_unlinks(db):
+    seed_profile(db, "A2", "Timothy Noe Test", "noetimothy1114@gmail.com", role="level_4")
+    db.users.insert_one({"user_id": "u1", "email": "noetimothy1114@gmail.com",
+                         "role": "level_4", "agent_id": "A2"})
+    profile, old, unlinked = cli.release_email(db, "A2")
+    assert old == "noetimothy1114@gmail.com" and unlinked == 1
+    assert db.agent_profiles.find_one({"agent_id": "A2"})["email"] == ""
+    u = db.users.find_one({"user_id": "u1"})
+    assert u["role"] == "pending" and u["agent_id"] is None
+    assert db.audit_log.find_one({"action": "release_email"})["agent_id"] == "A2"
+    # After the release, --fix can hand the email to the real profile.
+    seed_profile(db, "A1", "Timothy Noe", "", role="level_1")
+    entry = {"app_id": "AO0082", "name": "Timothy Noe", "email": "noetimothy1114@gmail.com"}
+    f = cli.audit(db, [entry], fix=True)
+    assert len(f["mismatch"]) == 1 and not f["conflict"]
+    assert db.agent_profiles.find_one({"agent_id": "A1"})["email"] == "noetimothy1114@gmail.com"
+
+
 def test_match_by_email_when_name_spelling_differs(db):
     # Sheet reconciliation tab: 'Waleedjasholih Othman' vs 'Waleed Othman' —
     # name tokens don't line up, but the email does, so it's the same person.

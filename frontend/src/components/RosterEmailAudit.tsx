@@ -19,6 +19,8 @@ interface AuditMismatch { name: string; db_email: string; sheet_email: string; }
 interface AuditPerson { name: string; email: string; }
 interface AuditMissing { app_id: string; name: string; email: string; }
 interface AuditAmbiguous { name: string; sheet_email: string; candidates: AuditPerson[]; }
+interface AuditConflictHolder { name: string; role: string; agent_id: string; }
+interface AuditConflict { name: string; sheet_email: string; holders: AuditConflictHolder[]; }
 interface AuditExtra { name: string; email: string; role: string; }
 
 interface AuditReport {
@@ -29,6 +31,7 @@ interface AuditReport {
   not_lowercase: AuditPerson[];
   missing: AuditMissing[];
   ambiguous: AuditAmbiguous[];
+  conflicts: AuditConflict[];
   extra: AuditExtra[];
 }
 
@@ -152,6 +155,24 @@ export function RosterEmailAudit({ onFixed }: { onFixed: () => void }) {
           ) : null}
           {fixable === 0 ? (
             <Text style={styles.clear}>Every stored email matches the sheet.</Text>
+          ) : null}
+
+          {report.conflicts.length > 0 ? (
+            <>
+              <Text style={styles.sectionBad}>EMAIL HELD BY ANOTHER PROFILE · {report.conflicts.length}</Text>
+              <Text style={styles.hint}>
+                Never fixed automatically: writing this email would leave two profiles
+                sharing one login. Resolve the profile that shouldn&apos;t hold it first.
+              </Text>
+              {report.conflicts.map((c) => (
+                <View key={c.sheet_email} style={styles.row}>
+                  <Text style={styles.name}>{c.name}</Text>
+                  <Text style={styles.meta}>
+                    {c.sheet_email} is already on: {c.holders.map((h) => `${h.name} (${h.role})`).join(', ')}
+                  </Text>
+                </View>
+              ))}
+            </>
           ) : null}
 
           {report.ambiguous.length > 0 ? (

@@ -2767,6 +2767,12 @@ def _run_roster_audit(fix: bool, changed_by: str) -> Dict[str, Any]:
                             for h in hits]}
             for e, hits in f["ambiguous"]
         ],
+        "conflicts": [
+            {"name": e["name"], "sheet_email": e["email"],
+             "holders": [{"name": str(h.get("name", "")), "role": str(h.get("role", "")),
+                          "agent_id": str(h.get("agent_id", ""))} for h in holders]}
+            for e, _profile, holders in f["conflict"]
+        ],
         "extra": [
             {"name": str(p.get("name", "")), "email": str(p.get("email", "")),
              "role": str(p.get("role", ""))}
