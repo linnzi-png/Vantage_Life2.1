@@ -23,6 +23,7 @@ import pytz
 import metrics
 import war_import
 import war_export
+import audit_roster_emails as roster_audit
 from pathlib import Path
 from pydantic import BaseModel, Field
 from jose import jwt as apple_jwt
@@ -2725,6 +2726,76 @@ async def admin_orphans(user: Dict[str, Any] = Depends(require_admin)):
         })
     orphans.sort(key=lambda o: o["name"])
     return {"orphans": orphans, "total_agents": len(everyone)}
+
+
+# ---- Roster email audit (admin) ----
+# Server-side twin of `python backend/audit_roster_emails.py`: verifies every
+# agent_profiles email against the committed roster sheet snapshot
+# (backend/data/roster/) and, on the fix route, applies the same corrections.
+# The CLI module owns all matching/fix logic (covered by
+# tests/test_audit_roster_emails.py); it is written for sync pymongo, so these
+# routes run it in a worker thread over a short-lived sync client instead of
+# duplicating the logic against motor and letting the two drift.
+
+def _sync_roster_db():
+    from pymongo import MongoClient
+    return MongoClient(mongo_url, serverSelectionTimeoutMS=15000)[os.environ['DB_NAME']]
+
+
+def _run_roster_audit(fix: bool, changed_by: str) -> Dict[str, Any]:
+    roster = roster_audit.load_roster(roster_audit.DEFAULT_CSV)
+    f = roster_audit.audit(_sync_roster_db(), roster, fix=fix, changed_by=changed_by)
+    return {
+        "fixed": fix,
+        "roster_size": len(roster),
+        "ok": len(f["ok"]),
+        "mismatches": [
+            {"name": e["name"], "db_email": str(p.get("email", "")), "sheet_email": e["email"]}
+            for e, p in f["mismatch"]
+        ],
+        "not_lowercase": [
+            {"name": str(p.get("name", "")), "email": str(p.get("email", ""))}
+            for p in f["not_lower"]
+        ],
+        "missing": [
+            {"app_id": e["app_id"], "name": e["name"], "email": e["email"]}
+            for e in f["missing"]
+        ],
+        "ambiguous": [
+            {"name": e["name"], "sheet_email": e["email"],
+             "candidates": [{"name": str(h.get("name", "")), "email": str(h.get("email", ""))}
+                            for h in hits]}
+            for e, hits in f["ambiguous"]
+        ],
+        "conflicts": [
+            {"name": e["name"], "sheet_email": e["email"],
+             "holders": [{"name": str(h.get("name", "")), "role": str(h.get("role", "")),
+                          "agent_id": str(h.get("agent_id", ""))} for h in holders]}
+            for e, _profile, holders in f["conflict"]
+        ],
+        "extra": [
+            {"name": str(p.get("name", "")), "email": str(p.get("email", "")),
+             "role": str(p.get("role", ""))}
+            for p in f["extra"]
+        ],
+    }
+
+
+@api_router.get("/admin/roster-audit")
+async def admin_roster_audit(user: Dict[str, Any] = Depends(require_admin)):
+    """Dry-run report only — nothing is written."""
+    return await asyncio.to_thread(_run_roster_audit, False, f"admin:{user['user_id']}")
+
+
+@api_router.post("/admin/roster-audit/fix")
+async def admin_roster_audit_fix(user: Dict[str, Any] = Depends(require_admin)):
+    """Apply the email corrections the audit found: update mismatched /
+    non-lowercase profile emails to the sheet's value, link any waiting
+    "pending" login under the corrected email, unlink logins keyed to the
+    replaced address, and write audit_log entries. Missing people are never
+    auto-created (role tier and upline can't be derived from an email sheet) —
+    onboard them through Add Person."""
+    return await asyncio.to_thread(_run_roster_audit, True, f"admin:{user['user_id']}")
 
 
 @api_router.post("/admin/set-upline")

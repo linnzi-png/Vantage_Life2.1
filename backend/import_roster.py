@@ -45,7 +45,10 @@ ROSTER = [
     ("ELTANOUKHI, ALI",       "3136705561", "aeltanoukhi@gmail.com",            "SA",         "level_2", "MUSA, ALI"),
     ("LONG, HENRY",           "7346292467", "Henry@aopremier.com",              "SA",         "level_2", "MUSA, ALI"),
     ("QARADAGHI, SNOOR",      "3137990462", "Snoor.qaradaghi@gmail.com",        "SA",         "level_2", "MUSA, ALI"),
-    ("SITTO, LANDY",          "5867448002", "landy.sitto.ali@gmail.com",        "SA",         "level_2", "MUSA, ALI"),
+    # Email corrected 2026-08-18 per the office's app roster sheet: the suffix
+    # is ".ail" (American Income Life), not ".ali" — the old value stranded her
+    # sign-in on Account Pending.
+    ("SITTO, LANDY",          "5867448002", "landy.sitto.ail@gmail.com",        "SA",         "level_2", "MUSA, ALI"),
     ("MURSHED, ALESKANDAR",   "3132401920", "alex.murshed@gmail.com",           "SA",         "level_2", "LONG, HENRY"),
     # ── Agents / Builders / inTraining ────────────────────────────────────────────────
     ("Aljahmi, Essa",         "3138985711", "EALJAHMI618@gmail.com",            "Builder",    "level_1", "MUSA, ALI"),

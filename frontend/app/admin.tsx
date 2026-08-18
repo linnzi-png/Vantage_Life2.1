@@ -13,6 +13,7 @@ import { api, useAuth, roleTitle, COLORS, Role } from '../src/lib/auth';
 import { WarReportImport } from '../src/components/WarReportImport';
 import { OfficeMerge } from '../src/components/OfficeMerge';
 import { OrphanRepair } from '../src/components/OrphanRepair';
+import { RosterEmailAudit } from '../src/components/RosterEmailAudit';
 import { confirmAsync, notify } from '../src/lib/dialog';
 
 interface Person {
@@ -165,6 +166,8 @@ export default function AdminScreen() {
         <OfficeMerge />
 
         <OrphanRepair candidates={people} onRepaired={load} />
+
+        <RosterEmailAudit onFixed={load} />
 
         {showAdd ? (
           <View style={styles.card} testID="admin-add-form">
