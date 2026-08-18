@@ -58,6 +58,34 @@ METRIC_COLUMNS = {
 
 AGENT_NAME_COLUMN = 5
 
+# Trailing computed columns. Present so a generated workbook has the same shape
+# as a real one; the parser ignores them and recomputes from the raw metrics.
+CLOSE_RATE_COLUMN = 20
+SHOW_RATE_COLUMN = 21
+
+# The data-section header, exactly as the real reports write it. parse_daily_tab
+# finds the data section by matching row[0]/row[5]/row[6] against it, so the
+# writer and the reader must share this one definition or a generated workbook
+# would not re-import.
+HEADER_ROW = [
+    "MGA", "GA", "SA", "LDR", "RESIDENT \nSTATE", "Agent",
+    "SETS", "SITS", "SALES", "OTS SITS", "OTS SALES", "N1",
+    "REF OBT", "REF SITS", "REF SALES", "POS SITS", "POS SALES",
+    "VETS SITS", "VET SALES", "ALP", "Close Rate", "Show Rate",
+]
+
+# Row the office summary block puts the office name on (1-based, column 2),
+# and the row the data-section header lands on beneath it.
+OFFICE_NAME_ROW = 2
+HEADER_ROW_INDEX = 4
+
+TOTALS_TAB = "Weekly Totals"
+
+# Present in every real report. Not a daily tab and never parsed — the app has
+# no lost-business tracking, so a generated workbook writes it empty rather than
+# omit it (shape matches) or invent rows (it would be fabricated data).
+LOST_BUSINESS_TAB = "LOST BUSINESS"
+
 # Leadership columns. Not imported as data — carried alongside unmatched agent
 # names so an admin can see who a missing agent reports to and onboard them
 # through the existing Add Person flow with the right upline.

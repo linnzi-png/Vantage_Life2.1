@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import { api, apiText, COLORS, useAuth } from '../src/lib/auth';
+import { api, apiText, apiBlob, COLORS, useAuth } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { notify } from '../src/lib/dialog';
 import { LineChart, BarChart, Point } from '../src/components/Charts';
@@ -84,9 +84,11 @@ export default function VaultScreen() {
   const [exporting, setExporting] = useState<string | null>(null);
   const [exportingCsv, setExportingCsv] = useState<string | null>(null);
   const { user } = useAuth();
-  // The spreadsheet names every agent and their daily numbers in one
-  // file, so it is admin-only — the backend enforces this too.
-  const canExportCsv = user?.is_admin === true;
+  // Deliberately not is_admin: the reconciliation exports are a narrower grant
+  // than the admin panel, and offering a button the server refuses is worse
+  // than not showing it. The backend enforces this independently.
+  const canExportCsv = user?.can_export === true;
+  const [exportingXlsx, setExportingXlsx] = useState<string | null>(null);
 
   // Offices come from the data — never a hardcoded list.
   useEffect(() => {
@@ -200,6 +202,28 @@ export default function VaultScreen() {
       notify('Export failed', e instanceof Error ? e.message : 'Could not export this week.');
     } finally {
       setExporting(null);
+    }
+  };
+
+  /** The WAR workbook itself, rebuilt from the app's data — same tabs, same
+   *  columns — so it can sit beside an old report. Web only: the native Share
+   *  sheet takes text, not a binary file. */
+  const exportWeekXlsx = async (weekStart: string) => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      notify('Open on the web', 'The WAR workbook downloads from the web app — the phone can only share text.');
+      return;
+    }
+    setExportingXlsx(weekStart);
+    try {
+      const blob = await apiBlob(`/api/vault/export?week_start=${weekStart}&format=xlsx`);
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = href; link.download = `${weekStart}_War_Report.xlsx`; link.click();
+      URL.revokeObjectURL(href);
+    } catch (e: unknown) {
+      notify('Export failed', e instanceof Error ? e.message : 'Could not build the workbook.');
+    } finally {
+      setExportingXlsx(null);
     }
   };
 
@@ -362,6 +386,20 @@ export default function VaultScreen() {
                       <Ionicons name="grid-outline" size={12} color={COLORS.gold} />
                       <Text style={[styles.exportTxt, { color: COLORS.gold }]}>
                         {exportingCsv === w.week_start ? 'EXPORTING…' : 'AGENT-BY-DAY CSV'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {canExportCsv ? (
+                    <TouchableOpacity
+                      onPress={() => exportWeekXlsx(w.week_start)}
+                      disabled={exportingXlsx === w.week_start}
+                      style={styles.exportBtn}
+                      testID={`vault-export-xlsx-${w.week_start}`}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="document-text-outline" size={12} color={COLORS.gold} />
+                      <Text style={[styles.exportTxt, { color: COLORS.gold }]}>
+                        {exportingXlsx === w.week_start ? 'BUILDING…' : 'WAR WORKBOOK (.XLSX)'}
                       </Text>
                     </TouchableOpacity>
                   ) : null}

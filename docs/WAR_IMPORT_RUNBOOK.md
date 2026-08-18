@@ -128,6 +128,29 @@ Two consequences:
 `vantagelife`). `WEEK_START` overrides the week start for files that are not
 named with a date — only useful for a single file at a time.
 
+## Getting a WAR report back out of the app
+
+Historical Vault → any week card:
+
+- **EXPORT** — JSON, round-trips through the importer, serves as the backup.
+  Any RGA.
+- **AGENT-BY-DAY CSV** — one flat row per agent per day, for eyeballing against
+  a report.
+- **WAR WORKBOOK (.XLSX)** — the report itself, rebuilt from the app's data:
+  same eleven tabs, same 22-column header, office name in the same cell, nine
+  daily tabs so `Wed (2)`/`Thurs (2)` still overlap the next week. It re-imports
+  through the same parser, which is asserted by a test.
+
+The last two are restricted to `EXPORT_EMAILS` (default: one address), which is
+deliberately narrower than `ADMIN_EMAILS` — they name every agent and their
+daily numbers in one downloadable file. Set `EXPORT_EMAILS` on Railway to change
+who can pull them.
+
+Two columns a real report carries are left blank rather than guessed: **Show
+Rate**, whose formula has never been specified for this app, and the **LOST
+BUSINESS** tab, which the app does not track. Close Rate is filled, via
+`metrics.close_rate()`.
+
 ## Reconciling the two-day overlap
 
 ```

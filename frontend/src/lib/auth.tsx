@@ -16,6 +16,8 @@ export interface AppUser {
   role: Role;
   agent_id?: string | null;
   is_admin?: boolean;
+  /** May pull the reconciliation exports. Narrower than is_admin. */
+  can_export?: boolean;
   can_switch_role?: boolean;
 }
 
@@ -159,6 +161,34 @@ export async function apiText(path: string): Promise<string> {
     throw new ApiError(res.status, msg);
   }
   return res.text();
+}
+
+/** Binary sibling of api(), for the generated .xlsx workbook. */
+export async function apiBlob(path: string): Promise<Blob> {
+  const token = await getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND}${path}`, {
+      headers, credentials: 'include', signal: controller.signal,
+    });
+  } catch (e: unknown) {
+    const aborted = (e as { name?: string }).name === 'AbortError';
+    throw new Error(aborted
+      ? 'The server took too long to respond. Please try again.'
+      : 'Unable to reach the server. Please check your connection and try again.');
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try { const j = await res.json(); msg = j.detail || msg; } catch {}
+    throw new ApiError(res.status, msg);
+  }
+  return res.blob();
 }
 
 interface AuthCtx {
