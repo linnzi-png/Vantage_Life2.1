@@ -107,7 +107,11 @@ ROSTER = [
 ]
 
 # Office for the two new roots (everyone else inherits from their upline).
+# These match the office names the database already uses for their teams.
 ROOT_OFFICE = {"Joseph Gojcaj": "Gojcaj RGA", "Ashley Rust": "Rust RGA"}
+
+# Sheet name → the name the database actually stores for the same person.
+ALIASES = {"Mohamed Aljahmi": "MJ Aljahmi"}
 
 
 def now_utc():
@@ -122,12 +126,14 @@ def norm_name(name):
 def find_upline(db, created, name):
     """Resolve an upline by name: profiles created this run first, then the DB.
     On multiple DB matches, prefer the profile holding a login email."""
-    key = norm_name(name)
+    keys = {norm_name(name)}
+    if name in ALIASES:
+        keys.add(norm_name(ALIASES[name]))
     for p in created:
-        if norm_name(p["name"]) == key:
+        if norm_name(p["name"]) in keys:
             return p, "created this run"
     matches = [p for p in db.agent_profiles.find({}, {"_id": 0})
-               if norm_name(p.get("name", "")) == key]
+               if norm_name(p.get("name", "")) in keys]
     if not matches:
         return None, "NOT FOUND"
     if len(matches) > 1:

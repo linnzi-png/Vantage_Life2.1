@@ -66,6 +66,14 @@ def test_missing_upline_blocks_only_that_person(db):
     assert db.agent_profiles.count_documents({}) == 0
 
 
+def test_alias_resolves_sheet_name_to_db_name(db):
+    # The DB stores Mohamed Aljahmi as "MJ Aljahmi" — the sheet name must
+    # still resolve to him instead of blocking the whole MJ chain.
+    seed(db, "MJ", "MJ Aljahmi", "mj@aopremier.com", role="level_4")
+    upline, _how = cli.find_upline(db, [], "Mohamed Aljahmi")
+    assert upline is not None and upline["agent_id"] == "MJ"
+
+
 def test_duplicate_upline_prefers_email_holder(db):
     seed(db, "S1", "Snoor Qaradaghi", "", role="level_2")
     seed(db, "S2", "QARADAGHI, SNOOR", "snoor.qaradaghi@gmail.com", role="level_2")
