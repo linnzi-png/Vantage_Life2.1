@@ -81,6 +81,22 @@ async def test_merge_fixes_past_weeks_too(client, seeded_db):
     assert after["series"][0]["gross_alp"] == 500.0   # historical week now included
 
 
+async def test_merge_into_a_brand_new_name_is_a_plain_rename(client, seeded_db):
+    """The destination doesn't need to pre-exist — this is how the admin UI's
+    free-text field renames an office outright instead of folding it into
+    another one."""
+    token = await admin_token(seeded_db)
+    r = await client.post("/api/admin/merge-office", headers=auth(token),
+                          json={"from_office": "MCM", "to_office": "ALWATAN RGA"})
+    assert r.status_code == 200, r.text
+    assert r.json()["agents_moved"] == 5
+
+    offices = {o["office"] for o in (await client.get(
+        "/api/admin/offices", headers=auth(token))).json()["offices"]}
+    assert "MCM" not in offices
+    assert "ALWATAN RGA" in offices
+
+
 async def test_merge_rejects_unknown_source(client, seeded_db):
     token = await admin_token(seeded_db)
     r = await client.post("/api/admin/merge-office", headers=auth(token),

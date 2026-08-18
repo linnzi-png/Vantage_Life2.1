@@ -6,8 +6,8 @@ import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Modal, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
-import { PULSE_FIELDS, PulsePayload, recentSalesDays, currentSalesDay, makeClientEntryId } from '../lib/cycle';
-import { notify } from '../lib/dialog';
+import { PULSE_FIELDS, PulseFieldKey, PulsePayload, recentSalesDays, currentSalesDay, makeClientEntryId } from '../lib/cycle';
+import { confirmAsync, notify } from '../lib/dialog';
 
 // Matches MAX_UPLINE_BUFFER_DAYS on the backend: an upline may enter for a
 // downline agent up to 7 sales days back.
@@ -37,7 +37,7 @@ interface Props {
   onNext?: () => void;
 }
 
-type FormState = Record<keyof PulsePayload, string>;
+type FormState = Record<PulseFieldKey, string>;
 
 const emptyForm: FormState = {
   sets: '', sits: '', sales: '', ots_sits: '', ots_sales: '',
@@ -58,6 +58,7 @@ function buildPayload(form: FormState): PulsePayload {
 export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext }: Props) {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [nifSubmitting, setNifSubmitting] = useState(false);
   const [salesDay, setSalesDay] = useState<string>(currentSalesDay());
   // Persists across a failed submit so a retry reuses the same idempotency
   // key; reset only after the server confirms the write.
@@ -67,7 +68,7 @@ export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext }
 
   const dayOptions = recentSalesDays(UPLINE_WINDOW_DAYS);
 
-  const set = (key: keyof PulsePayload, val: string) => setForm((f) => ({ ...f, [key]: val }));
+  const set = (key: PulseFieldKey, val: string) => setForm((f) => ({ ...f, [key]: val }));
 
   const submit = async () => {
     setSubmitting(true);
@@ -83,6 +84,38 @@ export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext }
       notify('Error', msg);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Zeros every field for target on the selected sales_day and marks it NIF
+  // (Not In Field) — discards whatever's been typed rather than saving it.
+  const markNif = async () => {
+    const ok = await confirmAsync({
+      title: `Mark ${target.name.split(' ')[0]} as NIF?`,
+      message: "This logs all 14 numbers as zero for the selected day (Not In Field). Anything typed on this entry will be discarded.",
+      confirmText: 'MARK NIF',
+      destructive: true,
+    });
+    if (!ok) return;
+    setNifSubmitting(true);
+    try {
+      if (!pendingEntryId.current) pendingEntryId.current = makeClientEntryId();
+      const payload = {
+        ...buildPayload(emptyForm),
+        target_agent_id: target.agent_id,
+        sales_day: salesDay,
+        is_nif: true,
+        client_entry_id: pendingEntryId.current,
+      };
+      await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
+      pendingEntryId.current = null;
+      setForm(emptyForm);
+      onSubmitted(target.agent_id);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to submit';
+      notify('Error', msg);
+    } finally {
+      setNifSubmitting(false);
     }
   };
 
@@ -148,6 +181,17 @@ export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext }
             >
               {submitting ? <ActivityIndicator color="#000" /> : <Text style={styles.submitTxt}>SUBMIT FOR {target.name.split(' ')[0].toUpperCase()}</Text>}
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.nifBtn}
+              onPress={markNif}
+              disabled={nifSubmitting || submitting}
+              testID="quick-entry-nif"
+            >
+              <Ionicons name="close-circle-outline" size={13} color={COLORS.textDim} />
+              <Text style={styles.nifTxt}>
+                {nifSubmitting ? 'LOGGING NIF…' : `NOT IN THE FIELD? MARK ${target.name.split(' ')[0].toUpperCase()} NIF`}
+              </Text>
+            </TouchableOpacity>
             {hasNext ? (
               <TouchableOpacity style={styles.nextBtn} onPress={onNext} testID="quick-entry-skip-next">
                 <Text style={styles.nextTxt}>Skip to next missing person</Text>
@@ -185,4 +229,6 @@ const styles = StyleSheet.create({
   submitTxt: { color: '#000', fontWeight: '900', fontSize: 14, letterSpacing: 0.5 },
   nextBtn: { alignItems: 'center', paddingVertical: 4 },
   nextTxt: { color: COLORS.textDim, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' },
+  nifBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6 },
+  nifTxt: { color: COLORS.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 0.4, textDecorationLine: 'underline' },
 });
