@@ -200,6 +200,7 @@ interface AuthCtx {
   signInDemo: (level: Role) => Promise<void>;
   signInApple: (identityToken: string, givenName: string | null, familyName: string | null) => Promise<void>;
   signInGoogleSession: (sessionId: string) => Promise<void>;
+  signInGoogleIdToken: (idToken: string) => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   switchRole: (role: Role) => Promise<void>;
@@ -270,6 +271,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await reload();
   };
 
+  const signInGoogleIdToken = async (idToken: string) => {
+    // Direct Google flow: the app got an ID token from Google itself and the
+    // backend verifies it — no Emergent proxy in the path.
+    setLoading(true);
+    const r = await api<{ user: AppUser; session_token: string }>('/api/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ id_token: idToken }),
+    });
+    await setToken(r.session_token);
+    setUser(r.user);
+    await reload();
+  };
+
   const signOut = async () => {
     try { await api('/api/push/unregister', { method: 'POST' }); } catch {}
     try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
@@ -291,7 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInGoogleSession, signOut, deleteAccount, switchRole }}>
+    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInGoogleSession, signInGoogleIdToken, signOut, deleteAccount, switchRole }}>
       {children}
     </AuthContext.Provider>
   );

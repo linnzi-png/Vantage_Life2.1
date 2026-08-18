@@ -1,6 +1,6 @@
 // Login screen with Google sign-in + 4 demo level buttons (no Google needed)
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -8,7 +8,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import * as Google from 'expo-auth-session/providers/google';
 import { useAuth, COLORS, Role } from '../src/lib/auth';
+
+// Completes the popup-based web flow when Google redirects back to the app.
+WebBrowser.maybeCompleteAuthSession();
+
+// Direct Google OAuth client IDs. When set, the Google button talks to Google
+// itself and the backend verifies the ID token (/api/auth/google). When unset,
+// the legacy Emergent-portal flow below keeps working — so a build without the
+// Google Cloud setup never breaks sign-in.
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
+const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
+const GOOGLE_DIRECT = !!GOOGLE_WEB_CLIENT_ID;
 
 const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] = [
   { level: 'level_1', title: 'AGENT', subtitle: 'Personal stats + Pulse entry', tint: COLORS.primary },
@@ -18,9 +30,45 @@ const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] =
 ];
 
 export default function LoginScreen() {
-  const { signInDemo, signInApple, signInGoogleSession } = useAuth();
+  const { signInDemo, signInApple, signInGoogleSession, signInGoogleIdToken } = useAuth();
   const router = useRouter();
   const [busy, setBusy] = useState<Role | 'google' | 'apple' | null>(null);
+
+  // Hooks must be unconditional; the placeholder ID is never prompted because
+  // onGoogle only takes this path when GOOGLE_DIRECT is set.
+  const [googleRequest, googleResponse, googlePrompt] = Google.useIdTokenAuthRequest({
+    clientId: GOOGLE_WEB_CLIENT_ID || 'unconfigured.apps.googleusercontent.com',
+    iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
+  });
+
+  useEffect(() => {
+    if (!googleResponse) return;
+    if (googleResponse.type !== 'success') {
+      // 'dismiss'/'cancel' are the user closing the sheet — stay silent.
+      if (googleResponse.type === 'error') {
+        alert(`Google Sign-In failed: ${googleResponse.error?.message || 'Please try again.'}`);
+      }
+      setBusy(null);
+      return;
+    }
+    const idToken = googleResponse.params.id_token;
+    if (!idToken) {
+      alert('Google Sign-In failed: no identity token returned. Please try again.');
+      setBusy(null);
+      return;
+    }
+    (async () => {
+      try {
+        await signInGoogleIdToken(idToken);
+        router.replace('/');
+      } catch (e: unknown) {
+        alert(`Google Sign-In failed: ${e instanceof Error ? e.message : e}`);
+      } finally {
+        setBusy(null);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleResponse]);
 
   const onDemo = async (level: Role) => {
     setBusy(level);
@@ -65,6 +113,13 @@ export default function LoginScreen() {
   const onGoogle = async () => {
     setBusy('google');
     try {
+      if (GOOGLE_DIRECT) {
+        // Direct flow: Google issues the ID token, our backend verifies it.
+        // The response lands in the googleResponse effect above.
+        await googlePrompt();
+        return;
+      }
+      // Legacy Emergent-portal flow — removed once the Google client IDs ship.
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
         const redirectUrl = window.location.origin + '/';
@@ -109,7 +164,7 @@ export default function LoginScreen() {
           <Text style={styles.heroSub}>The 174-person sales force lives here. Pulse, Platinum Wall, and the Eraser tool — all in one.</Text>
         </View>
 
-        <TouchableOpacity testID="google-signin-btn" style={styles.googleBtn} onPress={onGoogle} disabled={!!busy}>
+        <TouchableOpacity testID="google-signin-btn" style={styles.googleBtn} onPress={onGoogle} disabled={!!busy || (GOOGLE_DIRECT && !googleRequest)}>
           {busy === 'google' ? (
             <ActivityIndicator color="#000" />
           ) : (

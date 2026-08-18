@@ -83,6 +83,17 @@ ADMIN_EMAILS = {
 APPLE_BUNDLE_ID = "com.aopremiere.vantagelife"
 APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
 
+# Direct Google sign-in (replacing the Emergent auth proxy). Comma-separated
+# OAuth client IDs this backend accepts as token audience — the iOS client and
+# the web client. Empty (unset) means /auth/google is not yet configured and
+# returns 503; the Emergent /auth/session path keeps working through the
+# transition.
+GOOGLE_CLIENT_IDS = {
+    c.strip() for c in os.environ.get("GOOGLE_CLIENT_IDS", "").split(",") if c.strip()
+}
+GOOGLE_KEYS_URL = "https://www.googleapis.com/oauth2/v3/certs"
+GOOGLE_ISSUERS = {"https://accounts.google.com", "accounts.google.com"}
+
 # Bucket for agents whose roster record has no office. They still produce, so
 # dropping them makes office tiles disagree with the agency total; naming the
 # bucket also makes the gap visible enough to fix in the Admin panel.
@@ -174,6 +185,10 @@ class AppleLoginIn(BaseModel):
     identity_token: str
     given_name: Optional[str] = None
     family_name: Optional[str] = None
+
+
+class GoogleLoginIn(BaseModel):
+    id_token: str
 
 
 class PulseIn(BaseModel):
@@ -403,6 +418,99 @@ async def verify_apple_token(identity_token: str) -> Dict[str, Any]:
     return {"sub": payload["sub"], "email": payload.get("email")}
 
 
+_google_jwks_cache: Dict[str, Any] = {"keys": [], "fetched_at": None, "last_attempt_at": None}
+# Same caching/cooldown story as the Apple twin above: /auth/google is
+# unauthenticated, so unknown-kid forced refreshes are attacker-triggerable.
+GOOGLE_JWKS_TTL = timedelta(hours=6)
+GOOGLE_JWKS_FORCE_COOLDOWN = timedelta(minutes=5)
+
+
+async def _fetch_google_jwks(force: bool = False) -> List[Dict[str, Any]]:
+    """Fetch Google's JWKs, serving a cached copy so a transient Google outage
+    can't fail an otherwise-valid sign-in. Mirrors _fetch_apple_jwks."""
+    fresh = (
+        _google_jwks_cache["fetched_at"] is not None
+        and now_utc() - _google_jwks_cache["fetched_at"] < GOOGLE_JWKS_TTL
+    )
+    if fresh and not force:
+        return _google_jwks_cache["keys"]
+    if (
+        force
+        and _google_jwks_cache["last_attempt_at"] is not None
+        and now_utc() - _google_jwks_cache["last_attempt_at"] < GOOGLE_JWKS_FORCE_COOLDOWN
+    ):
+        return _google_jwks_cache["keys"]
+    _google_jwks_cache["last_attempt_at"] = now_utc()
+    last_err: Optional[Exception] = None
+    for _ in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as cli:
+                r = await cli.get(GOOGLE_KEYS_URL)
+            if r.status_code == 200:
+                keys = r.json().get("keys", [])
+                if keys:
+                    _google_jwks_cache["keys"] = keys
+                    _google_jwks_cache["fetched_at"] = now_utc()
+                    return keys
+        except (httpx.HTTPError, ValueError, AttributeError) as e:
+            last_err = e
+    if _google_jwks_cache["keys"]:
+        return _google_jwks_cache["keys"]
+    logging.error("Google JWKS fetch failed: %s", last_err)
+    raise HTTPException(status_code=503, detail="Google sign-in is temporarily unavailable. Please try again.")
+
+
+async def verify_google_token(id_token: str) -> Dict[str, Any]:
+    """Verify a Google ID token against Google's published JWKs.
+
+    aud and iss are checked by hand rather than via jwt.decode kwargs: the
+    token is valid for ANY of our client IDs (iOS or web) and Google issues
+    under two issuer strings, and jose's decode() takes a single value for
+    each. exp/signature are still enforced by decode()."""
+    if not GOOGLE_CLIENT_IDS:
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured on this server")
+    try:
+        header = apple_jwt.get_unverified_header(id_token)
+    except JOSEError:
+        raise HTTPException(status_code=401, detail="Invalid Google ID token format")
+
+    keys = await _fetch_google_jwks()
+    matching_key = next((k for k in keys if k.get("kid") == header.get("kid")), None)
+    if not matching_key:
+        # Google rotates keys daily — the cached set may be stale for a new kid.
+        keys = await _fetch_google_jwks(force=True)
+        matching_key = next((k for k in keys if k.get("kid") == header.get("kid")), None)
+    if not matching_key:
+        raise HTTPException(status_code=401, detail="No matching Google public key found")
+
+    try:
+        payload = apple_jwt.decode(
+            id_token,
+            matching_key,
+            algorithms=["RS256"],
+            options={"verify_aud": False},
+        )
+    except JOSEError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Google token: {e}")
+
+    if payload.get("iss") not in GOOGLE_ISSUERS:
+        raise HTTPException(status_code=401, detail="Invalid Google token issuer")
+    aud = payload.get("aud")
+    if aud not in GOOGLE_CLIENT_IDS:
+        raise HTTPException(status_code=401, detail="Google token audience mismatch")
+    email = payload.get("email")
+    if not email or not payload.get("email_verified"):
+        # Authorization is keyed entirely by email — an unverified address
+        # could impersonate a rostered agent.
+        raise HTTPException(status_code=401, detail="Google account email is not verified")
+    return {
+        "sub": payload["sub"],
+        "email": email,
+        "name": payload.get("name"),
+        "picture": payload.get("picture"),
+    }
+
+
 # =========================================================
 #                       AUTH ROUTES
 # =========================================================
@@ -512,6 +620,22 @@ async def auth_apple(payload: AppleLoginIn, response: Response):
     name = " ".join(filter(None, [payload.given_name, payload.family_name])) or apple_email
     session_token = f"st_{uuid.uuid4().hex}"
     user = await upsert_user_and_session(email=apple_email, name=name, picture=None, session_token=session_token)
+    set_session_cookie(response, session_token)
+    return {"user": user, "session_token": session_token}
+
+
+@api_router.post("/auth/google")
+async def auth_google(payload: GoogleLoginIn, response: Response):
+    """Direct Google sign-in: the app obtains an ID token from Google itself
+    and we verify it here — no Emergent proxy in the path. Same two-step
+    authentication/authorization contract as Apple: any verified Google
+    identity signs in successfully; roster matching happens separately in
+    upsert_user_and_session."""
+    claims = await verify_google_token(payload.id_token)
+    name = claims.get("name") or claims["email"]
+    session_token = f"st_{uuid.uuid4().hex}"
+    user = await upsert_user_and_session(
+        email=claims["email"], name=name, picture=claims.get("picture"), session_token=session_token)
     set_session_cookie(response, session_token)
     return {"user": user, "session_token": session_token}
 
