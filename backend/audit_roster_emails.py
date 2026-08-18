@@ -90,7 +90,7 @@ def match_profiles(entry, profiles):
             if str(p.get("email", "")).strip().lower() == entry["email"]]
 
 
-def audit(db, roster, fix=False):
+def audit(db, roster, fix=False, changed_by="cli:audit_roster_emails"):
     profiles = list(db.agent_profiles.find({}, {"_id": 0}))
     findings = {"ok": [], "mismatch": [], "not_lower": [], "missing": [],
                 "ambiguous": [], "extra": []}
@@ -100,7 +100,7 @@ def audit(db, roster, fix=False):
     for p in profiles:
         raw = str(p.get("email", ""))
         if raw != raw.strip().lower():
-            findings["not_lower"].append(p)
+            findings["not_lower"].append(dict(p))  # snapshot before any fix
             if fix:
                 db.agent_profiles.update_one(
                     {"agent_id": p["agent_id"]},
@@ -150,7 +150,7 @@ def audit(db, roster, fix=False):
                 "action": "sync_email",
                 "agent_id": profile["agent_id"],
                 "agent_name": profile.get("name"),
-                "changed_by": "cli:audit_roster_emails",
+                "changed_by": changed_by,
                 "original_value": profile.get("email"),
                 "new_value": entry["email"],
             })
