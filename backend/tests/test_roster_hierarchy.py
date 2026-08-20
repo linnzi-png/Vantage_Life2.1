@@ -65,3 +65,23 @@ def test_keys_match_tolerates_one_edit_but_not_different_people():
     assert not km(nk("Ali Musa"), nk("Basel Musaed"))
     assert not km(nk("Ali Musa"), nk("Ali Musaed"))  # 2 edits — distinct person
     assert not km(nk("Snoor Qaradaghi"), nk("Snoor"))  # token counts differ
+
+
+def test_nickname_alias_self_reference_eddie_leon():
+    # Owner-confirmed: the Gojcaj book's GA "Edward Leon" is Eddie Leon's own
+    # row. The alias must make his row read as GA, reporting to the MGA.
+    e = entry("Eddie Leon")
+    assert e["io_role"] == "GA" and e["role"] == "level_2"
+    assert e["upline_name"] == "Joseph Gojcaj"
+
+
+def test_nickname_alias_monty_alsheeblawy():
+    e = entry("Monty Alsheeblawy")
+    assert e["io_role"] == "SA"
+    assert e["upline_name"] == "Serage Jamil"
+
+
+def test_alias_names_returns_both_spellings():
+    assert roster_hierarchy.alias_names("Edward Leon") == ["Edward Leon", "Eddie Leon"]
+    assert roster_hierarchy.alias_names("Eddie Leon") == ["Eddie Leon", "Edward Leon"]
+    assert roster_hierarchy.alias_names("Snoor Qaradaghi") == ["Snoor Qaradaghi"]

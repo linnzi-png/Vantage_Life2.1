@@ -177,10 +177,14 @@ export function OrphanRepair({ candidates, onRepaired }: {
           ) : null}
           {plan && plan.unresolved.length > 0 ? (
             <Text style={styles.unresolvedNote}>
-              {plan.unresolved.length} of these aren&apos;t on any roster sheet the app
-              has, so their upline is unknown — assign them below, or get the
-              office&apos;s full roster (the sheet with the SA/GA/MGA columns) added
-              to the app&apos;s data to auto-link them.
+              {(() => {
+                const notOnSheet = plan.unresolved.filter((u) => u.reason === 'not_on_sheet').length;
+                const uplineMissing = plan.unresolved.length - notOnSheet;
+                const parts = [];
+                if (notOnSheet > 0) parts.push(`${notOnSheet} aren't on any roster sheet the app has (former agents, or missing from the sheet)`);
+                if (uplineMissing > 0) parts.push(`${uplineMissing} are on the sheet but the upline it names couldn't be found in the app`);
+                return `${parts.join('; ')} — assign them below, or update the office's roster sheet in the app's data.`;
+              })()}
             </Text>
           ) : null}
           {orphans.map((o) => {
