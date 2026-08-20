@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
-import { notify } from '../lib/dialog';
+import { confirmAsync, notify } from '../lib/dialog';
 
 interface Orphan {
   agent_id: string;
@@ -25,6 +25,9 @@ interface Orphan {
 
 export interface UplineChoice { agent_id: string; name: string; office?: string; role: string; }
 
+interface HierarchyProposal { agent_id: string; name: string; upline_name: string; }
+interface HierarchyPlan { proposals: HierarchyProposal[]; unresolved: { agent_id: string }[]; }
+
 export function OrphanRepair({ candidates, onRepaired }: {
   /** Roster the admin can pick an upline from — the same list the Add Person
    *  form searches, passed in so this component owns no roster state. */
@@ -37,11 +40,16 @@ export function OrphanRepair({ candidates, onRepaired }: {
   const [selected, setSelected] = useState<Orphan | null>(null);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
+  const [plan, setPlan] = useState<HierarchyPlan | null>(null);
 
   const load = useCallback(async () => {
     try {
       const r = await api<{ orphans: Orphan[] }>('/api/admin/orphans');
       setOrphans(r.orphans);
+      // The committed roster sheets know most uplines — ask what a bulk
+      // re-link would cover so the one-at-a-time picker is the fallback,
+      // not the plan.
+      setPlan(await api<HierarchyPlan>('/api/admin/hierarchy-audit'));
     } catch (e: unknown) {
       notify('Error', e instanceof Error ? e.message : 'Could not load orphaned agents');
     } finally {
@@ -61,6 +69,32 @@ export function OrphanRepair({ candidates, onRepaired }: {
     if (!q) return [];
     return candidates.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 5);
   }, [candidates, query]);
+
+  const autoLink = async () => {
+    if (!plan || plan.proposals.length === 0) return;
+    const n = plan.proposals.length;
+    const ok = await confirmAsync({
+      title: 'Auto-Link From Roster Sheet',
+      message:
+        `The roster sheets on file record an upline for ${n} of these agents. ` +
+        'Link them all now? Anyone the sheets don’t cover stays listed for ' +
+        'manual assignment.',
+      confirmText: `Link ${n}`,
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const r = await api<{ applied: HierarchyProposal[] }>(
+        '/api/admin/hierarchy-audit/fix', { method: 'POST' });
+      notify('Agents re-linked', `${r.applied.length} agent${r.applied.length === 1 ? '' : 's'} are back in their upline's team rollup.`);
+      await load();
+      onRepaired();
+    } catch (e: unknown) {
+      notify('Auto-link failed', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const assign = async (upline: UplineChoice) => {
     if (!selected) return;
@@ -111,6 +145,22 @@ export function OrphanRepair({ candidates, onRepaired }: {
       ) : (
         <>
           <Text style={styles.count}>{orphans.length} unlinked</Text>
+          {plan && plan.proposals.length > 0 ? (
+            <TouchableOpacity
+              style={[styles.autoBtn, busy && { opacity: 0.5 }]}
+              onPress={autoLink}
+              disabled={busy}
+              testID="orphans-autolink"
+            >
+              {busy
+                ? <ActivityIndicator color="#000" />
+                : (
+                  <Text style={styles.autoTxt}>
+                    AUTO-LINK {plan.proposals.length} FROM ROSTER SHEET
+                  </Text>
+                )}
+            </TouchableOpacity>
+          ) : null}
           {orphans.map((o) => {
             const sel = selected?.agent_id === o.agent_id;
             return (
@@ -174,6 +224,8 @@ const styles = StyleSheet.create({
   loading: { paddingVertical: 20, alignItems: 'center' },
   clear: { color: COLORS.primary, fontSize: 12, marginTop: 10, fontWeight: '700' },
   count: { color: COLORS.orange, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginTop: 12 },
+  autoBtn: { backgroundColor: COLORS.primary, alignItems: 'center', padding: 12, borderRadius: 6, marginTop: 8 },
+  autoTxt: { color: '#000', fontWeight: '900', fontSize: 12, letterSpacing: 0.5 },
   row: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, marginTop: 8, overflow: 'hidden' },
   rowOn: { borderColor: COLORS.orange },
   rowHead: { flexDirection: 'row', alignItems: 'center', padding: 10, gap: 8 },
