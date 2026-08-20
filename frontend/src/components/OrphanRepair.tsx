@@ -26,7 +26,12 @@ interface Orphan {
 export interface UplineChoice { agent_id: string; name: string; office?: string; role: string; }
 
 interface HierarchyProposal { agent_id: string; name: string; upline_name: string; }
-interface HierarchyPlan { proposals: HierarchyProposal[]; unresolved: { agent_id: string }[]; }
+interface HierarchyMerge { keep_agent_id: string; keep_name: string; remove_agent_id: string; }
+interface HierarchyPlan {
+  proposals: HierarchyProposal[];
+  merges: HierarchyMerge[];
+  unresolved: { agent_id: string; reason: string }[];
+}
 
 export function OrphanRepair({ candidates, onRepaired }: {
   /** Roster the admin can pick an upline from — the same list the Add Person
@@ -71,26 +76,34 @@ export function OrphanRepair({ candidates, onRepaired }: {
   }, [candidates, query]);
 
   const autoLink = async () => {
-    if (!plan || plan.proposals.length === 0) return;
-    const n = plan.proposals.length;
+    if (!plan) return;
+    const nLink = plan.proposals.length;
+    const nMerge = plan.merges.length;
+    if (nLink + nMerge === 0) return;
+    const parts = [];
+    if (nMerge > 0) parts.push(`${nMerge} are duplicate profiles of someone already in the hierarchy and will be merged into them`);
+    if (nLink > 0) parts.push(`${nLink} have an upline recorded on the roster sheets and will be linked to it`);
     const ok = await confirmAsync({
-      title: 'Auto-Link From Roster Sheet',
+      title: 'Auto-Fix Unlinked Agents',
       message:
-        `The roster sheets on file record an upline for ${n} of these agents. ` +
-        'Link them all now? Anyone the sheets don’t cover stays listed for ' +
-        'manual assignment.',
-      confirmText: `Link ${n}`,
+        `${parts.join('; ')}. Anyone the sheets don’t cover stays listed for ` +
+        'manual assignment. Merges cannot be undone.',
+      confirmText: `Fix ${nLink + nMerge}`,
     });
     if (!ok) return;
     setBusy(true);
     try {
-      const r = await api<{ applied: HierarchyProposal[] }>(
+      const r = await api<{ applied: HierarchyProposal[]; merged: HierarchyMerge[] }>(
         '/api/admin/hierarchy-audit/fix', { method: 'POST' });
-      notify('Agents re-linked', `${r.applied.length} agent${r.applied.length === 1 ? '' : 's'} are back in their upline's team rollup.`);
+      notify(
+        'Agents repaired',
+        `${r.applied.length} linked to their sheet upline, ${r.merged.length} duplicate ` +
+        'profiles merged — all back in their upline’s team rollup.',
+      );
       await load();
       onRepaired();
     } catch (e: unknown) {
-      notify('Auto-link failed', e instanceof Error ? e.message : 'Please try again.');
+      notify('Auto-fix failed', e instanceof Error ? e.message : 'Please try again.');
     } finally {
       setBusy(false);
     }
@@ -145,7 +158,7 @@ export function OrphanRepair({ candidates, onRepaired }: {
       ) : (
         <>
           <Text style={styles.count}>{orphans.length} unlinked</Text>
-          {plan && plan.proposals.length > 0 ? (
+          {plan && plan.proposals.length + plan.merges.length > 0 ? (
             <TouchableOpacity
               style={[styles.autoBtn, busy && { opacity: 0.5 }]}
               onPress={autoLink}
@@ -156,10 +169,19 @@ export function OrphanRepair({ candidates, onRepaired }: {
                 ? <ActivityIndicator color="#000" />
                 : (
                   <Text style={styles.autoTxt}>
-                    AUTO-LINK {plan.proposals.length} FROM ROSTER SHEET
+                    AUTO-FIX {plan.proposals.length + plan.merges.length}
+                    {plan.merges.length > 0 ? ` (LINK ${plan.proposals.length} · MERGE ${plan.merges.length})` : ' FROM ROSTER SHEET'}
                   </Text>
                 )}
             </TouchableOpacity>
+          ) : null}
+          {plan && plan.unresolved.length > 0 ? (
+            <Text style={styles.unresolvedNote}>
+              {plan.unresolved.length} of these aren&apos;t on any roster sheet the app
+              has, so their upline is unknown — assign them below, or get the
+              office&apos;s full roster (the sheet with the SA/GA/MGA columns) added
+              to the app&apos;s data to auto-link them.
+            </Text>
           ) : null}
           {orphans.map((o) => {
             const sel = selected?.agent_id === o.agent_id;
@@ -226,6 +248,7 @@ const styles = StyleSheet.create({
   count: { color: COLORS.orange, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginTop: 12 },
   autoBtn: { backgroundColor: COLORS.primary, alignItems: 'center', padding: 12, borderRadius: 6, marginTop: 8 },
   autoTxt: { color: '#000', fontWeight: '900', fontSize: 12, letterSpacing: 0.5 },
+  unresolvedNote: { color: COLORS.textDim, fontSize: 11, marginTop: 8, lineHeight: 16, fontStyle: 'italic' },
   row: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, marginTop: 8, overflow: 'hidden' },
   rowOn: { borderColor: COLORS.orange },
   rowHead: { flexDirection: 'row', alignItems: 'center', padding: 10, gap: 8 },

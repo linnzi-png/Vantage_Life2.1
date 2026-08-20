@@ -26,8 +26,10 @@ async def seed_orphaned_snoor_team(db):
         {"agent_id": "SNOOR", "name": "Snoor Qaradaghi",
          "email": "snoor.qaradaghi@gmail.com", "role": "level_2", "io_role": "SA",
          "upline_id": "GA_1", "office": "MJ RGA"},
-        # Sheet rows list "QARADAGHI, SNOOR" as their upline; the orphans
-        # themselves carry the WAR spelling of their own names.
+        {"agent_id": "ELT", "name": "Ali Eltanoukhi", "email": "elt@test.dev",
+         "role": "level_2", "io_role": "SA", "upline_id": "GA_1", "office": "MJ RGA"},
+        # Per the 2026-08-20 app sheet: Shiko reports to Snoor; Basel and
+        # Maher report to Ali Eltanoukhi. Orphan names carry WAR spellings.
         {"agent_id": "SHIKO", "name": "Shiko Qaradaghi", "email": "",
          "role": "level_1", "upline_id": None, "office": "MJ RGA",
          "created_by_import": True},
@@ -59,10 +61,11 @@ async def test_audit_proposes_sheet_uplines_without_writing(client, seeded_db):
     assert r.status_code == 200
     body = r.json()
     proposals = {p["agent_id"]: p for p in body["proposals"]}
-    # Shiko + Basel report to Snoor on the committed sheet; both name formats
-    # ("Shiko Qaradaghi" / "MUSAED, BASEL") must resolve.
+    # Current-sheet uplines; both name formats ("Shiko Qaradaghi" /
+    # "MUSAED, BASEL") must resolve.
     assert proposals["SHIKO"]["upline_agent_id"] == "SNOOR"
-    assert proposals["BASEL"]["upline_agent_id"] == "SNOOR"
+    assert proposals["BASEL"]["upline_agent_id"] == "ELT"
+    assert proposals["MAHER"]["upline_agent_id"] == "ELT"
     # Unknown person is reported, not guessed at.
     unresolved = {u["agent_id"]: u for u in body["unresolved"]}
     assert unresolved["MYSTERY"]["reason"] == "not_on_sheet"
@@ -95,7 +98,7 @@ async def test_fix_relinks_and_restores_team_view(client, seeded_db):
 
     r = await client.get("/api/team", headers=auth(snoor_token))
     team = {t["agent_id"]: t for t in r.json()["team"]}
-    assert {"SHIKO", "BASEL"} <= set(team)
+    assert "SHIKO" in team
     assert team["SHIKO"]["gross_alp"] == 800.0
 
     audit = await seeded_db.audit_log.find_one({"action": "hierarchy_bulk_relink"})
@@ -110,3 +113,98 @@ async def test_fix_is_idempotent(client, seeded_db):
     assert first >= 2
     r2 = await client.post("/api/admin/hierarchy-audit/fix", headers=auth(token))
     assert len(r2.json()["applied"]) == 0  # already linked agents are left alone
+
+
+async def test_orphan_duplicate_of_linked_profile_is_merged(client, seeded_db):
+    """The Waleed shape: the roster twin is linked under an SA, while the
+    WAR-minted orphan twin carries the downline and entries. The bulk fix must
+    merge the twins (keeper = the one with the login), not report not_on_sheet."""
+    await seeded_db.agent_profiles.insert_many([
+        {"agent_id": "W_LINKED", "name": "OTHMAN, WALEEDJASHOLIH",  # roster mashed the name — twins match by email
+         "email": "willothman.ao@test.dev", "role": "level_1",
+         "upline_id": "SA_1", "office": "MJ RGA"},
+        {"agent_id": "W_ORPHAN", "name": "Waleed Othman", "email": "willothman.ao@test.dev",
+         "role": "level_1", "upline_id": None, "office": "MJ RGA",
+         "created_by_import": True},
+        # A child hanging off the orphan twin must end up under the keeper.
+        {"agent_id": "W_CHILD", "name": "Some Child", "email": "",
+         "role": "level_1", "upline_id": "W_ORPHAN", "office": "MJ RGA"},
+    ])
+    await seeded_db.users.insert_one(
+        {"user_id": "u_w", "email": "willothman.ao@test.dev",
+         "role": "level_1", "agent_id": "W_LINKED"})
+    await seeded_db.production_entries.insert_one(
+        {"entry_id": "we1", "agent_id": "W_ORPHAN", "sales_day": "2026-08-14",
+         "gross_alp": 400.0})
+    token = await admin_token(seeded_db)
+
+    r = await client.get("/api/admin/hierarchy-audit", headers=auth(token))
+    body = r.json()
+    merges = {m["remove_agent_id"]: m for m in body["merges"]}
+    assert "W_ORPHAN" in merges
+    assert merges["W_ORPHAN"]["keep_agent_id"] == "W_LINKED"
+    assert "W_ORPHAN" not in {u["agent_id"] for u in body["unresolved"]}
+
+    r = await client.post("/api/admin/hierarchy-audit/fix", headers=auth(token))
+    assert r.status_code == 200
+    assert any(m["keep_agent_id"] == "W_LINKED" and m["remove_agent_id"] == "W_ORPHAN"
+               for m in r.json()["merged"])
+
+    # One profile left, still linked; child and entry moved to it.
+    assert await seeded_db.agent_profiles.find_one({"agent_id": "W_ORPHAN"}) is None
+    kept = await seeded_db.agent_profiles.find_one({"agent_id": "W_LINKED"})
+    assert kept["upline_id"] == "SA_1"
+    child = await seeded_db.agent_profiles.find_one({"agent_id": "W_CHILD"})
+    assert child["upline_id"] == "W_LINKED"
+    entry = await seeded_db.production_entries.find_one({"entry_id": "we1"})
+    assert entry["agent_id"] == "W_LINKED"
+
+
+async def test_orphan_twin_with_login_kept_and_adopts_linked_upline(client, seeded_db):
+    """Reverse shape: the orphan twin holds the login (so it must be kept) and
+    the linked twin holds the upline — the keeper adopts it during the merge."""
+    await seeded_db.agent_profiles.insert_many([
+        {"agent_id": "K_ORPHAN", "name": "Husein Ghasham",
+         "email": "ghashuss@test.dev", "role": "level_1", "upline_id": None,
+         "office": "MJ RGA"},
+        {"agent_id": "K_LINKED", "name": "GHASHAM, HUSEIN", "email": "",
+         "role": "level_1", "upline_id": "SA_1", "office": "MJ RGA"},
+    ])
+    await seeded_db.users.insert_one(
+        {"user_id": "u_h", "email": "ghashuss@test.dev",
+         "role": "level_1", "agent_id": "K_ORPHAN"})
+    token = await admin_token(seeded_db)
+
+    r = await client.post("/api/admin/hierarchy-audit/fix", headers=auth(token))
+    assert r.status_code == 200
+    merged = r.json()["merged"]
+    assert any(m["keep_agent_id"] == "K_ORPHAN" and m["remove_agent_id"] == "K_LINKED"
+               for m in merged)
+    kept = await seeded_db.agent_profiles.find_one({"agent_id": "K_ORPHAN"})
+    assert kept["upline_id"] == "SA_1"  # adopted from the merged twin
+    assert await seeded_db.agent_profiles.find_one({"agent_id": "K_LINKED"}) is None
+
+
+async def test_full_sheet_covers_other_offices_and_typos(client, seeded_db):
+    """The 2026-08-20 full app-sheet snapshot covers all three RGA books, so
+    an Alwatan-book orphan (not in either import script) now resolves — even
+    through the sheet's own spelling drift: Ashton Marshall's SA column says
+    "Afnan Alfatlaway" while her profile (and her own name row) spell it
+    "Afnan Alfatlawy"."""
+    await seeded_db.agent_profiles.insert_many([
+        {"agent_id": "AFNAN", "name": "Afnan Alfatlawy", "email": "afalawy@test.dev",
+         "role": "level_2", "io_role": "SA", "upline_id": "GA_1", "office": "Alwatan RGA"},
+        {"agent_id": "ASHTON", "name": "Ashton Marshall", "email": "",
+         "role": "level_1", "upline_id": None, "office": "Alwatan RGA",
+         "created_by_import": True},
+    ])
+    token = await admin_token(seeded_db)
+
+    r = await client.get("/api/admin/hierarchy-audit", headers=auth(token))
+    proposals = {p["agent_id"]: p for p in r.json()["proposals"]}
+    assert proposals["ASHTON"]["upline_agent_id"] == "AFNAN"
+
+    r = await client.post("/api/admin/hierarchy-audit/fix", headers=auth(token))
+    assert r.status_code == 200
+    ashton = await seeded_db.agent_profiles.find_one({"agent_id": "ASHTON"})
+    assert ashton["upline_id"] == "AFNAN"
