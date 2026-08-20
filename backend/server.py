@@ -2887,18 +2887,21 @@ def _committed_hierarchy() -> Dict[frozenset, Dict[str, str]]:
 
 
 async def _find_profile_tolerant(name: str) -> Optional[Dict[str, Any]]:
-    """find_profile_by_person_name, then a one-typo-per-token fuzzy pass —
-    the office sheet misspells some of its own references ("Afnan Alfatlaway"
-    for "Afnan Alfatlawy"). Fuzzy matching stays confined to the hierarchy
-    audit; production-attributing paths (WAR import) keep exact matching."""
-    exact = await find_profile_by_person_name(name)
-    if exact:
-        return exact
+    """find_profile_by_person_name across every spelling the person goes by
+    (curated aliases like "Edward Leon" / "Eddie Leon"), then a
+    one-typo-per-token fuzzy pass — the office sheet misspells some of its own
+    references ("Afnan Alfatlaway" for "Afnan Alfatlawy"). Fuzzy matching
+    stays confined to the hierarchy audit; production-attributing paths (WAR
+    import) keep exact matching."""
+    for variant in roster_hierarchy.alias_names(name):
+        exact = await find_profile_by_person_name(variant)
+        if exact:
+            return exact
     key = _person_name_key(name)
     if not key:
         return None
     matches = [a async for a in db.agent_profiles.find({}, {"_id": 0})
-               if roster_hierarchy.keys_match(key, _person_name_key(a.get("name", "")))]
+               if roster_hierarchy.person_match(key, _person_name_key(a.get("name", "")))]
     if not matches:
         return None
     with_email = [a for a in matches if str(a.get("email", "")).strip()]
@@ -2974,9 +2977,9 @@ async def _hierarchy_repair_plan() -> Dict[str, Any]:
 
         entry = sheet.get(key) or (by_email.get(a_email) if a_email else None)
         if entry is None and key:
-            # One-typo tolerance for the sheet's own spelling drift.
+            # One-typo and alias tolerance for the sheet's own spelling drift.
             entry = next((v for k2, v in sheet.items()
-                          if roster_hierarchy.keys_match(key, k2)), None)
+                          if roster_hierarchy.person_match(key, k2)), None)
         if entry is None or not entry["upline_name"]:
             unresolved.append({"agent_id": a["agent_id"], "name": a.get("name", ""),
                                "office": a.get("office") or UNASSIGNED_OFFICE,

@@ -208,3 +208,34 @@ async def test_full_sheet_covers_other_offices_and_typos(client, seeded_db):
     assert r.status_code == 200
     ashton = await seeded_db.agent_profiles.find_one({"agent_id": "ASHTON"})
     assert ashton["upline_id"] == "AFNAN"
+
+
+async def test_alias_resolves_eddie_leon_and_his_downline(client, seeded_db):
+    """Eddie Leon (Gojcaj's GA) was stuck unresolved: his row's GA column says
+    "Edward Leon", a nickname one-edit matching can't bridge. The alias table
+    must classify him as a GA under Joseph Gojcaj, and resolve his downline's
+    "Edward Leon" references to his profile."""
+    await seeded_db.agent_profiles.insert_many([
+        {"agent_id": "GOJCAJ", "name": "Joseph Gojcaj", "email": "joseph@test.dev",
+         "role": "level_4", "upline_id": None, "office": "Gojcaj RGA"},
+        {"agent_id": "EDDIE", "name": "Eddie Leon", "email": "",
+         "role": "level_1", "upline_id": None, "office": "Gojcaj RGA",
+         "created_by_import": True},
+        {"agent_id": "JULIAN", "name": "Julian Hyman", "email": "",
+         "role": "level_1", "upline_id": None, "office": "Gojcaj RGA",
+         "created_by_import": True},
+    ])
+    token = await admin_token(seeded_db)
+
+    r = await client.get("/api/admin/hierarchy-audit", headers=auth(token))
+    proposals = {p["agent_id"]: p for p in r.json()["proposals"]}
+    assert proposals["EDDIE"]["upline_agent_id"] == "GOJCAJ"
+    # Julian's sheet row: SA "Julian Hyman" (self) → upline GA "Edward Leon".
+    assert proposals["JULIAN"]["upline_agent_id"] == "EDDIE"
+
+    r = await client.post("/api/admin/hierarchy-audit/fix", headers=auth(token))
+    assert r.status_code == 200
+    eddie = await seeded_db.agent_profiles.find_one({"agent_id": "EDDIE"})
+    julian = await seeded_db.agent_profiles.find_one({"agent_id": "JULIAN"})
+    assert eddie["upline_id"] == "GOJCAJ"
+    assert julian["upline_id"] == "EDDIE"
