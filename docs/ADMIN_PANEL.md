@@ -89,7 +89,9 @@ an upline.
   `agent_profiles` by email on every login. So every role write updates **both**
   `agent_profiles` (survives the next login) **and** `users` (visible immediately).
 - **Endpoints** (all `require_admin` except the self-switch):
-  - `GET  /api/admin/people` — roster with `has_login`, `is_admin`, `can_switch_role`
+  - `GET  /api/admin/people` — roster with `has_login`, `is_admin`, `can_switch_role`,
+    `first_login_at`, `last_seen_at` (activity, refreshed at most every 10 minutes),
+    plus a `summary { roster, signed_in }` powering the Login Scoreboard card
   - `POST /api/admin/set-role` — `{ agent_id, role }`
   - `POST /api/admin/add-person` — `{ name, email, phone?, office?, role, io_role?, upline_agent_id? }`
   - `POST /api/admin/set-flags` — `{ email, is_admin?, can_switch_role? }`

@@ -29,7 +29,26 @@ interface Person {
   has_login: boolean;
   is_admin: boolean;
   can_switch_role: boolean;
+  first_login_at?: string | null; // null until they sign in for the first time
+  last_seen_at?: string | null;   // refreshed by activity, not just login
 }
+
+interface LoginSummary {
+  roster: number;
+  signed_in: number;
+}
+
+type LoginFilter = 'all' | 'in' | 'out';
+
+// e.g. "Aug 20" this year, "Aug 20, 2025" otherwise; '—' when never signed in.
+const fmtWhen = (iso?: string | null): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString(undefined, opts);
+};
 
 const TIERS: Role[] = ['level_1', 'level_2', 'level_3', 'level_4'];
 const TIER_SHORT: Record<string, string> = { level_1: 'L1', level_2: 'L2', level_3: 'L3', level_4: 'L4' };
@@ -39,8 +58,10 @@ export default function AdminScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [people, setPeople] = useState<Person[]>([]);
+  const [summary, setSummary] = useState<LoginSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [loginFilter, setLoginFilter] = useState<LoginFilter>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
 
@@ -60,8 +81,9 @@ export default function AdminScreen() {
 
   const load = async () => {
     try {
-      const r = await api<{ people: Person[] }>('/api/admin/people');
+      const r = await api<{ people: Person[]; summary: LoginSummary }>('/api/admin/people');
       setPeople(r.people);
+      setSummary(r.summary);
     } catch (e: unknown) {
       notify('Error', e instanceof Error ? e.message : 'Failed to load roster');
     } finally {
@@ -77,12 +99,15 @@ export default function AdminScreen() {
 
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return people;
-    return people.filter((p) =>
-      p.name.toLowerCase().includes(q) ||
-      (p.email || '').toLowerCase().includes(q) ||
-      (p.office || '').toLowerCase().includes(q));
-  }, [people, filter]);
+    return people.filter((p) => {
+      if (loginFilter === 'in' && !p.has_login) return false;
+      if (loginFilter === 'out' && p.has_login) return false;
+      if (!q) return true;
+      return p.name.toLowerCase().includes(q) ||
+        (p.email || '').toLowerCase().includes(q) ||
+        (p.office || '').toLowerCase().includes(q);
+    });
+  }, [people, filter, loginFilter]);
 
   const uplineMatches = useMemo(() => {
     const q = fUplineQuery.trim().toLowerCase();
@@ -155,6 +180,32 @@ export default function AdminScreen() {
         <Text style={styles.intro}>
           Tier changes take effect immediately and update both the roster and any linked login.
         </Text>
+
+        {summary ? (
+          <View style={styles.scoreCard} testID="admin-login-scoreboard">
+            <Text style={styles.scoreKicker}>LOGIN SCOREBOARD</Text>
+            <View style={styles.scoreRow}>
+              <Text style={styles.scoreBig}>
+                {summary.signed_in}
+                <Text style={styles.scoreOf}> / {summary.roster}</Text>
+              </Text>
+              <Text style={styles.scorePct}>
+                {summary.roster > 0 ? Math.round((summary.signed_in / summary.roster) * 100) : 0}%
+              </Text>
+            </View>
+            <View style={styles.scoreTrack}>
+              <View
+                style={[styles.scoreFill,
+                  { width: `${summary.roster > 0 ? Math.round((summary.signed_in / summary.roster) * 100) : 0}%` }]}
+              />
+            </View>
+            <Text style={styles.scoreSub}>
+              {summary.roster - summary.signed_in === 0
+                ? 'Everyone on the roster has signed in.'
+                : `${summary.roster - summary.signed_in} still haven't signed in — tap NOT SIGNED IN below to see who to chase.`}
+            </Text>
+          </View>
+        ) : null}
 
         <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd((v) => !v)} testID="admin-toggle-add">
           <Ionicons name={showAdd ? 'chevron-up' : 'person-add'} size={16} color="#000" />
@@ -262,6 +313,18 @@ export default function AdminScreen() {
             testID="admin-search"
           />
         </View>
+        <View style={styles.tierRow}>
+          {([['all', 'ALL'], ['in', 'SIGNED IN'], ['out', 'NOT SIGNED IN']] as [LoginFilter, string][]).map(([key, label]) => (
+            <TouchableOpacity
+              key={key}
+              style={[styles.tierBtn, styles.loginFilterBtn, loginFilter === key && styles.tierBtnOn]}
+              onPress={() => setLoginFilter(key)}
+              testID={`admin-login-filter-${key}`}
+            >
+              <Text style={[styles.tierTxt, loginFilter === key && styles.tierTxtOn]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <Text style={styles.count}>{shown.length} of {people.length} people</Text>
 
         {loading ? (
@@ -288,7 +351,11 @@ export default function AdminScreen() {
               {open ? (
                 <View style={styles.personBody}>
                   <Text style={styles.detail}>{p.email || 'No email on file'}</Text>
-                  <Text style={styles.detailDim}>{p.has_login ? 'Has signed in' : 'Never signed in'}</Text>
+                  <Text style={styles.detailDim}>
+                    {p.has_login
+                      ? `First login ${fmtWhen(p.first_login_at)} · Last seen ${fmtWhen(p.last_seen_at)}`
+                      : 'Never signed in'}
+                  </Text>
 
                   <Text style={styles.lab}>ACCESS TIER</Text>
                   <View style={styles.tierRow}>
@@ -351,6 +418,16 @@ export default function AdminScreen() {
 const styles = StyleSheet.create({
   kicker: { color: COLORS.gold, fontWeight: '900', fontSize: 11, letterSpacing: 2 },
   intro: { color: COLORS.textDim, fontSize: 12, marginVertical: 8 },
+  scoreCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.gold, borderRadius: 6, padding: 14, marginBottom: 10 },
+  scoreKicker: { color: COLORS.gold, fontWeight: '900', fontSize: 9, letterSpacing: 1.2 },
+  scoreRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 6 },
+  scoreBig: { color: '#fff', fontWeight: '900', fontSize: 28 },
+  scoreOf: { color: COLORS.textDim, fontWeight: '700', fontSize: 16 },
+  scorePct: { color: COLORS.gold, fontWeight: '900', fontSize: 16 },
+  scoreTrack: { height: 6, borderRadius: 3, backgroundColor: COLORS.surface2, marginTop: 8, overflow: 'hidden' },
+  scoreFill: { height: 6, borderRadius: 3, backgroundColor: COLORS.gold },
+  scoreSub: { color: COLORS.textDim, fontSize: 11, marginTop: 8 },
+  loginFilterBtn: { marginTop: 8 },
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.primary, padding: 12, borderRadius: 6, marginTop: 4 },
   addBtnTxt: { color: '#000', fontWeight: '900', fontSize: 13 },
   card: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, padding: 14, marginTop: 10 },
