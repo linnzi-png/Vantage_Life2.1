@@ -95,6 +95,15 @@ an upline.
   - `POST /api/admin/set-role` — `{ agent_id, role }`
   - `POST /api/admin/add-person` — `{ name, email, phone?, office?, role, io_role?, upline_agent_id? }`
   - `POST /api/admin/set-flags` — `{ email, is_admin?, can_switch_role? }`
+  - `POST /api/team/remove-person` — `{ agent_id, dry_run?, destination_upline_agent_id?, reason? }`;
+    SA+ for their own downline strictly below their tier (GA can't remove SA, RGA
+    can't remove RGA), admin for anyone. Archives + detaches (never deletes): sales
+    history keeps aggregating, login parks on pending, direct reports move to the
+    removed leader's former upline. Removing a root requires promoting a direct report.
+  - `POST /api/team/reassign` — `{ agent_id, new_upline_agent_id }`; GA/MGA/RGA
+    (SA title excluded) within their downline, admin anywhere.
+  - `POST /api/admin/unarchive-person` — `{ agent_id, upline_agent_id? }` restores
+    an archived person under a chosen upline and re-links their login.
   - `POST /api/admin/import-war-report` — multipart: `file` (.xlsx), plus optional
     `week_start` (YYYY-MM-DD, defaults to the filename date), `dry_run`, `create_missing`.
     Returns per-file counts (`inserted`/`replaced`/`protected`/`skipped_unmatched`) and
