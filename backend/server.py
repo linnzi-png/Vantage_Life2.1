@@ -24,6 +24,9 @@ import metrics
 import war_import
 import war_export
 import audit_roster_emails as roster_audit
+import import_roster as roster_2026_07
+import import_missing_roster as roster_2026_08
+import roster_hierarchy
 from pathlib import Path
 from pydantic import BaseModel, Field
 from jose import jwt as apple_jwt
@@ -2892,6 +2895,669 @@ async def admin_orphans(user: Dict[str, Any] = Depends(require_admin)):
     return {"orphans": orphans, "total_agents": len(everyone)}
 
 
+# ---- Bulk upline repair from the committed roster hierarchy (admin) ----
+# The orphans endpoint above surfaced ~150 unlinked agents in production —
+# every one invisible in their upline's Team tab (found troubleshooting Snoor
+# Qaradaghi's missing team, 2026-08-20). Fixing them one at a time through the
+# picker is not realistic, but the repo already knows most of the hierarchy:
+# the two committed roster scripts record who reports to whom. These routes
+# match each orphan against that committed sheet data (tolerant of name-format
+# drift) and re-link them in bulk, dry-run first.
+
+def _committed_hierarchy() -> Dict[frozenset, Dict[str, str]]:
+    """Person-name-key -> {name, email, upline_name}, newest source last so it
+    wins: the two committed roster scripts, then the office's full app-sheet
+    snapshot (backend/data/roster/agent_hierarchy_*.csv), which carries
+    SA/GA/MGA/RGA columns for all three RGA books."""
+    out: Dict[frozenset, Dict[str, str]] = {}
+    for name, _phone, email, _io, _role, upline_name in roster_2026_07.ROSTER:
+        key = _person_name_key(name)
+        if key:
+            out[key] = {"name": name, "email": (email or "").strip().lower(),
+                        "upline_name": upline_name or ""}
+    for name, email, _io, _role, _rookie, upline_name in roster_2026_08.ROSTER:
+        key = _person_name_key(name)
+        if key:
+            out[key] = {"name": name, "email": (email or "").strip().lower(),
+                        "upline_name": upline_name or ""}
+    for key, entry in roster_hierarchy.load_hierarchy().items():
+        out[key] = {"name": entry["name"], "email": entry["email"],
+                    "upline_name": entry["upline_name"]}
+    return out
+
+
+async def _find_profile_tolerant(name: str) -> Optional[Dict[str, Any]]:
+    """find_profile_by_person_name across every spelling the person goes by
+    (curated aliases like "Edward Leon" / "Eddie Leon"), then a
+    one-typo-per-token fuzzy pass — the office sheet misspells some of its own
+    references ("Afnan Alfatlaway" for "Afnan Alfatlawy"). Fuzzy matching
+    stays confined to the hierarchy audit; production-attributing paths (WAR
+    import) keep exact matching."""
+    for variant in roster_hierarchy.alias_names(name):
+        exact = await find_profile_by_person_name(variant)
+        if exact:
+            return exact
+    key = _person_name_key(name)
+    if not key:
+        return None
+    matches = [a async for a in db.agent_profiles.find({}, {"_id": 0})
+               if roster_hierarchy.person_match(key, _person_name_key(a.get("name", "")))]
+    if not matches:
+        return None
+    with_email = [a for a in matches if str(a.get("email", "")).strip()]
+    return (with_email or matches)[0]
+
+
+async def _profile_rank(a: Dict[str, Any], child_count: Dict[str, int]) -> Tuple:
+    """Keeper-preference rank, same order the duplicates endpoint suggests:
+    a linked login first, then a login email, then the larger subtree."""
+    logins = await db.users.count_documents({"agent_id": a["agent_id"]})
+    entries = await db.production_entries.count_documents({"agent_id": a["agent_id"]})
+    return (logins > 0, bool(str(a.get("email", "")).strip()),
+            child_count.get(a["agent_id"], 0), entries)
+
+
+async def _hierarchy_repair_plan() -> Dict[str, Any]:
+    """For every orphaned agent (same definition as /admin/orphans), work out
+    the fix: an orphan that is a duplicate twin of an already-linked profile
+    should be MERGED into it (the WAR import minted these); anyone else gets
+    the upline the committed roster sheets record, if they record one."""
+    sheet = _committed_hierarchy()
+    by_email = {v["email"]: v for v in sheet.values() if v["email"]}
+    everyone = [a async for a in db.agent_profiles.find(
+        {}, {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "office": 1,
+             "role": 1, "upline_id": 1})]
+    known = {a["agent_id"] for a in everyone}
+    child_count: Dict[str, int] = {}
+    for a in everyone:
+        up = a.get("upline_id")
+        if up:
+            child_count[up] = child_count.get(up, 0) + 1
+
+    def is_linked(a: Dict[str, Any]) -> bool:
+        return a.get("role") == "level_4" or (a.get("upline_id") in known)
+
+    linked_by_key: Dict[frozenset, List[Dict[str, Any]]] = {}
+    linked_by_login: Dict[str, List[Dict[str, Any]]] = {}
+    for a in everyone:
+        if is_linked(a):
+            key = _person_name_key(a.get("name", ""))
+            if key:
+                linked_by_key.setdefault(key, []).append(a)
+            email = str(a.get("email", "")).strip().lower()
+            if email:
+                linked_by_login.setdefault(email, []).append(a)
+
+    proposals, merges, unresolved = [], [], []
+    for a in everyone:
+        if a.get("role") == "level_4" or is_linked(a):
+            continue
+        key = _person_name_key(a.get("name", ""))
+
+        # Duplicate twin of a linked profile → merge them back into one node.
+        # Matched by name key or by login email — the roster sometimes mashes
+        # a name ("OTHMAN, WALEEDJASHOLIH" vs "Waleed Othman"), and then only
+        # the shared email identifies the twins.
+        a_email = str(a.get("email", "")).strip().lower()
+        twins = [t for t in linked_by_key.get(key, [])
+                 + (linked_by_login.get(a_email, []) if a_email else [])
+                 if t["agent_id"] != a["agent_id"]]
+        twins = list({t["agent_id"]: t for t in twins}.values())
+        if twins:
+            ranked = sorted(
+                [(await _profile_rank(p, child_count), p) for p in [a] + twins],
+                key=lambda t: t[0], reverse=True)
+            keep, remove = ranked[0][1], ranked[1][1]
+            merges.append({
+                "keep_agent_id": keep["agent_id"], "keep_name": keep.get("name", ""),
+                "remove_agent_id": remove["agent_id"], "remove_name": remove.get("name", ""),
+                "office": a.get("office") or UNASSIGNED_OFFICE,
+            })
+            continue
+
+        entry = sheet.get(key) or (by_email.get(a_email) if a_email else None)
+        if entry is None and key:
+            # One-typo and alias tolerance for the sheet's own spelling drift.
+            entry = next((v for k2, v in sheet.items()
+                          if roster_hierarchy.person_match(key, k2)), None)
+        if entry is None or not entry["upline_name"]:
+            unresolved.append({"agent_id": a["agent_id"], "name": a.get("name", ""),
+                               "office": a.get("office") or UNASSIGNED_OFFICE,
+                               "reason": "not_on_sheet"})
+            continue
+        upline = await _find_profile_tolerant(entry["upline_name"])
+        if upline is None or upline["agent_id"] == a["agent_id"]:
+            unresolved.append({"agent_id": a["agent_id"], "name": a.get("name", ""),
+                               "office": a.get("office") or UNASSIGNED_OFFICE,
+                               "reason": "upline_not_found",
+                               "sheet_upline": entry["upline_name"]})
+            continue
+        proposals.append({
+            "agent_id": a["agent_id"],
+            "name": a.get("name", ""),
+            "office": a.get("office") or UNASSIGNED_OFFICE,
+            "upline_agent_id": upline["agent_id"],
+            "upline_name": upline.get("name", ""),
+        })
+    proposals.sort(key=lambda p: p["name"].lower())
+    merges.sort(key=lambda p: p["keep_name"].lower())
+    unresolved.sort(key=lambda p: p["name"].lower())
+    return {"proposals": proposals, "merges": merges, "unresolved": unresolved,
+            "orphan_count": len(proposals) + len(merges) + len(unresolved)}
+
+
+@api_router.get("/admin/hierarchy-audit")
+async def admin_hierarchy_audit(user: Dict[str, Any] = Depends(require_admin)):
+    """Dry-run: which unlinked agents the committed roster hierarchy can
+    re-link, and who still needs a manual upline assignment."""
+    return await _hierarchy_repair_plan()
+
+
+@api_router.post("/admin/hierarchy-audit/fix")
+async def admin_hierarchy_audit_fix(user: Dict[str, Any] = Depends(require_admin)):
+    """Apply the plan above: merge each orphan that duplicates a linked
+    profile, then set each remaining resolvable orphan's upline to the one the
+    roster sheets record. Same cycle guard as /admin/set-upline, re-checked at
+    apply time since each link changes the tree."""
+    plan = await _hierarchy_repair_plan()
+
+    merged = []
+    for m in plan["merges"]:
+        keep = await db.agent_profiles.find_one({"agent_id": m["keep_agent_id"]}, {"_id": 0})
+        remove = await db.agent_profiles.find_one({"agent_id": m["remove_agent_id"]}, {"_id": 0})
+        if not keep or not remove:
+            continue  # an earlier merge in this run already consumed it
+        merge_plan = await _plan_agent_merge(keep, remove)
+        await _apply_agent_merge(keep, remove, merge_plan, user["user_id"], user.get("name"))
+        merged.append(m)
+
+    # Re-plan after the merges: a merged keeper may have adopted its upline,
+    # and its former children now hang off a linked profile.
+    plan = await _hierarchy_repair_plan()
+    applied, skipped = [], list(plan["unresolved"])
+    now = now_utc()
+    for p in plan["proposals"]:
+        if p["agent_id"] in await _ancestor_chain(p["upline_agent_id"]):
+            skipped.append({**p, "reason": "would_create_cycle"})
+            continue
+        await db.agent_profiles.update_one(
+            {"agent_id": p["agent_id"]},
+            {"$set": {"upline_id": p["upline_agent_id"], "updated_at": now}})
+        applied.append(p)
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now,
+        "action": "hierarchy_bulk_relink",
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "applied_count": len(applied),
+        "merged_count": len(merged),
+        "applied": [{"agent_id": p["agent_id"], "upline_agent_id": p["upline_agent_id"]}
+                    for p in applied],
+        "merged": [{"keep_agent_id": m["keep_agent_id"],
+                    "remove_agent_id": m["remove_agent_id"]} for m in merged],
+    })
+    return {"ok": True, "applied": applied, "merged": merged, "unresolved": skipped}
+
+
+# ---- Full roster-sheet sync (admin) ----
+# Owner request (2026-08-21): the 2026-08-20 app sheet is the source of truth
+# for tier, display title, tenure, and the entire upline structure — sync the
+# app to it. One deliberate exception: the sync only RAISES access tiers to
+# match a person's sheet position; it never lowers anyone's access on its own.
+# The sheet structurally shows e.g. MJ Aljahmi as an MGA under Joseph Gojcaj,
+# but he is level_4 in the app by explicit owner decision — demotions are
+# reported for human review instead of applied. Titles follow the same rule:
+# Partner / Senior Partner are deliberate titles carried by level_3/level_4
+# holders and are never overwritten.
+
+_PROTECTED_TITLES = {"partner", "senior partner"}
+
+
+def _level_of(role: str) -> int:
+    try:
+        return int(str(role or "level_1").split("_")[1])
+    except (IndexError, ValueError):
+        return 1
+
+
+async def _roster_sync_plan() -> Dict[str, Any]:
+    sheet = roster_hierarchy.load_hierarchy()
+    profiles = [a async for a in db.agent_profiles.find({}, {"_id": 0})]
+    known = {a["agent_id"] for a in profiles}
+    by_email = {str(a.get("email", "")).strip().lower(): a
+                for a in profiles if str(a.get("email", "")).strip()}
+
+    def match_profile(entry: Dict[str, str]) -> Optional[Dict[str, Any]]:
+        key = roster_hierarchy.name_key(entry["name"])
+        for a in profiles:
+            if roster_hierarchy.person_match(key, _person_name_key(a.get("name", ""))):
+                return a
+        return by_email.get(entry["email"]) if entry["email"] else None
+
+    changes, demotions_review, to_create = [], [], []
+    matched_ids = set()
+    for entry in sheet.values():
+        prof = match_profile(entry)
+        if prof is None:
+            to_create.append(entry)
+            continue
+        matched_ids.add(prof["agent_id"])
+        change: Dict[str, Any] = {}
+        cur_level, sheet_level = _level_of(prof.get("role")), _level_of(entry["role"])
+        if sheet_level > cur_level:
+            change["role"] = entry["role"]
+        elif sheet_level < cur_level:
+            demotions_review.append({
+                "agent_id": prof["agent_id"], "name": prof.get("name", ""),
+                "app_role": prof.get("role"), "sheet_position": entry["io_role"],
+            })
+        cur_title = str(prof.get("io_role") or "").strip()
+        if cur_title.lower() not in _PROTECTED_TITLES:
+            if not cur_title or ("role" in change and cur_title != entry["io_role"]):
+                if entry["io_role"] != cur_title:
+                    change["io_role"] = entry["io_role"]
+        tenure = entry["tenure"].strip().lower()
+        target_rookie = True if tenure.startswith("rookie") else False if tenure.startswith("vet") else None
+        if target_rookie is not None and prof.get("is_rookie") != target_rookie:
+            change["is_rookie"] = target_rookie
+        for field in ("email", "phone"):
+            if not str(prof.get(field) or "").strip() and entry[field]:
+                change[field] = entry[field]
+        if entry["upline_name"]:
+            upline = await _find_profile_tolerant(entry["upline_name"])
+            cur_upline = prof.get("upline_id")
+            if (upline and upline["agent_id"] != prof["agent_id"]
+                    and upline["agent_id"] != cur_upline
+                    and prof["agent_id"] not in await _ancestor_chain(upline["agent_id"])):
+                # Correct a wrong or dangling link — but never null out a valid
+                # one silently; this only re-points to the sheet's upline.
+                change["upline_id"] = upline["agent_id"]
+                change["upline_name"] = upline.get("name", "")
+        if change:
+            changes.append({"agent_id": prof["agent_id"], "name": prof.get("name", ""),
+                            "current_role": prof.get("role"), **change})
+
+    not_on_sheet = sorted(
+        ({"agent_id": a["agent_id"], "name": a.get("name", ""),
+          "office": a.get("office") or UNASSIGNED_OFFICE}
+         for a in profiles if a["agent_id"] not in matched_ids),
+        key=lambda x: x["name"].lower())
+    changes.sort(key=lambda c: c["name"].lower())
+    return {"changes": changes, "to_create": [e["name"] for e in to_create],
+            "_create_entries": to_create, "demotions_review": demotions_review,
+            "not_on_sheet": not_on_sheet, "sheet_size": len(sheet),
+            "profiles_total": len(profiles), "known_ids": known}
+
+
+@api_router.get("/admin/roster-sync")
+async def admin_roster_sync(user: Dict[str, Any] = Depends(require_admin)):
+    """Preview: what syncing the app to the committed roster sheet would
+    change — tier raises, titles, tenure, upline corrections, missing profiles
+    to create — plus demotion candidates and app-only people, both left for
+    human review."""
+    plan = await _roster_sync_plan()
+    plan.pop("_create_entries", None)
+    plan.pop("known_ids", None)
+    return plan
+
+
+@api_router.post("/admin/roster-sync/fix")
+async def admin_roster_sync_fix(user: Dict[str, Any] = Depends(require_admin)):
+    """Apply the sync: per-profile field updates (role raises re-synced onto
+    linked logins, per the sign-in invariant), then create sheet people the
+    app lacks — in sheet order, so each new profile's upline usually already
+    exists."""
+    plan = await _roster_sync_plan()
+    now = now_utc()
+
+    applied = []
+    for c in plan["changes"]:
+        sets = {k: v for k, v in c.items()
+                if k in ("role", "io_role", "is_rookie", "email", "phone", "upline_id")}
+        if not sets:
+            continue
+        if "email" in sets:
+            sets["email"] = str(sets["email"]).strip().lower()
+        await db.agent_profiles.update_one(
+            {"agent_id": c["agent_id"]}, {"$set": {**sets, "updated_at": now}})
+        if "role" in sets:
+            await db.users.update_many(
+                {"agent_id": c["agent_id"]}, {"$set": {"role": sets["role"]}})
+        applied.append(c)
+
+    created = []
+    for entry in plan["_create_entries"]:
+        upline = None
+        if entry["upline_name"]:
+            upline = await _find_profile_tolerant(entry["upline_name"])
+        if entry["role"] != "level_4" and upline is None:
+            continue  # an agent created without an upline would be a fresh orphan
+        tenure = entry["tenure"].strip().lower()
+        profile = {
+            "agent_id": f"agent_{uuid.uuid4().hex[:10]}",
+            "name": entry["name"],
+            "email": entry["email"],
+            "phone": entry["phone"],
+            "office": (upline.get("office") if upline else "") or UNASSIGNED_OFFICE,
+            "role": entry["role"],
+            "io_role": entry["io_role"],
+            "upline_id": upline["agent_id"] if upline else None,
+            "created_at": now,
+        }
+        if tenure.startswith("rookie"):
+            profile["is_rookie"] = True
+        elif tenure.startswith("vet"):
+            profile["is_rookie"] = False
+        await db.agent_profiles.insert_one(dict(profile))
+        if entry["email"]:
+            await db.users.update_many(
+                {"email": entry["email"]},
+                {"$set": {"role": entry["role"], "agent_id": profile["agent_id"]}})
+        created.append(entry["name"])
+
+    if created:
+        # An upline that only came into existence in the creation pass above
+        # couldn't be linked in the first pass — one re-plan settles those.
+        replan = await _roster_sync_plan()
+        for c in replan["changes"]:
+            if "upline_id" not in c:
+                continue
+            await db.agent_profiles.update_one(
+                {"agent_id": c["agent_id"]},
+                {"$set": {"upline_id": c["upline_id"], "updated_at": now}})
+            applied.append(c)
+
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now,
+        "action": "roster_sheet_sync",
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "changes_applied": len(applied),
+        "profiles_created": len(created),
+        "changes": [{k: v for k, v in c.items() if k != "current_role"} for c in applied],
+    })
+    return {"ok": True, "applied": applied, "created": created,
+            "demotions_review": plan["demotions_review"],
+            "not_on_sheet": plan["not_on_sheet"]}
+
+
+# ---- Duplicate agent profiles (admin) ----
+# Root cause found troubleshooting Snoor Qaradaghi's Team tab (2026-08-20):
+# each import path spelled names its own way — the roster script wrote
+# "QARADAGHI, SNOOR" while the WAR import and the office's app sheet wrote
+# "Snoor Qaradaghi" — and every exact-name lookup saw "no match" and minted a
+# second profile for the same human. The person's downline then splits: some
+# agents' upline_id points at one profile, the rest at the other. Sign-in links
+# a login to exactly one profile (by email), so the person sees only that
+# fragment of their team — and the fragment they do see reads $0 / "No Pulse",
+# because those agents' own logins attach their entries to the *other* twin.
+
+def _person_name_key(name: str) -> frozenset:
+    """Order/case/punctuation-insensitive identity key: "QARADAGHI, SNOOR" and
+    "Snoor Qaradaghi" both map to {"snoor", "qaradaghi"}. Mirrors
+    import_missing_roster.norm_name so every tool agrees on who is who."""
+    cleaned = re.sub(r"[^a-z'\- ]", " ", str(name).replace(",", " ").lower())
+    return frozenset(t for t in cleaned.split() if t)
+
+
+async def find_profile_by_person_name(name: str) -> Optional[Dict[str, Any]]:
+    """Resolve a human's profile tolerating name-format drift. Exact
+    (case-insensitive) match first; then the token-set key above. If duplicate
+    profiles exist for the person, prefer the one a login can attach to (has an
+    email), then the one with the larger downline — so imports keep attaching
+    production to the profile the person and their team actually see."""
+    exact = await db.agent_profiles.find_one(
+        {"name": {"$regex": f"^{re.escape(name.strip())}$", "$options": "i"}}, {"_id": 0})
+    if exact:
+        return exact
+    key = _person_name_key(name)
+    if not key:
+        return None
+    matches = [a async for a in db.agent_profiles.find({}, {"_id": 0})
+               if _person_name_key(a.get("name", "")) == key]
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0]
+    ranked = []
+    for a in matches:
+        downline = await db.agent_profiles.count_documents({"upline_id": a["agent_id"]})
+        ranked.append((bool(str(a.get("email", "")).strip()), downline, a))
+    ranked.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    return ranked[0][2]
+
+
+@api_router.get("/admin/duplicates")
+async def admin_duplicates(user: Dict[str, Any] = Depends(require_admin)):
+    """Groups of agent_profiles that are the same human twice: identical name
+    key (any word order / case / "Last, First" formatting) or identical login
+    email. Each member is annotated with what hangs off it, and the group
+    carries a suggested keeper: the profile a login is linked to, else the one
+    with a login email, else the larger subtree."""
+    profiles = [a async for a in db.agent_profiles.find({}, {"_id": 0})]
+    child_count: Dict[str, int] = {}
+    for a in profiles:
+        up = a.get("upline_id")
+        if up:
+            child_count[up] = child_count.get(up, 0) + 1
+
+    grouped: Dict[Any, List[Dict[str, Any]]] = {}
+    for a in profiles:
+        key = _person_name_key(a.get("name", ""))
+        if key:
+            grouped.setdefault(("name", key), []).append(a)
+        email = str(a.get("email", "")).strip().lower()
+        if email:
+            grouped.setdefault(("email", email), []).append(a)
+
+    names = {a["agent_id"]: a.get("name", "") for a in profiles}
+    groups, seen_id_sets = [], set()
+    for (reason, _), members in grouped.items():
+        if len(members) < 2:
+            continue
+        id_set = frozenset(m["agent_id"] for m in members)
+        if len(id_set) < 2 or id_set in seen_id_sets:
+            continue  # same pair already reported under the other reason
+        seen_id_sets.add(id_set)
+        annotated = []
+        for m in members:
+            aid = m["agent_id"]
+            entries = await db.production_entries.count_documents({"agent_id": aid})
+            logins = await db.users.count_documents({"agent_id": aid})
+            annotated.append({
+                "agent_id": aid,
+                "name": m.get("name", ""),
+                "email": str(m.get("email", "")).strip(),
+                "office": m.get("office") or UNASSIGNED_OFFICE,
+                "role": m.get("role", ""),
+                "io_role": m.get("io_role") or "",
+                "upline_id": m.get("upline_id"),
+                "upline_name": names.get(m.get("upline_id") or "", ""),
+                "downline_count": child_count.get(aid, 0),
+                "entries_count": entries,
+                "logins_count": logins,
+                "created_by_import": bool(m.get("created_by_import")),
+            })
+        annotated.sort(
+            key=lambda x: (x["logins_count"] > 0, bool(x["email"]),
+                           x["downline_count"], x["entries_count"]),
+            reverse=True)
+        groups.append({
+            "reason": "same_name" if reason == "name" else "same_email",
+            "suggested_keep_agent_id": annotated[0]["agent_id"],
+            "profiles": annotated,
+        })
+    groups.sort(key=lambda g: g["profiles"][0]["name"].lower())
+    return {"groups": groups, "total_agents": len(profiles)}
+
+
+class AdminMergeAgentsIn(BaseModel):
+    keep_agent_id: str
+    remove_agent_id: str
+    dry_run: bool = False
+
+
+@api_router.post("/admin/merge-agents")
+async def admin_merge_agents(
+    payload: AdminMergeAgentsIn,
+    user: Dict[str, Any] = Depends(require_admin),
+):
+    """Fold a duplicate profile into the one being kept, so the person is one
+    node in the hierarchy again: direct reports, production entries, logins,
+    push tokens, shoutouts and nominations all move to the keeper, blank keeper
+    fields (email, phone, title, tenure...) adopt the duplicate's values, the
+    keeper ends at the higher of the two access tiers, and the duplicate is
+    deleted. `dry_run` reports every count without writing.
+
+    Production entries: a WAR-import entry on a sales_day the keeper already
+    covers is dropped, not moved — both twins were handed the same restated
+    WAR rows, and moving them would double-count that day. App-submitted
+    entries always move (multiple entries per day are legal and additive)."""
+    keep_id, remove_id = payload.keep_agent_id, payload.remove_agent_id
+    if keep_id == remove_id:
+        raise HTTPException(status_code=400, detail="Pick two different profiles to merge")
+    keep = await db.agent_profiles.find_one({"agent_id": keep_id}, {"_id": 0})
+    remove = await db.agent_profiles.find_one({"agent_id": remove_id}, {"_id": 0})
+    if not keep or not remove:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    plan = await _plan_agent_merge(keep, remove)
+    report = {
+        "ok": True,
+        "dry_run": payload.dry_run,
+        "keep_agent_id": keep_id,
+        "remove_agent_id": remove_id,
+        **{k: plan[k] for k in ("final_role", "final_upline_id", "adopted_fields",
+                                "children_repointed", "entries_moved",
+                                "entries_dropped_war_duplicates", "logins_relinked",
+                                "push_tokens_moved")},
+    }
+    if payload.dry_run:
+        return report
+    await _apply_agent_merge(keep, remove, plan, user["user_id"], user.get("name"))
+    return report
+
+
+async def _plan_agent_merge(keep: Dict[str, Any], remove: Dict[str, Any]) -> Dict[str, Any]:
+    keep_id, remove_id = keep["agent_id"], remove["agent_id"]
+    keep_level = int(str(keep.get("role", "level_1")).split("_")[1])
+    remove_level = int(str(remove.get("role", "level_1")).split("_")[1])
+    final_role = f"level_{max(keep_level, remove_level)}"
+
+    # The keeper adopts the duplicate's upline when its own is missing,
+    # dangling (points at a profile that no longer exists), or — worse —
+    # points at the duplicate itself (about to be deleted). Guarded against
+    # self-loops and cycles the same way /admin/set-upline is.
+    final_upline = keep.get("upline_id")
+    if final_upline == remove_id:
+        final_upline = None
+    if final_upline and not await db.agent_profiles.find_one(
+            {"agent_id": final_upline}, {"_id": 1}):
+        final_upline = None
+    if not final_upline:
+        candidate = remove.get("upline_id")
+        if (candidate and candidate not in (keep_id, remove_id)
+                and await db.agent_profiles.find_one({"agent_id": candidate}, {"_id": 1})
+                and keep_id not in await _ancestor_chain(candidate)):
+            final_upline = candidate
+
+    adopted = {}
+    for field in ("email", "phone", "io_role", "state", "office"):
+        if not str(keep.get(field) or "").strip() and str(remove.get(field) or "").strip():
+            adopted[field] = remove[field]
+    if keep.get("is_rookie") is None and remove.get("is_rookie") is not None:
+        adopted["is_rookie"] = remove["is_rookie"]
+    if not keep.get("created_by_import") or not remove.get("created_by_import"):
+        adopted["created_by_import"] = False
+
+    keep_days = set(await db.production_entries.distinct("sales_day", {"agent_id": keep_id}))
+    move_entry_ids, drop_entry_ids = [], []
+    async for e in db.production_entries.find(
+            {"agent_id": remove_id}, {"_id": 0, "entry_id": 1, "sales_day": 1, "source": 1}):
+        if e.get("sales_day") in keep_days and e.get("source") == war_import.WAR_IMPORT_SOURCE:
+            drop_entry_ids.append(e["entry_id"])
+        else:
+            move_entry_ids.append(e["entry_id"])
+
+    children_q = {"upline_id": remove_id, "agent_id": {"$ne": keep_id}}
+    return {
+        "final_role": final_role,
+        "final_upline_id": final_upline,
+        "adopted": adopted,
+        "adopted_fields": sorted(adopted.keys()),
+        "move_entry_ids": move_entry_ids,
+        "drop_entry_ids": drop_entry_ids,
+        "children_q": children_q,
+        "children_repointed": await db.agent_profiles.count_documents(children_q),
+        "entries_moved": len(move_entry_ids),
+        "entries_dropped_war_duplicates": len(drop_entry_ids),
+        "logins_relinked": await db.users.count_documents({"agent_id": remove_id}),
+        "push_tokens_moved": await db.push_tokens.count_documents({"agent_id": remove_id}),
+    }
+
+
+async def _apply_agent_merge(
+    keep: Dict[str, Any], remove: Dict[str, Any], plan: Dict[str, Any],
+    changed_by: str, changed_by_name: Optional[str],
+) -> None:
+    keep_id, remove_id = keep["agent_id"], remove["agent_id"]
+    final_role, final_upline = plan["final_role"], plan["final_upline_id"]
+    adopted = plan["adopted"]
+    move_entry_ids, drop_entry_ids = plan["move_entry_ids"], plan["drop_entry_ids"]
+    now = now_utc()
+    await db.agent_profiles.update_many(
+        plan["children_q"], {"$set": {"upline_id": keep_id, "updated_at": now}})
+    await db.agent_profiles.update_one(
+        {"agent_id": keep_id},
+        {"$set": {**adopted, "role": final_role, "upline_id": final_upline, "updated_at": now}})
+    if move_entry_ids:
+        await db.production_entries.update_many(
+            {"entry_id": {"$in": move_entry_ids}},
+            {"$set": {"agent_id": keep_id, "updated_at": now}})
+    if drop_entry_ids:
+        await db.production_entries.delete_many({"entry_id": {"$in": drop_entry_ids}})
+    # Per the sign-in invariant, users re-derive role/agent_id from
+    # agent_profiles by email — but update the linked docs now so the fix is
+    # visible without waiting for the next sign-in.
+    await db.users.update_many(
+        {"agent_id": remove_id}, {"$set": {"agent_id": keep_id, "role": final_role}})
+    if adopted.get("email"):
+        await db.users.update_many(
+            {"email": str(adopted["email"]).strip().lower()},
+            {"$set": {"agent_id": keep_id, "role": final_role}})
+    if final_role != keep.get("role"):
+        await db.users.update_many({"agent_id": keep_id}, {"$set": {"role": final_role}})
+    await db.push_tokens.update_many(
+        {"agent_id": remove_id}, {"$set": {"agent_id": keep_id}})
+    for field in ("agent_id", "posted_by_agent_id", "ga_team_id"):
+        await db.shoutouts.update_many({field: remove_id}, {"$set": {field: keep_id}})
+    for field in ("nominee_agent_id", "nominator_agent_id"):
+        await db.nominations.update_many({field: remove_id}, {"$set": {field: keep_id}})
+    async for nom in db.nominations.find(
+            {"endorsements.agent_id": remove_id}, {"_id": 0, "nomination_id": 1, "endorsements": 1}):
+        ends = [{**e, "agent_id": keep_id} if e.get("agent_id") == remove_id else e
+                for e in nom.get("endorsements", [])]
+        await db.nominations.update_one(
+            {"nomination_id": nom["nomination_id"]}, {"$set": {"endorsements": ends}})
+    await db.agent_profiles.delete_one({"agent_id": remove_id})
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now,
+        "action": "merge_agents",
+        "agent_id": keep_id,
+        "agent_name": keep.get("name"),
+        "merged_agent_id": remove_id,
+        "merged_agent_name": remove.get("name"),
+        "changed_by": changed_by,
+        "changed_by_name": changed_by_name,
+        "entries_moved": plan["entries_moved"],
+        "entries_dropped_war_duplicates": plan["entries_dropped_war_duplicates"],
+        "children_repointed": plan["children_repointed"],
+    })
+
+
 # ---- Roster email audit (admin) ----
 # Server-side twin of `python backend/audit_roster_emails.py`: verifies every
 # agent_profiles email against the committed roster sheet snapshot
@@ -3165,10 +3831,10 @@ async def admin_import_war_report(
         days_seen.append(date_str)
         for m in rows:
             name = str(m["name"]).strip()
-            profile = await db.agent_profiles.find_one(
-                {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}},
-                {"_id": 0, "agent_id": 1, "office": 1},
-            )
+            # Tolerant of name-format drift ("Snoor Qaradaghi" vs the roster's
+            # "QARADAGHI, SNOOR"): the old exact-only match minted a second
+            # profile for the same human, splitting their upline's team view.
+            profile = await find_profile_by_person_name(name)
             if not profile:
                 if not create_missing:
                     # Report rather than orphan: an agent created without an

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
-import { notify } from '../lib/dialog';
+import { confirmAsync, notify } from '../lib/dialog';
 
 interface Orphan {
   agent_id: string;
@@ -25,6 +25,14 @@ interface Orphan {
 
 export interface UplineChoice { agent_id: string; name: string; office?: string; role: string; }
 
+interface HierarchyProposal { agent_id: string; name: string; upline_name: string; }
+interface HierarchyMerge { keep_agent_id: string; keep_name: string; remove_agent_id: string; }
+interface HierarchyPlan {
+  proposals: HierarchyProposal[];
+  merges: HierarchyMerge[];
+  unresolved: { agent_id: string; reason: string }[];
+}
+
 export function OrphanRepair({ candidates, onRepaired }: {
   /** Roster the admin can pick an upline from — the same list the Add Person
    *  form searches, passed in so this component owns no roster state. */
@@ -37,11 +45,16 @@ export function OrphanRepair({ candidates, onRepaired }: {
   const [selected, setSelected] = useState<Orphan | null>(null);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
+  const [plan, setPlan] = useState<HierarchyPlan | null>(null);
 
   const load = useCallback(async () => {
     try {
       const r = await api<{ orphans: Orphan[] }>('/api/admin/orphans');
       setOrphans(r.orphans);
+      // The committed roster sheets know most uplines — ask what a bulk
+      // re-link would cover so the one-at-a-time picker is the fallback,
+      // not the plan.
+      setPlan(await api<HierarchyPlan>('/api/admin/hierarchy-audit'));
     } catch (e: unknown) {
       notify('Error', e instanceof Error ? e.message : 'Could not load orphaned agents');
     } finally {
@@ -61,6 +74,40 @@ export function OrphanRepair({ candidates, onRepaired }: {
     if (!q) return [];
     return candidates.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 5);
   }, [candidates, query]);
+
+  const autoLink = async () => {
+    if (!plan) return;
+    const nLink = plan.proposals.length;
+    const nMerge = plan.merges.length;
+    if (nLink + nMerge === 0) return;
+    const parts = [];
+    if (nMerge > 0) parts.push(`${nMerge} are duplicate profiles of someone already in the hierarchy and will be merged into them`);
+    if (nLink > 0) parts.push(`${nLink} have an upline recorded on the roster sheets and will be linked to it`);
+    const ok = await confirmAsync({
+      title: 'Auto-Fix Unlinked Agents',
+      message:
+        `${parts.join('; ')}. Anyone the sheets don’t cover stays listed for ` +
+        'manual assignment. Merges cannot be undone.',
+      confirmText: `Fix ${nLink + nMerge}`,
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const r = await api<{ applied: HierarchyProposal[]; merged: HierarchyMerge[] }>(
+        '/api/admin/hierarchy-audit/fix', { method: 'POST' });
+      notify(
+        'Agents repaired',
+        `${r.applied.length} linked to their sheet upline, ${r.merged.length} duplicate ` +
+        'profiles merged — all back in their upline’s team rollup.',
+      );
+      await load();
+      onRepaired();
+    } catch (e: unknown) {
+      notify('Auto-fix failed', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const assign = async (upline: UplineChoice) => {
     if (!selected) return;
@@ -111,6 +158,35 @@ export function OrphanRepair({ candidates, onRepaired }: {
       ) : (
         <>
           <Text style={styles.count}>{orphans.length} unlinked</Text>
+          {plan && plan.proposals.length + plan.merges.length > 0 ? (
+            <TouchableOpacity
+              style={[styles.autoBtn, busy && { opacity: 0.5 }]}
+              onPress={autoLink}
+              disabled={busy}
+              testID="orphans-autolink"
+            >
+              {busy
+                ? <ActivityIndicator color="#000" />
+                : (
+                  <Text style={styles.autoTxt}>
+                    AUTO-FIX {plan.proposals.length + plan.merges.length}
+                    {plan.merges.length > 0 ? ` (LINK ${plan.proposals.length} · MERGE ${plan.merges.length})` : ' FROM ROSTER SHEET'}
+                  </Text>
+                )}
+            </TouchableOpacity>
+          ) : null}
+          {plan && plan.unresolved.length > 0 ? (
+            <Text style={styles.unresolvedNote}>
+              {(() => {
+                const notOnSheet = plan.unresolved.filter((u) => u.reason === 'not_on_sheet').length;
+                const uplineMissing = plan.unresolved.length - notOnSheet;
+                const parts = [];
+                if (notOnSheet > 0) parts.push(`${notOnSheet} aren't on any roster sheet the app has (former agents, or missing from the sheet)`);
+                if (uplineMissing > 0) parts.push(`${uplineMissing} are on the sheet but the upline it names couldn't be found in the app`);
+                return `${parts.join('; ')} — assign them below, or update the office's roster sheet in the app's data.`;
+              })()}
+            </Text>
+          ) : null}
           {orphans.map((o) => {
             const sel = selected?.agent_id === o.agent_id;
             return (
@@ -174,6 +250,9 @@ const styles = StyleSheet.create({
   loading: { paddingVertical: 20, alignItems: 'center' },
   clear: { color: COLORS.primary, fontSize: 12, marginTop: 10, fontWeight: '700' },
   count: { color: COLORS.orange, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginTop: 12 },
+  autoBtn: { backgroundColor: COLORS.primary, alignItems: 'center', padding: 12, borderRadius: 6, marginTop: 8 },
+  autoTxt: { color: '#000', fontWeight: '900', fontSize: 12, letterSpacing: 0.5 },
+  unresolvedNote: { color: COLORS.textDim, fontSize: 11, marginTop: 8, lineHeight: 16, fontStyle: 'italic' },
   row: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, marginTop: 8, overflow: 'hidden' },
   rowOn: { borderColor: COLORS.orange },
   rowHead: { flexDirection: 'row', alignItems: 'center', padding: 10, gap: 8 },
