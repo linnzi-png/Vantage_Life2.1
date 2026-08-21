@@ -3,6 +3,12 @@
     "name": "VantageLife",
     "slug": "frontend",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/649b2c4b-062d-43e9-b060-e75fa6406340"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "frontend",

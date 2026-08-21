@@ -15,13 +15,15 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://vantagelife21-production.up.railway.app"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://vantagelife21-production.up.railway.app"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {
