@@ -54,6 +54,73 @@ async def test_people_lists_roster_with_flags(client, seeded_db):
     assert people["AG_2"]["can_switch_role"] is False
 
 
+async def test_people_summary_counts_roster_and_signed_in(client, seeded_db):
+    # 7 seeded agents; GA_1 and AG_1 have logins, the rest never signed in.
+    await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    token = await admin_token(seeded_db)
+
+    r = await client.get("/api/admin/people", headers=auth(token))
+    assert r.status_code == 200
+    assert r.json()["summary"] == {"roster": 7, "signed_in": 2}
+
+
+async def test_people_login_timestamps_fall_back_to_created_at(client, seeded_db):
+    # make_session writes only created_at (like accounts that predate the
+    # first_login_at/last_seen_at fields) — both must fall back to created_at.
+    await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    created = (await seeded_db.users.find_one({"email": "ga1@test.dev"}))["created_at"]
+    token = await admin_token(seeded_db)
+
+    r = await client.get("/api/admin/people", headers=auth(token))
+    people = {p["agent_id"]: p for p in r.json()["people"]}
+    assert people["GA_1"]["first_login_at"] == server.iso_utc(created)
+    assert people["GA_1"]["last_seen_at"] == server.iso_utc(created)
+    assert people["AG_2"]["first_login_at"] is None
+    assert people["AG_2"]["last_seen_at"] is None
+
+
+def as_utc(d) -> "server.datetime":
+    """Mongo hands datetimes back naive (UTC, millisecond precision) — normalize
+    for comparison the same way server.iso_utc does."""
+    return d.replace(tzinfo=server.timezone.utc) if d.tzinfo is None else d
+
+
+async def test_login_stamps_first_login_and_refreshes_last_seen(client, seeded_db, monkeypatch):
+    # A real sign-in (upsert_user_and_session) stamps first_login_at once and
+    # moves last_seen_at on every login.
+    await server.upsert_user_and_session("ga1@test.dev", "Ga One", None, "st_a")
+    u1 = await seeded_db.users.find_one({"email": "ga1@test.dev"})
+    assert u1["first_login_at"] == u1["last_seen_at"]
+
+    later = as_utc(u1["last_seen_at"]) + server.timedelta(hours=1)
+    monkeypatch.setattr(server, "now_utc", lambda: later)
+    await server.upsert_user_and_session("ga1@test.dev", "Ga One", None, "st_b")
+    u2 = await seeded_db.users.find_one({"email": "ga1@test.dev"})
+    assert u2["first_login_at"] == u1["first_login_at"]
+    assert as_utc(u2["last_seen_at"]) == later
+
+
+async def test_activity_refreshes_last_seen_when_stale(client, seeded_db, monkeypatch):
+    # An authenticated request refreshes a stale last_seen_at (sessions last 7
+    # days, so login time alone would lag real activity by up to a week).
+    token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    r = await client.get("/api/auth/me", headers=auth(token))
+    assert r.status_code == 200
+    first_seen = (await seeded_db.users.find_one({"email": "ga1@test.dev"}))["last_seen_at"]
+
+    # Within the throttle interval: no write.
+    r = await client.get("/api/auth/me", headers=auth(token))
+    assert (await seeded_db.users.find_one({"email": "ga1@test.dev"}))["last_seen_at"] == first_seen
+
+    # Past the throttle interval: refreshed.
+    later = as_utc(first_seen) + server.LAST_SEEN_TOUCH_INTERVAL
+    monkeypatch.setattr(server, "now_utc", lambda: later)
+    r = await client.get("/api/auth/me", headers=auth(token))
+    assert r.status_code == 200
+    assert as_utc((await seeded_db.users.find_one({"email": "ga1@test.dev"}))["last_seen_at"]) == later
+
+
 # ---------------- POST /api/admin/set-role ----------------
 
 async def test_set_role_rejects_invalid_role(client, seeded_db):

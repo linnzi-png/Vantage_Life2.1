@@ -234,6 +234,13 @@ async def get_session_token(request: Request) -> Optional[str]:
     return None
 
 
+# Sessions last 7 days, so login time alone can lag real activity by a week;
+# the admin Login Scoreboard needs "still opening the app", not "still has a
+# cookie". Refreshing at most every 10 minutes keeps it one write per user per
+# interval instead of one per request.
+LAST_SEEN_TOUCH_INTERVAL = timedelta(minutes=10)
+
+
 async def get_current_user(request: Request) -> Dict[str, Any]:
     tok = await get_session_token(request)
     if not tok:
@@ -251,6 +258,14 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     user = await db.users.find_one({"user_id": sess["user_id"]}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    last_seen = user.get("last_seen_at")
+    if isinstance(last_seen, str):
+        last_seen = datetime.fromisoformat(last_seen)
+    if last_seen and last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+    if not last_seen or now_utc() - last_seen >= LAST_SEEN_TOUCH_INTERVAL:
+        user["last_seen_at"] = now_utc()
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_seen_at": user["last_seen_at"]}})
     return user
 
 
@@ -318,6 +333,7 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
+        now = now_utc()
         user_doc = {
             "user_id": user_id,
             "email": email,
@@ -325,17 +341,27 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
             "picture": picture or "",
             "role": role,
             "agent_id": agent_id,
-            "created_at": now_utc(),
+            "created_at": now,
+            "first_login_at": now,
+            "last_seen_at": now,
         }
         await db.users.insert_one(user_doc)
         user_doc.pop("_id", None)
         user = user_doc
     else:
         # role/agent_id always re-synced from the agent roster, the source of truth
-        await db.users.update_one(
-            {"user_id": user["user_id"]},
-            {"$set": {"name": name, "picture": picture or user.get("picture", ""), "role": role, "agent_id": agent_id}},
-        )
+        updates = {
+            "name": name,
+            "picture": picture or user.get("picture", ""),
+            "role": role,
+            "agent_id": agent_id,
+            "last_seen_at": now_utc(),
+        }
+        if not user.get("first_login_at"):
+            # Accounts created before first_login_at existed: their account was
+            # created by their first sign-in, so created_at is that moment.
+            updates["first_login_at"] = user.get("created_at") or now_utc()
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
         user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
 
     await db.user_sessions.insert_one({
@@ -2598,23 +2624,37 @@ class SelfRoleIn(BaseModel):
     role: str  # level_1..level_4
 
 
+def _login_ts(value: Any) -> Optional[str]:
+    """Serialize a stored login timestamp for the admin roster (None passes through)."""
+    if isinstance(value, datetime):
+        return iso_utc(value)
+    return value or None
+
+
 @api_router.get("/admin/people")
 async def admin_people(user: Dict[str, Any] = Depends(require_admin)):
-    """Full roster with login-link status and permission flags, for the Admin screen."""
+    """Full roster with login-link status, login/activity timestamps, permission
+    flags, and a launch-engagement summary, for the Admin screen."""
     agents = [a async for a in db.agent_profiles.find(
         {}, {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "phone": 1,
              "office": 1, "role": 1, "io_role": 1, "upline_id": 1, "is_rookie": 1,
              "state": 1},
     ).sort("name", 1)]
-    flags_by_email: Dict[str, Dict[str, Any]] = {}
-    async for u in db.users.find({}, {"_id": 0, "email": 1, "is_admin": 1, "can_switch_role": 1}):
-        flags_by_email[str(u.get("email", "")).lower()] = u
+    users_by_email: Dict[str, Dict[str, Any]] = {}
+    async for u in db.users.find({}, {"_id": 0, "email": 1, "is_admin": 1, "can_switch_role": 1,
+                                      "created_at": 1, "first_login_at": 1, "last_seen_at": 1}):
+        users_by_email[str(u.get("email", "")).lower()] = u
     for a in agents:
-        u = flags_by_email.get(str(a.get("email", "")).lower())
+        u = users_by_email.get(str(a.get("email", "")).lower())
         a["has_login"] = u is not None
         a["is_admin"] = bool(u and u.get("is_admin")) or str(a.get("email", "")).lower() in ADMIN_EMAILS
         a["can_switch_role"] = bool(u and u.get("can_switch_role"))
-    return {"people": agents}
+        # Accounts predating these fields fall back to created_at — for them the
+        # account was created by their first sign-in.
+        a["first_login_at"] = _login_ts(u.get("first_login_at") or u.get("created_at")) if u else None
+        a["last_seen_at"] = _login_ts(u.get("last_seen_at") or u.get("created_at")) if u else None
+    signed_in = sum(1 for a in agents if a["has_login"])
+    return {"people": agents, "summary": {"roster": len(agents), "signed_in": signed_in}}
 
 
 @api_router.post("/admin/set-role")
