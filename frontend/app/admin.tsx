@@ -14,6 +14,7 @@ import { WarReportImport } from '../src/components/WarReportImport';
 import { OfficeMerge } from '../src/components/OfficeMerge';
 import { OrphanRepair } from '../src/components/OrphanRepair';
 import { DuplicateMerge } from '../src/components/DuplicateMerge';
+import { RosterSheetSync } from '../src/components/RosterSheetSync';
 import { RosterEmailAudit } from '../src/components/RosterEmailAudit';
 import { confirmAsync, notify } from '../src/lib/dialog';
 
@@ -169,6 +170,8 @@ export default function AdminScreen() {
         <OrphanRepair candidates={people} onRepaired={load} />
 
         <DuplicateMerge onMerged={load} />
+
+        <RosterSheetSync onSynced={load} />
 
         <RosterEmailAudit onFixed={load} />
 
