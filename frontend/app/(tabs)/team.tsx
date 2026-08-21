@@ -4,17 +4,21 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
+import { api, COLORS, useAuth, levelNum, roleTitle, Role } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
 import { QuickEntryForm, QuickEntryTarget } from '../../src/components/QuickEntryForm';
 import { AddTeamMemberSheet } from '../../src/components/AddTeamMemberSheet';
+import { MoveMemberSheet } from '../../src/components/MoveMemberSheet';
 import { PeriodSelector, usePersistedPeriod } from '../../src/components/PeriodSelector';
 import { SearchBar } from '../../src/components/SearchBar';
 import { TourAnchor } from '../../src/components/TourAnchor';
+import { confirmAsync, notify } from '../../src/lib/dialog';
 
 interface TeamRow {
-  agent_id: string; name: string; office: string; role: string; io_role: string;
+  agent_id: string; name: string; office: string; role: Role; io_role: string;
   phone: string; email: string; is_rookie: boolean;
+  upline_id?: string | null;
+  archived: boolean; // removed from the team; production shown for history only
   gross_alp: number; net_alp: number; sits: number; sales: number; close_ratio: number; avg_deal: number; alerts: string[];
 }
 
@@ -25,8 +29,9 @@ const ALERT_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export default function TeamScreen() {
-  const { user } = useAuth();
+  const { user, agent } = useAuth();
   const [rows, setRows] = useState<TeamRow[]>([]);
+  const [moveTarget, setMoveTarget] = useState<TeamRow | null>(null);
   const [upline, setUpline] = useState<AgentContact | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [sortKey, setSortKey] = useState<keyof TeamRow>('gross_alp');
@@ -79,6 +84,45 @@ export default function TeamScreen() {
   // downline teammate's behalf, matching can_enter_for on the backend.
   const canEnter = levelNum(user?.role) >= 2;
   const missingTonight = rows.filter((r) => r.alerts?.includes('no_pulse'));
+
+  // Owner's decision tree: remove anyone in your downline strictly below your
+  // tier (level 2+); reassign is GA/MGA/RGA — the SA display title, the only
+  // thing separating SA from GA at tier 2, is excluded. Backend re-checks all.
+  const myLevel = levelNum(user?.role);
+  const saTitle = (agent?.io_role || '').trim().toUpperCase() === 'SA';
+  const canRemoveRow = (r: TeamRow) =>
+    myLevel >= 2 && !r.archived && r.agent_id !== user?.agent_id && levelNum(r.role) < myLevel;
+  const canMoveRow = (r: TeamRow) => canRemoveRow(r) && (myLevel >= 3 || !saTitle);
+
+  const removeMember = async (row: TeamRow) => {
+    setSelected(null);
+    try {
+      const preview = await api<{ plan: { children_count: number; destination_upline: { name: string } | null } }>(
+        '/api/team/remove-person',
+        { method: 'POST', body: JSON.stringify({ agent_id: row.agent_id, dry_run: true }) });
+      const n = preview.plan.children_count;
+      const cascade = n > 0
+        ? ` Their ${n} direct report${n === 1 ? '' : 's'} (and everyone under them) will move under ${preview.plan.destination_upline?.name || 'their former upline'}.`
+        : '';
+      const ok = await confirmAsync({
+        title: 'Remove From Team',
+        message: `Remove ${row.name} from your team? Their sales history stays in the records and an admin can restore them.${cascade}`,
+        confirmText: 'Remove',
+      });
+      if (!ok) return;
+      await api('/api/team/remove-person', {
+        method: 'POST', body: JSON.stringify({ agent_id: row.agent_id }) });
+      await fetchAll();
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'Remove failed');
+    }
+  };
+
+  const moveCandidates = moveTarget
+    ? rows.filter((c) =>
+        !c.archived && c.agent_id !== moveTarget.agent_id &&
+        levelNum(c.role) >= levelNum(moveTarget.role) && levelNum(c.role) <= myLevel)
+    : [];
 
   const openQuickEntry = (row: TeamRow) => {
     setSelected(null);
@@ -269,6 +313,7 @@ export default function TeamScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={styles.name} numberOfLines={1}>{r.name}</Text>
                 {r.is_rookie ? <View style={styles.rookie}><Text style={styles.rookieTxt}>R</Text></View> : null}
+                {r.archived ? <View style={styles.removed}><Text style={styles.removedTxt}>REMOVED</Text></View> : null}
                 <Ionicons name="chevron-forward" size={12} color={COLORS.textDim} style={{ marginLeft: 'auto' }} />
               </View>
               <Text style={styles.meta}>
@@ -299,7 +344,15 @@ export default function TeamScreen() {
       <AgentContactSheet
         agent={selected}
         onClose={() => setSelected(null)}
-        onEnterNumbers={canEnter && selected ? () => openQuickEntry(selected) : undefined}
+        onEnterNumbers={canEnter && selected && !selected.archived ? () => openQuickEntry(selected) : undefined}
+        onMove={selected && canMoveRow(selected) ? () => { const t = selected; setSelected(null); setMoveTarget(t); } : undefined}
+        onRemove={selected && canRemoveRow(selected) ? () => removeMember(selected) : undefined}
+      />
+      <MoveMemberSheet
+        target={moveTarget}
+        candidates={moveCandidates}
+        onClose={() => setMoveTarget(null)}
+        onMoved={fetchAll}
       />
       <AgentContactSheet
         agent={uplineOpen ? upline : null}
@@ -350,6 +403,8 @@ const styles = StyleSheet.create({
   alertTxt:      { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   rookie:        { backgroundColor: COLORS.orange, paddingHorizontal: 4, borderRadius: 2 },
   rookieTxt:     { color: '#000', fontWeight: '900', fontSize: 9 },
+  removed:       { borderWidth: 1, borderColor: COLORS.red, paddingHorizontal: 4, borderRadius: 2 },
+  removedTxt:    { color: COLORS.red, fontWeight: '900', fontSize: 8, letterSpacing: 0.5 },
   uplineCard:    {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginHorizontal: 16, marginBottom: 8,

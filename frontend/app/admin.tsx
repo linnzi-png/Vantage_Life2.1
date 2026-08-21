@@ -40,6 +40,16 @@ interface LoginSummary {
   signed_in: number;
 }
 
+interface ArchivedPerson extends Person {
+  archived_at?: string | null;
+  archived_by_name?: string | null;
+}
+
+interface RemovePlan {
+  children_count: number;
+  destination_upline: { name: string } | null;
+}
+
 type LoginFilter = 'all' | 'in' | 'out';
 
 // e.g. "Aug 20" this year, "Aug 20, 2025" otherwise; '—' when never signed in.
@@ -60,7 +70,14 @@ export default function AdminScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [people, setPeople] = useState<Person[]>([]);
+  const [archivedPeople, setArchivedPeople] = useState<ArchivedPerson[]>([]);
   const [summary, setSummary] = useState<LoginSummary | null>(null);
+  // Removal of a root (no upline) needs a destination pick; restore always
+  // needs an upline pick (unless RGA). Both hold the pending person + search.
+  const [destFor, setDestFor] = useState<Person | null>(null);
+  const [destQuery, setDestQuery] = useState('');
+  const [restoreFor, setRestoreFor] = useState<ArchivedPerson | null>(null);
+  const [restoreQuery, setRestoreQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [loginFilter, setLoginFilter] = useState<LoginFilter>('all');
@@ -83,8 +100,9 @@ export default function AdminScreen() {
 
   const load = async () => {
     try {
-      const r = await api<{ people: Person[]; summary: LoginSummary }>('/api/admin/people');
+      const r = await api<{ people: Person[]; archived: ArchivedPerson[]; summary: LoginSummary }>('/api/admin/people');
       setPeople(r.people);
+      setArchivedPeople(r.archived || []);
       setSummary(r.summary);
     } catch (e: unknown) {
       notify('Error', e instanceof Error ? e.message : 'Failed to load roster');
@@ -161,6 +179,53 @@ export default function AdminScreen() {
       notify('Error', e instanceof Error ? e.message : 'Could not add person');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const removePerson = async (p: Person, destinationId?: string) => {
+    setDestFor(null); setDestQuery('');
+    const args = { agent_id: p.agent_id, destination_upline_agent_id: destinationId || null };
+    try {
+      const preview = await api<{ plan: RemovePlan }>('/api/team/remove-person', {
+        method: 'POST', body: JSON.stringify({ ...args, dry_run: true }) });
+      const n = preview.plan.children_count;
+      const cascade = n > 0
+        ? ` Their ${n} direct report${n === 1 ? '' : 's'} (and everyone under them) will move under ${preview.plan.destination_upline?.name || 'their former upline'}.`
+        : '';
+      const ok = await confirmAsync({
+        title: 'Remove From Roster',
+        message: `Remove ${p.name}? They are archived, not deleted — sales history stays in the records and you can restore them below.${cascade}`,
+        confirmText: 'Remove',
+      });
+      if (!ok) return;
+      await api('/api/team/remove-person', { method: 'POST', body: JSON.stringify(args) });
+      setExpanded(null);
+      await load();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Remove failed';
+      if (msg.toLowerCase().includes('destination')) {
+        // Root removal (no upline to inherit the team): pick who takes over.
+        setDestFor(p);
+        return;
+      }
+      notify('Error', msg);
+    }
+  };
+
+  const restorePerson = async (p: ArchivedPerson, uplineId?: string) => {
+    setRestoreFor(null); setRestoreQuery('');
+    try {
+      const ok = await confirmAsync({
+        title: 'Restore To Roster',
+        message: `Restore ${p.name} to the active roster? Their login links back automatically.`,
+        confirmText: 'Restore',
+      });
+      if (!ok) return;
+      await api('/api/admin/unarchive-person', {
+        method: 'POST', body: JSON.stringify({ agent_id: p.agent_id, upline_agent_id: uplineId || null }) });
+      await load();
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'Restore failed');
     }
   };
 
@@ -411,11 +476,95 @@ export default function AdminScreen() {
                   {!p.has_login ? (
                     <Text style={styles.hint}>Flags need a login — have them sign in once first.</Text>
                   ) : null}
+
+                  <TouchableOpacity
+                    style={styles.removeBtn}
+                    onPress={() => removePerson(p)}
+                    testID={`admin-remove-${p.agent_id}`}
+                  >
+                    <Ionicons name="person-remove" size={14} color={COLORS.red} />
+                    <Text style={styles.removeBtnTxt}>REMOVE FROM ROSTER (ARCHIVE)</Text>
+                  </TouchableOpacity>
+                  {destFor?.agent_id === p.agent_id ? (
+                    <View style={styles.pickerBox}>
+                      <Text style={styles.fieldNote}>
+                        They lead a team and have no upline — pick their direct report to promote, or someone outside the team, to take it over.
+                      </Text>
+                      <TextInput
+                        style={styles.input}
+                        value={destQuery}
+                        onChangeText={setDestQuery}
+                        placeholder="Search destination upline by name"
+                        placeholderTextColor={COLORS.textMuted}
+                        testID="admin-remove-dest-search"
+                      />
+                      {people
+                        .filter((c) => c.agent_id !== p.agent_id &&
+                          destQuery.trim() && c.name.toLowerCase().includes(destQuery.trim().toLowerCase()))
+                        .slice(0, 5)
+                        .map((c) => (
+                          <TouchableOpacity key={c.agent_id} style={styles.uplineRow} onPress={() => removePerson(p, c.agent_id)}>
+                            <Text style={styles.uplineName}>{c.name} <Text style={styles.dim}>· {TIER_SHORT[c.role]} · {c.office}</Text></Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+                  ) : null}
                 </View>
               ) : null}
             </View>
           );
         })}
+
+        {archivedPeople.length > 0 ? (
+          <>
+            <Text style={[styles.kicker, { marginTop: 24 }]}>ARCHIVED — REMOVED FROM TEAM</Text>
+            <Text style={styles.intro}>
+              Kept for history, hidden from the roster, login parked on the pending screen. Restore re-links everything.
+            </Text>
+            {archivedPeople.map((p) => (
+              <View key={p.agent_id} style={[styles.person, styles.archivedRow]} testID={`admin-archived-${p.agent_id}`}>
+                <View style={styles.personHead}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.personName}>{p.name}</Text>
+                    <Text style={styles.personSub}>
+                      {roleTitle(p.io_role, p.role)}{p.office ? ` · ${p.office}` : ''}
+                      {p.archived_at ? ` · Removed ${new Date(p.archived_at).toLocaleDateString()}` : ''}
+                      {p.archived_by_name ? ` by ${p.archived_by_name}` : ''}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.restoreBtn}
+                    onPress={() => (p.role === 'level_4' ? restorePerson(p) : setRestoreFor(restoreFor?.agent_id === p.agent_id ? null : p))}
+                    testID={`admin-restore-${p.agent_id}`}
+                  >
+                    <Text style={styles.restoreBtnTxt}>RESTORE</Text>
+                  </TouchableOpacity>
+                </View>
+                {restoreFor?.agent_id === p.agent_id ? (
+                  <View style={[styles.personBody, styles.pickerBox]}>
+                    <Text style={styles.fieldNote}>Pick the upline to restore them under.</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={restoreQuery}
+                      onChangeText={setRestoreQuery}
+                      placeholder="Search upline by name"
+                      placeholderTextColor={COLORS.textMuted}
+                      testID="admin-restore-upline-search"
+                    />
+                    {people
+                      .filter((c) => restoreQuery.trim() && c.name.toLowerCase().includes(restoreQuery.trim().toLowerCase()))
+                      .slice(0, 5)
+                      .map((c) => (
+                        <TouchableOpacity key={c.agent_id} style={styles.uplineRow} onPress={() => restorePerson(p, c.agent_id)}>
+                          <Text style={styles.uplineName}>{c.name} <Text style={styles.dim}>· {TIER_SHORT[c.role]} · {c.office}</Text></Text>
+                        </TouchableOpacity>
+                      ))}
+                  </View>
+                ) : null}
+              </View>
+            ))}
+          </>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -472,4 +621,13 @@ const styles = StyleSheet.create({
   flagRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
   flagLab: { color: '#fff', fontSize: 13, fontWeight: '600' },
   hint: { color: COLORS.textMuted, fontSize: 11, marginTop: 8, fontStyle: 'italic' },
+  removeBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderWidth: 1, borderColor: COLORS.red, borderRadius: 6, padding: 10, marginTop: 14,
+  },
+  removeBtnTxt: { color: COLORS.red, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
+  pickerBox: { marginTop: 8 },
+  archivedRow: { opacity: 0.85, borderColor: COLORS.red },
+  restoreBtn: { borderWidth: 1, borderColor: COLORS.gold, borderRadius: 4, paddingHorizontal: 10, paddingVertical: 6 },
+  restoreBtnTxt: { color: COLORS.gold, fontWeight: '900', fontSize: 10, letterSpacing: 1 },
 });
