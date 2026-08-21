@@ -3060,6 +3060,189 @@ async def admin_hierarchy_audit_fix(user: Dict[str, Any] = Depends(require_admin
     return {"ok": True, "applied": applied, "merged": merged, "unresolved": skipped}
 
 
+# ---- Full roster-sheet sync (admin) ----
+# Owner request (2026-08-21): the 2026-08-20 app sheet is the source of truth
+# for tier, display title, tenure, and the entire upline structure — sync the
+# app to it. One deliberate exception: the sync only RAISES access tiers to
+# match a person's sheet position; it never lowers anyone's access on its own.
+# The sheet structurally shows e.g. MJ Aljahmi as an MGA under Joseph Gojcaj,
+# but he is level_4 in the app by explicit owner decision — demotions are
+# reported for human review instead of applied. Titles follow the same rule:
+# Partner / Senior Partner are deliberate titles carried by level_3/level_4
+# holders and are never overwritten.
+
+_PROTECTED_TITLES = {"partner", "senior partner"}
+
+
+def _level_of(role: str) -> int:
+    try:
+        return int(str(role or "level_1").split("_")[1])
+    except (IndexError, ValueError):
+        return 1
+
+
+async def _roster_sync_plan() -> Dict[str, Any]:
+    sheet = roster_hierarchy.load_hierarchy()
+    profiles = [a async for a in db.agent_profiles.find({}, {"_id": 0})]
+    known = {a["agent_id"] for a in profiles}
+    by_email = {str(a.get("email", "")).strip().lower(): a
+                for a in profiles if str(a.get("email", "")).strip()}
+
+    def match_profile(entry: Dict[str, str]) -> Optional[Dict[str, Any]]:
+        key = roster_hierarchy.name_key(entry["name"])
+        for a in profiles:
+            if roster_hierarchy.person_match(key, _person_name_key(a.get("name", ""))):
+                return a
+        return by_email.get(entry["email"]) if entry["email"] else None
+
+    changes, demotions_review, to_create = [], [], []
+    matched_ids = set()
+    for entry in sheet.values():
+        prof = match_profile(entry)
+        if prof is None:
+            to_create.append(entry)
+            continue
+        matched_ids.add(prof["agent_id"])
+        change: Dict[str, Any] = {}
+        cur_level, sheet_level = _level_of(prof.get("role")), _level_of(entry["role"])
+        if sheet_level > cur_level:
+            change["role"] = entry["role"]
+        elif sheet_level < cur_level:
+            demotions_review.append({
+                "agent_id": prof["agent_id"], "name": prof.get("name", ""),
+                "app_role": prof.get("role"), "sheet_position": entry["io_role"],
+            })
+        cur_title = str(prof.get("io_role") or "").strip()
+        if cur_title.lower() not in _PROTECTED_TITLES:
+            if not cur_title or ("role" in change and cur_title != entry["io_role"]):
+                if entry["io_role"] != cur_title:
+                    change["io_role"] = entry["io_role"]
+        tenure = entry["tenure"].strip().lower()
+        target_rookie = True if tenure.startswith("rookie") else False if tenure.startswith("vet") else None
+        if target_rookie is not None and prof.get("is_rookie") != target_rookie:
+            change["is_rookie"] = target_rookie
+        for field in ("email", "phone"):
+            if not str(prof.get(field) or "").strip() and entry[field]:
+                change[field] = entry[field]
+        if entry["upline_name"]:
+            upline = await _find_profile_tolerant(entry["upline_name"])
+            cur_upline = prof.get("upline_id")
+            if (upline and upline["agent_id"] != prof["agent_id"]
+                    and upline["agent_id"] != cur_upline
+                    and prof["agent_id"] not in await _ancestor_chain(upline["agent_id"])):
+                # Correct a wrong or dangling link — but never null out a valid
+                # one silently; this only re-points to the sheet's upline.
+                change["upline_id"] = upline["agent_id"]
+                change["upline_name"] = upline.get("name", "")
+        if change:
+            changes.append({"agent_id": prof["agent_id"], "name": prof.get("name", ""),
+                            "current_role": prof.get("role"), **change})
+
+    not_on_sheet = sorted(
+        ({"agent_id": a["agent_id"], "name": a.get("name", ""),
+          "office": a.get("office") or UNASSIGNED_OFFICE}
+         for a in profiles if a["agent_id"] not in matched_ids),
+        key=lambda x: x["name"].lower())
+    changes.sort(key=lambda c: c["name"].lower())
+    return {"changes": changes, "to_create": [e["name"] for e in to_create],
+            "_create_entries": to_create, "demotions_review": demotions_review,
+            "not_on_sheet": not_on_sheet, "sheet_size": len(sheet),
+            "profiles_total": len(profiles), "known_ids": known}
+
+
+@api_router.get("/admin/roster-sync")
+async def admin_roster_sync(user: Dict[str, Any] = Depends(require_admin)):
+    """Preview: what syncing the app to the committed roster sheet would
+    change — tier raises, titles, tenure, upline corrections, missing profiles
+    to create — plus demotion candidates and app-only people, both left for
+    human review."""
+    plan = await _roster_sync_plan()
+    plan.pop("_create_entries", None)
+    plan.pop("known_ids", None)
+    return plan
+
+
+@api_router.post("/admin/roster-sync/fix")
+async def admin_roster_sync_fix(user: Dict[str, Any] = Depends(require_admin)):
+    """Apply the sync: per-profile field updates (role raises re-synced onto
+    linked logins, per the sign-in invariant), then create sheet people the
+    app lacks — in sheet order, so each new profile's upline usually already
+    exists."""
+    plan = await _roster_sync_plan()
+    now = now_utc()
+
+    applied = []
+    for c in plan["changes"]:
+        sets = {k: v for k, v in c.items()
+                if k in ("role", "io_role", "is_rookie", "email", "phone", "upline_id")}
+        if not sets:
+            continue
+        if "email" in sets:
+            sets["email"] = str(sets["email"]).strip().lower()
+        await db.agent_profiles.update_one(
+            {"agent_id": c["agent_id"]}, {"$set": {**sets, "updated_at": now}})
+        if "role" in sets:
+            await db.users.update_many(
+                {"agent_id": c["agent_id"]}, {"$set": {"role": sets["role"]}})
+        applied.append(c)
+
+    created = []
+    for entry in plan["_create_entries"]:
+        upline = None
+        if entry["upline_name"]:
+            upline = await _find_profile_tolerant(entry["upline_name"])
+        if entry["role"] != "level_4" and upline is None:
+            continue  # an agent created without an upline would be a fresh orphan
+        tenure = entry["tenure"].strip().lower()
+        profile = {
+            "agent_id": f"agent_{uuid.uuid4().hex[:10]}",
+            "name": entry["name"],
+            "email": entry["email"],
+            "phone": entry["phone"],
+            "office": (upline.get("office") if upline else "") or UNASSIGNED_OFFICE,
+            "role": entry["role"],
+            "io_role": entry["io_role"],
+            "upline_id": upline["agent_id"] if upline else None,
+            "created_at": now,
+        }
+        if tenure.startswith("rookie"):
+            profile["is_rookie"] = True
+        elif tenure.startswith("vet"):
+            profile["is_rookie"] = False
+        await db.agent_profiles.insert_one(dict(profile))
+        if entry["email"]:
+            await db.users.update_many(
+                {"email": entry["email"]},
+                {"$set": {"role": entry["role"], "agent_id": profile["agent_id"]}})
+        created.append(entry["name"])
+
+    if created:
+        # An upline that only came into existence in the creation pass above
+        # couldn't be linked in the first pass — one re-plan settles those.
+        replan = await _roster_sync_plan()
+        for c in replan["changes"]:
+            if "upline_id" not in c:
+                continue
+            await db.agent_profiles.update_one(
+                {"agent_id": c["agent_id"]},
+                {"$set": {"upline_id": c["upline_id"], "updated_at": now}})
+            applied.append(c)
+
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now,
+        "action": "roster_sheet_sync",
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "changes_applied": len(applied),
+        "profiles_created": len(created),
+        "changes": [{k: v for k, v in c.items() if k != "current_role"} for c in applied],
+    })
+    return {"ok": True, "applied": applied, "created": created,
+            "demotions_review": plan["demotions_review"],
+            "not_on_sheet": plan["not_on_sheet"]}
+
+
 # ---- Duplicate agent profiles (admin) ----
 # Root cause found troubleshooting Snoor Qaradaghi's Team tab (2026-08-20):
 # each import path spelled names its own way — the roster script wrote
