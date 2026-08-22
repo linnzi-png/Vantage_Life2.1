@@ -23,7 +23,10 @@
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://vantagelife21-production.up.railway.app"
       },
-      "channel": "production"
+      "channel": "production",
+      "android": {
+        "buildType": "apk"
+      }
     }
   },
   "submit": {
