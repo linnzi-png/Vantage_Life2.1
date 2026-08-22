@@ -231,6 +231,7 @@ class PulseIn(BaseModel):
     sales_day: Optional[str] = None  # buffered flush only — YYYY-MM-DD; see MAX_SELF_BUFFER_DAYS / MAX_UPLINE_BUFFER_DAYS
     target_agent_id: Optional[str] = None  # set only when an MGA/RGA is entering on behalf of a downline agent
     client_entry_id: Optional[str] = None  # client idempotency key — a retried submit with the same key must not double-count
+    is_nif: bool = False  # "Not In Field" shortcut — an all-zero day submitted on purpose, not a missed entry
 
 
 class EraseIn(BaseModel):
@@ -1090,6 +1091,11 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
         "entered_by_role": user.get("role"),
         "is_proxy_entry": is_proxy_entry,
         "client_entry_id": payload.client_entry_id,
+        # True only when submitted via the "NIF" (Not In Field) shortcut — an
+        # intentional all-zero day, distinct from an agent who worked and simply
+        # produced nothing. Metrics/aggregates treat it like any other zero-value
+        # entry; this flag exists purely so the UI can label it correctly.
+        "is_nif": payload.is_nif,
     }
     await db.production_entries.insert_one(entry)
     entry.pop("_id", None)
