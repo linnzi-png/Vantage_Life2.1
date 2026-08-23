@@ -2,6 +2,10 @@
   "buildCommand": "cd frontend && yarn install && npx expo export --platform web",
   "outputDirectory": "frontend/dist",
   "framework": null,
+  "redirects": [
+    { "source": "/get-iphone", "destination": "https://testflight.apple.com/join/sAsefB12", "permanent": false },
+    { "source": "/get-android", "destination": "/android", "permanent": false }
+  ],
   "rewrites": [
     { "source": "/tour", "destination": "/tour.html" },
     { "source": "/iphone", "destination": "/iphone.html" },
