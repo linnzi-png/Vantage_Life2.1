@@ -303,6 +303,7 @@ export default function PulseScreen() {
 
           {/* Self-correction window: today + the last SELF_WINDOW_DAYS-1 days.
               Same chip pattern as QuickEntryForm's upline picker, scoped to 3. */}
+          <TourAnchor id="pulse-days">
           <View style={styles.dayRowWrap}>
             <Text style={styles.dayKicker}>SALES DAY</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayRow}>
@@ -318,6 +319,7 @@ export default function PulseScreen() {
               ))}
             </ScrollView>
           </View>
+          </TourAnchor>
 
           {correctionMode ? (
             <View style={styles.correctionNote} testID="correction-banner">
