@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, COLORS, useAuth, levelNum, roleTitle } from '../../src/lib/auth';
-import { BufferedPulse, PulsePayload, PULSE_FIELDS, isBufferEntryEligible, isLateNightWindow, makeClientEntryId } from '../../src/lib/cycle';
+import { BufferedPulse, PulsePayload, PULSE_FIELDS, isBufferEntryEligible, isLateNightWindow, makeClientEntryId, recentSalesDays, SELF_WINDOW_DAYS } from '../../src/lib/cycle';
 import GateBanner from '../../src/components/GateBanner';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 import { TourAnchor } from '../../src/components/TourAnchor';
@@ -31,6 +31,38 @@ const empty: PulseForm = {
 
 // Anchors the keyboard-docked NEXT bar (iOS) to the pulse TextInput.
 const PULSE_ACCESSORY_ID = 'pulse-next-accessory-bar';
+
+// ---- Self-correction window (owner spec 2026-08-22) ----
+// Full totals for one sales day, as returned by GET /api/pulse/me/day.
+interface DayTotals {
+  sets: number; sits: number; sales: number; ots_sits: number; ots_sales: number;
+  n1: number; refs_obtained: number; ref_sits: number; ref_sales: number;
+  pos_sits: number; pos_sales: number; vet_sits: number; vet_sales: number;
+  gross_alp: number; net_alp: number;
+}
+interface DayEntry { entry_id: string; is_adjustment?: boolean; is_nif?: boolean; gross_alp: number; sales: number; sits: number; refs_obtained: number; submitted_at: string }
+interface DayData { entries: DayEntry[]; totals: DayTotals; sales_day: string }
+
+// Pre-fill the stepper with a day's current summed totals so the agent edits
+// the TRUE values in place (the server computes deltas).
+function totalsToForm(t: DayTotals): PulseForm {
+  return {
+    sets: String(t.sets), sits: String(t.sits), sales: String(t.sales),
+    ots_sits: String(t.ots_sits), ots_sales: String(t.ots_sales), n1: String(t.n1),
+    refs_obtained: String(t.refs_obtained), ref_sits: String(t.ref_sits), ref_sales: String(t.ref_sales),
+    pos_sits: String(t.pos_sits), pos_sales: String(t.pos_sales),
+    vet_sits: String(t.vet_sits), vet_sales: String(t.vet_sales),
+    gross_alp: String(t.gross_alp),
+  };
+}
+
+function dayChipLabel(salesDay: string, index: number): string {
+  if (index === 0) return 'Tonight';
+  if (index === 1) return 'Yesterday';
+  // salesDay is local YYYY-MM-DD; parse as local date, not UTC.
+  const [y, m, d] = salesDay.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
 
 const BUFFER_KEY = 'vl_pulse_buffer';
 
@@ -101,6 +133,16 @@ export default function PulseScreen() {
   // prompt only. Entries still post immediately.
   const [lateNight, setLateNight] = useState(false);
 
+  // Day picker: today plus the last SELF_WINDOW_DAYS-1 sales days. Today
+  // behaves exactly as before (new additive entry). A past day WITH entries
+  // switches into correction mode (restate true totals → /api/pulse/correct);
+  // a past day with NO entries is a plain backfill through /api/pulse.
+  const dayOptions = useMemo(() => recentSalesDays(SELF_WINDOW_DAYS), []);
+  const [salesDay, setSalesDay] = useState<string>(dayOptions[0]);
+  const isToday = salesDay === dayOptions[0];
+  const [dayData, setDayData] = useState<DayData | null>(null);
+  const correctionMode = !isToday && (dayData?.entries?.length ?? 0) > 0;
+
   const refresh = useCallback(async () => {
     try {
       const [t, s, u] = await Promise.all([
@@ -155,6 +197,27 @@ export default function PulseScreen() {
   // key; reset only after the server confirms (or the entry is buffered).
   const pendingEntryId = useRef<string | null>(null);
 
+  const onSelectDay = useCallback(async (d: string) => {
+    setSalesDay(d);
+    setStep(0);
+    pendingEntryId.current = null;
+    if (d === dayOptions[0]) {
+      setDayData(null);
+      setForm(empty);
+      return;
+    }
+    try {
+      const r = await api<DayData>(`/api/pulse/me/day?sales_day=${d}`);
+      setDayData(r);
+      // Correction mode pre-fills with current totals; a day with no entries
+      // starts blank (backfill).
+      setForm(r.entries.length > 0 ? totalsToForm(r.totals) : empty);
+    } catch {
+      setDayData(null);
+      setForm(empty);
+    }
+  }, [dayOptions]);
+
   const onSubmit = async () => {
     setSubmitting(true);
     try {
@@ -164,12 +227,23 @@ export default function PulseScreen() {
       // The idempotency key survives a failed retry so a committed write can't
       // double-count.
       if (!pendingEntryId.current) pendingEntryId.current = makeClientEntryId();
-      await api('/api/pulse', { method: 'POST', body: JSON.stringify({ ...payload, client_entry_id: pendingEntryId.current }) });
+      if (correctionMode) {
+        // Restate the day's TRUE totals; the server computes per-field deltas
+        // (including Gross ALP — the corrected number flows to the Platinum Wall).
+        await api('/api/pulse/correct', { method: 'POST', body: JSON.stringify({ ...payload, sales_day: salesDay, client_entry_id: pendingEntryId.current }) });
+        notify('Pulse corrected' /* TODO copy */, `Updated ${salesDay}: ${form.sales || '0'} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP. This updates the Platinum Wall.` /* TODO copy */);
+      } else {
+        // Today: normal additive entry. Past day with no entries yet: a plain
+        // backfill — same endpoint, explicit sales_day (3-day window enforced
+        // server-side).
+        await api('/api/pulse', { method: 'POST', body: JSON.stringify({ ...payload, ...(isToday ? {} : { sales_day: salesDay }), client_entry_id: pendingEntryId.current }) });
+        notify('Pulse logged', `${form.sales || '0'} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
+      }
       pendingEntryId.current = null;
-      notify('Pulse logged', `${form.sales || '0'} sales · $${Math.round(parseFloat(form.gross_alp || '0')).toLocaleString()} ALP`);
       setForm(empty);
       setStep(0);
       await refresh();
+      if (!isToday) await onSelectDay(salesDay); // re-pull the day's now-corrected totals
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to submit';
       notify('Error', msg);
@@ -211,11 +285,16 @@ export default function PulseScreen() {
     }
   };
 
-  const totalAlp = today?.totals?.gross_alp ?? 0;
+  // Totals + entry list follow the selected day (today keeps its live data).
+  const displayTotals = isToday ? today?.totals : dayData?.totals;
+  const totalAlp = displayTotals?.gross_alp ?? 0;
   const isPlayersClub = totalAlp >= 10000;
 
   // Memoised so the value is stable across renders within the same mount
-  const entries = useMemo(() => (today?.entries ?? []) as Array<{ entry_id: string; is_adjustment: boolean; is_nif?: boolean; gross_alp: number; sales: number; sits: number; refs_obtained: number; submitted_at: string }>, [today]);
+  const entries = useMemo(
+    () => (isToday ? ((today?.entries ?? []) as DayEntry[]) : (dayData?.entries ?? [])),
+    [isToday, today, dayData],
+  );
 
   if (!user?.agent_id) {
     return (
@@ -247,7 +326,8 @@ export default function PulseScreen() {
           <View style={styles.headRow}>
             <View>
               <Text style={styles.kicker}>NIGHTLY PULSE</Text>
-              <Text style={styles.h1}>Log your sales day</Text>
+              {/* TODO copy — placeholder heading for correction mode */}
+              <Text style={styles.h1}>{correctionMode ? 'Correct a past day' : 'Log your sales day'}</Text>
             </View>
             <View style={styles.streakPill}>
               <Text style={styles.streakEmoji}>{streak >= 5 ? '🔥' : '⚡'}</Text>
@@ -255,10 +335,38 @@ export default function PulseScreen() {
             </View>
           </View>
 
+          {/* Self-correction window: today + the last SELF_WINDOW_DAYS-1 days.
+              Same chip pattern as QuickEntryForm's upline picker, scoped to 3. */}
+          <TourAnchor id="pulse-days">
+          <View style={styles.dayRowWrap}>
+            <Text style={styles.dayKicker}>SALES DAY</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayRow}>
+              {dayOptions.map((d, i) => (
+                <TouchableOpacity
+                  key={d}
+                  style={[styles.dayChip, salesDay === d && styles.dayChipActive]}
+                  onPress={() => onSelectDay(d)}
+                  testID={`pulse-day-${d}`}
+                >
+                  <Text style={[styles.dayChipTxt, salesDay === d && styles.dayChipTxtActive]}>{dayChipLabel(d, i)}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+          </TourAnchor>
+
+          {correctionMode ? (
+            <View style={styles.correctionNote} testID="correction-banner">
+              <Ionicons name="create-outline" size={14} color={COLORS.orange} />
+              {/* TODO copy */}
+              <Text style={styles.correctionNoteTxt}>Correction mode — fields show your current totals for this day. Edit any value and submit; the corrected numbers update the Platinum Wall.</Text>
+            </View>
+          ) : null}
+
           <View style={styles.todayCard}>
-            <Text style={styles.todayLabel}>{"TODAY'S RUNNING TOTAL"}</Text>
+            <Text style={styles.todayLabel}>{isToday ? "TODAY'S RUNNING TOTAL" : `${salesDay} TOTAL`}</Text>
             <Text style={[styles.todayAlp, isPlayersClub && { color: COLORS.gold }]}>${Math.round(totalAlp).toLocaleString()}</Text>
-            <Text style={styles.todayMeta}>{today?.totals?.sales ?? 0} sales · {today?.totals?.sits ?? 0} sits</Text>
+            <Text style={styles.todayMeta}>{displayTotals?.sales ?? 0} sales · {displayTotals?.sits ?? 0} sits</Text>
             {isPlayersClub ? (
               <View style={styles.club}><Ionicons name="trophy" size={14} color={COLORS.gold} /><Text style={styles.clubTxt}>{"PLAYER'S CLUB · $10K HIT"}</Text></View>
             ) : null}
@@ -279,6 +387,10 @@ export default function PulseScreen() {
               <Text style={styles.stepNum}>STEP {step + 1} OF {STEPS.length}</Text>
               <Text style={styles.stepLabel}>{cur.label}</Text>
               <Text style={styles.stepHint}>{cur.hint}</Text>
+              {correctionMode && cur.key === 'gross_alp' ? (
+                /* TODO copy — Gross ALP corrections flow to the Platinum Wall (no lock, per owner) */
+                <Text style={styles.wallNote}>This updates the Platinum Wall.</Text>
+              ) : null}
               <TextInput
                 testID={`pulse-input-${cur.key}`}
                 style={styles.input}
@@ -309,6 +421,7 @@ export default function PulseScreen() {
                   <Ionicons name="arrow-forward" size={14} color="#000" />
                 </TouchableOpacity>
               </View>
+              {isToday ? (
               <TouchableOpacity
                 style={styles.nifBtn}
                 onPress={onMarkNif}
@@ -318,10 +431,16 @@ export default function PulseScreen() {
                 <Ionicons name="close-circle-outline" size={13} color={COLORS.textDim} />
                 <Text style={styles.nifTxt}>{nifSubmitting ? 'LOGGING NIF…' : 'NOT IN THE FIELD TODAY? MARK NIF'}</Text>
               </TouchableOpacity>
+              ) : null}
             </View>
           ) : (
             <View style={styles.stepCard} testID="pulse-review-card">
-              <Text style={styles.kicker}>REVIEW & SUBMIT</Text>
+              {/* TODO copy — correction-mode kicker */}
+              <Text style={styles.kicker}>{correctionMode ? 'REVIEW CORRECTION' : 'REVIEW & SUBMIT'}</Text>
+              {correctionMode ? (
+                /* TODO copy */
+                <Text style={styles.wallNote}>These replace the day's totals. Gross ALP updates the Platinum Wall.</Text>
+              ) : null}
               {STEPS.map((s) => (
                 <View key={s.key} style={styles.reviewRow}>
                   <Text style={styles.reviewLabel}>{s.label}</Text>
@@ -340,10 +459,11 @@ export default function PulseScreen() {
                   disabled={submitting}
                   onPress={onSubmit}
                 >
-                  <Text style={styles.btnPrimaryTxt}>{submitting ? 'SUBMITTING…' : 'SUBMIT PULSE'}</Text>
+                  <Text style={styles.btnPrimaryTxt}>{submitting ? 'SUBMITTING…' : correctionMode ? 'SUBMIT CORRECTION' /* TODO copy */ : 'SUBMIT PULSE'}</Text>
                   <Ionicons name="checkmark-circle" size={14} color="#000" />
                 </TouchableOpacity>
               </View>
+              {isToday ? (
               <TouchableOpacity
                 style={styles.nifBtn}
                 onPress={onMarkNif}
@@ -353,13 +473,14 @@ export default function PulseScreen() {
                 <Ionicons name="close-circle-outline" size={13} color={COLORS.textDim} />
                 <Text style={styles.nifTxt}>{nifSubmitting ? 'LOGGING NIF…' : 'NOT IN THE FIELD TODAY? MARK NIF'}</Text>
               </TouchableOpacity>
+              ) : null}
             </View>
           )}
           </TourAnchor>
 
-          <Text style={[styles.kicker, { marginTop: 18 }]}>TODAY'S ENTRIES</Text>
+          <Text style={[styles.kicker, { marginTop: 18 }]}>{isToday ? "TODAY'S ENTRIES" : 'ENTRIES FOR THIS DAY'}</Text>
           {entries.filter((e) => !e.is_adjustment).length === 0 ? (
-            <Text style={styles.empty}>No pulses logged for today yet.</Text>
+            <Text style={styles.empty}>{isToday ? 'No pulses logged for today yet.' : 'No pulses logged for this day — submitting will log a new entry.' /* TODO copy */}</Text>
           ) : (
             entries.filter((e) => !e.is_adjustment).map((e) => (
               <View key={e.entry_id} style={styles.entry}>
@@ -451,6 +572,21 @@ const styles = StyleSheet.create({
   stepNum: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
   stepLabel: { color: '#fff', fontSize: 22, fontWeight: '900', marginTop: 4 },
   stepHint: { color: COLORS.textDim, fontSize: 12, marginTop: 4 },
+  wallNote: { color: COLORS.orange, fontSize: 11, fontWeight: '700', marginTop: 6 },
+  // Day picker chips — same pattern as QuickEntryForm's upline picker.
+  dayRowWrap: { marginTop: 4 },
+  dayKicker: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 1.6, marginBottom: 8 },
+  dayRow: { gap: 8 },
+  dayChip: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
+  dayChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  dayChipTxt: { color: COLORS.textDim, fontSize: 12, fontWeight: '800' },
+  dayChipTxtActive: { color: '#000' },
+  correctionNote: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: 'rgba(255,140,0,0.08)', borderWidth: 1, borderColor: COLORS.orange,
+    borderRadius: 6, padding: 10, marginTop: 10,
+  },
+  correctionNoteTxt: { color: COLORS.orange, fontSize: 11, fontWeight: '700', flex: 1, lineHeight: 15 },
   input: {
     backgroundColor: '#000', color: '#fff', fontSize: 36, fontWeight: '900',
     borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 14,

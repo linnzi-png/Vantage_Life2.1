@@ -12,7 +12,9 @@ import { Role } from './auth';
 // Bump to re-show all tours once after a meaningful revision.
 // v2: Close Rate corrected to Sales / Sits, Company Health dashboard,
 // Team week picker, Production History charts.
-export const TOUR_VERSION = 2;
+// v3: Self-Correction Window (3-day picker + correction mode on the Pulse
+// tab, all tiers).
+export const TOUR_VERSION = 3;
 
 export type TourAnchorId =
   | 'dash-header'
@@ -22,6 +24,7 @@ export type TourAnchorId =
   | 'dash-ticker'
   | 'dash-history'
   | 'pulse-stepper'
+  | 'pulse-days'
   | 'pulse-upline'
   | 'shoutouts-nominate'
   | 'team-roster'
@@ -135,6 +138,13 @@ const BASICS_FULL: TourStep[] = [
     body: 'Submit before 9:00 PM — that\'s when the warning banner turns yellow. Miss it? The "Midnight Miracle" window (midnight to 6:00 AM) still posts to the same sales day. Submit on time every night and your streak grows. 🔥',
   },
   {
+    id: 'pulse-correct',
+    screen: '/pulse',
+    anchor: 'pulse-days',
+    title: 'FIX A PAST DAY',
+    body: "Typo in last night's numbers? These day chips open any of your last 3 sales days. A day that already has entries opens in correction mode — every field pre-fills with that day's totals, you fix what's wrong, and the corrected numbers become the record everywhere, Platinum Wall included.",
+  },
+  {
     id: 'pulse-upline',
     screen: '/pulse',
     anchor: 'pulse-upline',
@@ -181,6 +191,13 @@ const basicsBrief = (welcomeBody: string, includeUpline: boolean): TourStep[] =>
     anchor: 'pulse-stepper',
     title: 'YOUR NIGHTLY PULSE',
     body: 'Your own 14 nightly numbers still go in here every night — before the 9:00 PM gate, or in the Midnight Miracle window (midnight–6:00 AM) at the latest.',
+  },
+  {
+    id: 'pulse-correct',
+    screen: '/pulse',
+    anchor: 'pulse-days',
+    title: 'FIX A PAST DAY',
+    body: "The day chips open any of your last 3 sales days. A day with entries opens in correction mode — fields pre-fill with that day's totals, you restate the true numbers, and the correction flows everywhere, Platinum Wall included.",
   },
   ...(includeUpline
     ? [

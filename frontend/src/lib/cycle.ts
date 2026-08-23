@@ -89,6 +89,11 @@ export function currentSalesDay(now: Date = new Date()): string {
  * open sales day. Used by the upline quick-entry day picker — the backend
  * accepts proxy entries up to 7 sales days back (MAX_UPLINE_BUFFER_DAYS).
  */
+// Matches MAX_SELF_BUFFER_DAYS on the backend: an agent may enter or correct
+// their OWN numbers up to 3 sales days back. Uplines get 7 (see
+// QuickEntryForm's UPLINE_WINDOW_DAYS / MAX_UPLINE_BUFFER_DAYS).
+export const SELF_WINDOW_DAYS = 3;
+
 export function recentSalesDays(count: number, now: Date = new Date()): string[] {
   const base = new Date(now);
   if (base.getHours() < CYCLE_OPEN_HOUR) base.setDate(base.getDate() - 1);
