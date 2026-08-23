@@ -30,14 +30,15 @@ Emergent Google OAuth (web) + Demo Login bypass (`/api/auth/demo-login`) for the
 - **Wednesday 14:00 reset**: Archive to `Historical_Vault`, zero out active production. Endpoint: `POST /api/admin/wednesday-reset` (Level 4).
 
 ## 5. Nightly Pulse Entry (Agent)
-14-step stepper form, exact order: sets, sits, sales, OTS sits, OTS sales, N1, referrals, ref sits, ref sales, POS sits, POS sales, vet sits, vet sales, gross ALP. Auto-tagged `submitted_on_time` if before 9 PM.
+14-step stepper form, exact order: sets, sits, sales, OTS sits, OTS sales, N1, referrals, ref sits, ref sales, POS sits, POS sales, vet sits, vet sales, gross ALP. Auto-tagged `submitted_on_time` if before 9 PM (same-day self entries only — a backfill of a past day is never on time).
+- **Self-Correction Window** (owner, 2026-08-22): day picker over the last 3 sales days (`MAX_SELF_BUFFER_DAYS`). A past day with entries opens correction mode — all 14 fields restated as TRUE totals via `POST /api/pulse/correct` (per-field delta adjustment row, `is_self_correction`). Gross ALP corrections flow to the Platinum Wall (unlike the Eraser); net ALP moves by the same delta. Reason optional; audited as `self_correct_pulse`. A correction repairs the streak for that day; a first-time backfill does not. Only the Player's Club check re-runs after a correction.
 
 ## 6. Premier Shoutouts
 - **Player's Club** (Gold Crown): $10,000+ Gross ALP in a single Sales Day (6 AM → 6 AM). Global scope.
 - **Performance Streak** (Fire emoji): 5+ consecutive days of on-time Pulses. Global scope.
 - **First Deal** (Welcome to the Board): an agent's first-ever sale — **GA-Team scope only** (visible to immediate GA + Level 4).
 
-## 7. Manager Command Panel — Net ALP Eraser (Level 4)
+## 7. Manager Command Panel — Net ALP Eraser (Level 3+: MGA + RGA)
 - "Adjust ALP" with **mandatory 10+ char Reason** for Adjustment.
 - **Ledger logic**: adjustments update **Net ALP** (internal) only; **Gross ALP** on Platinum Wall is unchanged.
 - **Audit Log** records: timestamp, action, agent, changed_by, original_value, new_value, reason.

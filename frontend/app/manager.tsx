@@ -31,9 +31,10 @@ export default function ManagerScreen() {
     })();
   }, []);
 
-  if (levelNum(user?.role) < 4) {
+  // Matches the backend: /api/manager/erase is level_3+ (MGA + RGA).
+  if (levelNum(user?.role) < 3) {
     return (
-      <View style={styles.lock}><Ionicons name="lock-closed" size={32} color={COLORS.textDim} /><Text style={styles.lockTxt}>RGA-only command panel.</Text></View>
+      <View style={styles.lock}><Ionicons name="lock-closed" size={32} color={COLORS.textDim} /><Text style={styles.lockTxt}>MGA/RGA-only command panel.</Text></View>
     );
   }
 
@@ -62,7 +63,7 @@ export default function ManagerScreen() {
       <Stack.Screen options={{ title: 'COMMAND PANEL', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
         <TourAnchor id="manager-intro">
-          <Text style={styles.kicker}>NET ALP ERASER · LEVEL 4</Text>
+          <Text style={styles.kicker}>NET ALP ERASER · MGA + RGA</Text>
           <Text style={styles.intro}>Adjustments update Net ALP for internal reporting; Gross ALP on the Platinum Wall stays unchanged.</Text>
         </TourAnchor>
 

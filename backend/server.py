@@ -222,6 +222,31 @@ class EraseIn(BaseModel):
     reason: str
 
 
+class SelfCorrectIn(BaseModel):
+    """Self-correction: the agent restates their day's TRUE totals for all 14
+    fields; the server computes deltas vs. what's currently summed. Unlike the
+    Manager Eraser, gross_alp is corrected too and flows to the Platinum Wall
+    (per owner, 2026-08-22). Reason is optional (contrast Eraser's mandatory
+    10+ chars)."""
+    sales_day: str  # YYYY-MM-DD — must be within MAX_SELF_BUFFER_DAYS
+    sets: int = 0
+    sits: int = 0
+    sales: int = 0
+    ots_sits: int = 0
+    ots_sales: int = 0
+    n1: int = 0
+    refs_obtained: int = 0
+    ref_sits: int = 0
+    ref_sales: int = 0
+    pos_sits: int = 0
+    pos_sales: int = 0
+    vet_sits: int = 0
+    vet_sales: int = 0
+    gross_alp: float = 0.0
+    reason: Optional[str] = None
+    client_entry_id: Optional[str] = None
+
+
 # ---------------- Auth ----------------
 
 async def get_session_token(request: Request) -> Optional[str]:
@@ -739,6 +764,41 @@ async def aggregate_alp(filter_q: Dict[str, Any]) -> Dict[str, float]:
     return {"gross_alp": float(d.get("gross_alp", 0) or 0), "net_alp": float(d.get("net_alp", 0) or 0), "sits": int(d.get("sits", 0) or 0), "sales": int(d.get("sales", 0) or 0)}
 
 
+# The 13 integer metric fields (everything in PulseIn except gross_alp).
+# Order matches the canonical 14-metric order; gross_alp is handled as a float
+# alongside net_alp wherever this list is used.
+PULSE_INT_FIELDS = [
+    "sets", "sits", "sales", "ots_sits", "ots_sales", "n1",
+    "refs_obtained", "ref_sits", "ref_sales", "pos_sits", "pos_sales",
+    "vet_sits", "vet_sales",
+]
+
+
+async def aggregate_full_pulse(filter_q: Dict[str, Any]) -> Dict[str, float]:
+    """Same shape of job as aggregate_alp, but sums ALL 14 raw fields (plus
+    net_alp) — needed to show current totals before a self-correction and to
+    compute per-field deltas."""
+    group: Dict[str, Any] = {"_id": None}
+    for f in PULSE_INT_FIELDS:
+        group[f] = {"$sum": f"${f}"}
+    group["gross_alp"] = {"$sum": "$gross_alp"}
+    group["net_alp"] = {"$sum": "$net_alp"}
+    pipeline = [{"$match": filter_q}, {"$group": group}]
+    cur = db.production_entries.aggregate(pipeline)
+    docs = [d async for d in cur]
+    out: Dict[str, float] = {f: 0 for f in PULSE_INT_FIELDS}
+    out["gross_alp"] = 0.0
+    out["net_alp"] = 0.0
+    if not docs:
+        return out
+    d = docs[0]
+    for f in PULSE_INT_FIELDS:
+        out[f] = int(d.get(f, 0) or 0)
+    out["gross_alp"] = float(d.get("gross_alp", 0) or 0)
+    out["net_alp"] = float(d.get("net_alp", 0) or 0)
+    return out
+
+
 def resolve_history_day(sales_day: Optional[str]) -> str:
     """Validate an optional read-only history day. Returns the current sales
     day when absent. History may not be in the future; the sales-day boundary
@@ -969,6 +1029,28 @@ async def dashboard_offices(
 #                          PULSE
 # =========================================================
 
+def validate_buffered_sales_day(sales_day: Optional[str], is_proxy_entry: bool, now_local: datetime) -> str:
+    """Shared bounds check for any client-supplied sales_day on a write
+    (buffered flush, backfill, self-correction). Same window and exact error
+    messages as the original inline /api/pulse check — single source of truth,
+    per the 'reuse, don't duplicate' rule."""
+    if not sales_day:
+        return current_sales_day_str()
+    max_buffer_days = MAX_UPLINE_BUFFER_DAYS if is_proxy_entry else MAX_SELF_BUFFER_DAYS
+    try:
+        requested = datetime.strptime(sales_day, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid sales_day format — use YYYY-MM-DD")
+    delta = (now_local.date() - requested).days
+    if delta < 0:
+        raise HTTPException(status_code=400, detail="sales_day cannot be in the future")
+    if delta > max_buffer_days:
+        if is_proxy_entry:
+            raise HTTPException(status_code=400, detail=f"Buffered pulse expired — sales_day is more than {max_buffer_days} days old")
+        raise HTTPException(status_code=400, detail=f"That day is outside your {max_buffer_days}-day self-edit window — ask your upline to enter this correction")
+    return sales_day
+
+
 @api_router.post("/pulse")
 async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_agent)):
     if not user.get("agent_id"):
@@ -993,24 +1075,7 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
             return {"ok": True, "entry": _ser_entry(existing), "duplicate": True}
 
     now_local = now_detroit()
-    max_buffer_days = MAX_UPLINE_BUFFER_DAYS if is_proxy_entry else MAX_SELF_BUFFER_DAYS
-    if payload.sales_day:
-        # Buffered flush: validate the client-supplied sales_day
-        try:
-            requested = datetime.strptime(payload.sales_day, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid sales_day format — use YYYY-MM-DD")
-        today_date = now_local.date()
-        delta = (today_date - requested).days
-        if delta < 0:
-            raise HTTPException(status_code=400, detail="sales_day cannot be in the future")
-        if delta > max_buffer_days:
-            if is_proxy_entry:
-                raise HTTPException(status_code=400, detail=f"Buffered pulse expired — sales_day is more than {max_buffer_days} days old")
-            raise HTTPException(status_code=400, detail=f"That day is outside your {max_buffer_days}-day self-edit window — ask your upline to enter this correction")
-        sd = payload.sales_day
-    else:
-        sd = current_sales_day_str()
+    sd = validate_buffered_sales_day(payload.sales_day, is_proxy_entry, now_local)
 
     entry = {
         "entry_id": f"pe_{uuid.uuid4().hex[:12]}",
@@ -1034,7 +1099,11 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
         "net_alp": payload.gross_alp,  # net == gross until eraser modifies
         "submitted_at": now_utc(),
         # Upline-entered data bypasses the 9 PM gate outright, per business rule.
-        "submitted_on_time": True if is_proxy_entry else now_local.hour < 21,
+        # Self entries: on time only when logged before 9 PM for the currently
+        # open sales day. A backfill of a PAST day is never on time — per owner
+        # (2026-08-22), a first-time entry for a missed day does not repair the
+        # streak (only a self-correction of an existing day does).
+        "submitted_on_time": True if is_proxy_entry else (sd == current_sales_day_str() and now_local.hour < 21),
         # entered_by is always derived from the authenticated session — never a
         # manual form field the submitter fills in themselves.
         "entered_by": user["user_id"],
@@ -1042,6 +1111,10 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
         "entered_by_role": user.get("role"),
         "is_proxy_entry": is_proxy_entry,
         "client_entry_id": payload.client_entry_id,
+        # Row-origin tag (go-live source-tagging convention, issue #12): every
+        # row the app writes going forward is tagged "app" at write-time, so
+        # reconcile/audits can tell app rows from WAR imports without heuristics.
+        "source": "app",
     }
     await db.production_entries.insert_one(entry)
     entry.pop("_id", None)
@@ -1072,6 +1145,123 @@ async def pulse_me_today(agent_id: Optional[str] = None, user: Dict[str, Any] = 
     entries = [_ser_entry(e) async for e in cur]
     agg = await aggregate_alp({"agent_id": target_agent_id, "sales_day": sd})
     return {"entries": entries, "totals": agg, "gate": gate_state(), "sales_day": sd}
+
+
+@api_router.get("/pulse/me/day")
+async def pulse_me_day(sales_day: Optional[str] = None, user: Dict[str, Any] = Depends(require_agent)):
+    """Mirrors /pulse/me/today but parameterized by sales_day — feeds the
+    self-correction screen with current summed totals for all 14 fields.
+    Self only: corrections have no proxy path (uplines have their own)."""
+    if not user.get("agent_id"):
+        return {"entries": [], "totals": {}, "sales_day": None}
+    sd = resolve_history_day(sales_day)
+    q = {"agent_id": user["agent_id"], "sales_day": sd}
+    cur = db.production_entries.find(q, {"_id": 0}).sort("submitted_at", -1)
+    entries = [_ser_entry(e) async for e in cur]
+    totals = await aggregate_full_pulse(q)
+    return {"entries": entries, "totals": totals, "sales_day": sd}
+
+
+@api_router.post("/pulse/correct")
+async def pulse_correct(payload: SelfCorrectIn, user: Dict[str, Any] = Depends(require_agent)):
+    """Self-correction (owner decisions, 2026-08-22): the agent restates the
+    TRUE totals for a day within MAX_SELF_BUFFER_DAYS; one is_adjustment /
+    is_self_correction row carries the per-field deltas.
+
+    Diverges from the Manager Eraser deliberately:
+    - gross_alp is corrected too — flows to the Platinum Wall via the existing
+      live aggregation (net_alp moves by the SAME delta, preserving any prior
+      manager-adjustment offset).
+    - reason is optional.
+    - submitted_on_time: True — per owner, correcting an existing day repairs
+      the streak. A day with NO entries cannot be corrected (400) — first-time
+      backfill goes through /api/pulse and does NOT repair the streak.
+    - Only the Player's Club check re-runs afterwards (idempotent); Streak and
+      First Deal shoutouts never fire off a correction.
+    """
+    if not user.get("agent_id"):
+        raise HTTPException(status_code=400, detail="No linked agent profile")
+    agent_id = user["agent_id"]  # self only — no target_agent_id accepted
+    agent = await db.agent_profiles.find_one({"agent_id": agent_id}, {"_id": 0})
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    if payload.client_entry_id:
+        existing = await db.production_entries.find_one(
+            {"agent_id": agent_id, "client_entry_id": payload.client_entry_id}, {"_id": 0}
+        )
+        if existing:
+            return {"ok": True, "entry": _ser_entry(existing), "duplicate": True}
+
+    sd = validate_buffered_sales_day(payload.sales_day, False, now_detroit())
+
+    q = {"agent_id": agent_id, "sales_day": sd}
+    existing_count = await db.production_entries.count_documents(q)
+    if existing_count == 0:
+        # Owner rule (§3b): a correction only ever adjusts an existing day. A
+        # missed day is a fresh backfill through /api/pulse, which keeps its
+        # normal on-time semantics and does not repair the streak.
+        raise HTTPException(status_code=400, detail="No entries exist for that day — log a regular pulse instead of a correction")
+
+    totals = await aggregate_full_pulse(q)
+    deltas: Dict[str, float] = {}
+    for f in PULSE_INT_FIELDS:
+        deltas[f] = int(getattr(payload, f)) - int(totals[f])
+    gross_delta = float(payload.gross_alp) - float(totals["gross_alp"])
+    if all(v == 0 for v in deltas.values()) and gross_delta == 0:
+        return {"ok": True, "no_change": True}
+
+    adj = {
+        "entry_id": f"adj_{uuid.uuid4().hex[:10]}",
+        "agent_id": agent_id,
+        "office": agent["office"],
+        "sales_day": sd,
+        **deltas,                    # each field is a DELTA vs. current total
+        "gross_alp": gross_delta,    # real delta — NOT zeroed like the Eraser
+        "net_alp": gross_delta,      # same delta: preserves any manager offset
+        "submitted_at": now_utc(),
+        "submitted_on_time": True,   # per owner: a correction repairs the streak
+        "is_adjustment": True,
+        "is_self_correction": True,
+        "entered_by": user["user_id"],
+        "entered_by_name": user.get("name"),
+        "entered_by_role": user.get("role"),
+        "reason": payload.reason,
+        "client_entry_id": payload.client_entry_id,
+        "source": "app",             # issue #12 row-origin tag, same as /api/pulse
+    }
+    await db.production_entries.insert_one(adj)
+    adj.pop("_id", None)
+
+    audit = {
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now_utc(),
+        "action": "self_correct_pulse",
+        "agent_id": agent_id,
+        "agent_name": agent["name"],
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "sales_day": sd,
+        "changes": {
+            **{f: {"from": int(totals[f]), "to": int(getattr(payload, f)), "delta": deltas[f]}
+               for f in PULSE_INT_FIELDS if deltas[f] != 0},
+            **({"gross_alp": {"from": totals["gross_alp"], "to": float(payload.gross_alp), "delta": gross_delta}}
+               if gross_delta != 0 else {}),
+        },
+        # Optional here (unlike the Eraser) — but the log line should still
+        # read consistently, so absence is spelled out rather than blank.
+        "reason": (payload.reason or "").strip() or "(no reason given)",
+    }
+    await db.audit_log.insert_one(audit)
+    audit.pop("_id", None)
+
+    # Only the Player's Club check re-runs — it's idempotent (no-ops if the
+    # shoutout already exists) and never retracts one if the corrected total
+    # drops back under $10k. Streak / First Deal are never correction-triggered.
+    await maybe_trigger_players_club(agent, sd)
+
+    audit["ts"] = iso_utc(audit["ts"])
+    return {"ok": True, "entry": _ser_entry(adj), "audit": audit}
 
 
 @api_router.get("/pulse/me/streak")
@@ -1492,9 +1682,11 @@ async def team_weeks(user: Dict[str, Any] = Depends(require_level(2))):
 #                       SHOUTOUTS
 # =========================================================
 
-async def maybe_trigger_shoutouts(agent: Dict[str, Any], entry: Dict[str, Any]):
-    sd = entry["sales_day"]
-    # Player's Club: $10k+ Gross ALP in a sales day
+async def maybe_trigger_players_club(agent: Dict[str, Any], sd: str):
+    """Player's Club: $10k+ Gross ALP in a sales day. Idempotent — no-ops if
+    the shoutout for this agent+day already exists, and never retracts one.
+    Split out of maybe_trigger_shoutouts so a self-correction can re-run just
+    this check (the only shoutout type corrections may trigger)."""
     agg = await aggregate_alp({"agent_id": agent["agent_id"], "sales_day": sd})
     if agg["gross_alp"] >= 10000:
         existing = await db.shoutouts.find_one({"type": "players_club", "agent_id": agent["agent_id"], "sales_day": sd})
@@ -1511,6 +1703,11 @@ async def maybe_trigger_shoutouts(agent: Dict[str, Any], entry: Dict[str, Any]):
                 "amount": agg["gross_alp"],
                 "ts": now_utc(),
             })
+
+
+async def maybe_trigger_shoutouts(agent: Dict[str, Any], entry: Dict[str, Any]):
+    sd = entry["sales_day"]
+    await maybe_trigger_players_club(agent, sd)
     # First Deal Milestone (only first ever sale): scope = ga_team
     total_sales = await db.production_entries.aggregate([
         {"$match": {"agent_id": agent["agent_id"]}},
