@@ -1,7 +1,7 @@
 // Login screen with Google sign-in + 4 demo level buttons (no Google needed)
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -46,14 +46,14 @@ export default function LoginScreen() {
     if (googleResponse.type !== 'success') {
       // 'dismiss'/'cancel' are the user closing the sheet — stay silent.
       if (googleResponse.type === 'error') {
-        alert(`Google Sign-In failed: ${googleResponse.error?.message || 'Please try again.'}`);
+        Alert.alert('Sign-In Error', googleResponse.error?.message || 'Please try again.');
       }
       setBusy(null);
       return;
     }
     const idToken = googleResponse.params.id_token;
     if (!idToken) {
-      alert('Google Sign-In failed: no identity token returned. Please try again.');
+      Alert.alert('Sign-In Error', 'Google did not return an identity token. Please try again.');
       setBusy(null);
       return;
     }
@@ -62,7 +62,7 @@ export default function LoginScreen() {
         await signInGoogleIdToken(idToken);
         router.replace('/');
       } catch (e: unknown) {
-        alert(`Google Sign-In failed: ${e instanceof Error ? e.message : e}`);
+        Alert.alert('Sign-In Error', e instanceof Error ? e.message : String(e));
       } finally {
         setBusy(null);
       }
@@ -76,7 +76,7 @@ export default function LoginScreen() {
       await signInDemo(level);
       router.replace('/');
     } catch (e: any) {
-      alert(`Login failed: ${e.message || e}`);
+      Alert.alert('Login Error', e.message || String(e));
     } finally {
       setBusy(null);
     }
@@ -104,7 +104,7 @@ export default function LoginScreen() {
       const err = e as { code?: string; message?: string };
       // User dismissed the Apple sheet — not an error, stay silent.
       if (err.code === 'ERR_REQUEST_CANCELED' || err.code === 'ERR_CANCELED') return;
-      alert(`Apple Sign-In failed: ${err.message || 'Unknown error'}. Please check your connection and try again.`);
+      Alert.alert('Sign-In Error', err.message || 'Unknown error. Please check your connection and try again.');
     } finally {
       setBusy(null);
     }
@@ -141,7 +141,7 @@ export default function LoginScreen() {
         router.replace('/');
       }
     } catch (e: any) {
-      alert(`Google Sign-In failed: ${e.message || e}`);
+      Alert.alert('Sign-In Error', e.message || String(e));
     } finally {
       setBusy(null);
     }

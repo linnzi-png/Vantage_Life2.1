@@ -214,17 +214,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roleLabel, setRoleLabel] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
+  // A cold start commonly loses the very first request to a not-yet-ready
+  // network stack (or a Railway cold spin-up) — that is a transient failure,
+  // not proof the session is invalid. One quick retry absorbs it instead of
+  // bouncing a legitimately signed-in agent to the login screen.
+  const RELOAD_RETRY_DELAYS_MS = [800, 2000];
+
   const reload = async () => {
-    try {
-      const tok = await getToken();
-      if (!tok) { setUser(null); setAgent(null); setLoading(false); return; }
-      const r = await api<{ user: AppUser; agent: AppAgent | null; role_label: string }>('/api/auth/me');
-      setUser(r.user); setAgent(r.agent); setRoleLabel(r.role_label);
-    } catch {
-      setUser(null); setAgent(null);
-      await setToken(null);
-    } finally {
-      setLoading(false);
+    const tok = await getToken();
+    if (!tok) { setUser(null); setAgent(null); setLoading(false); return; }
+
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const r = await api<{ user: AppUser; agent: AppAgent | null; role_label: string }>('/api/auth/me');
+        setUser(r.user); setAgent(r.agent); setRoleLabel(r.role_label);
+        setLoading(false);
+        return;
+      } catch (e: unknown) {
+        // Only a genuine 401 ("Not authenticated" / "Invalid session" /
+        // "Session expired" — see backend get_current_user) means the stored
+        // token is actually bad. Anything else — a network error, a timeout,
+        // a 5xx — is transient and must not destroy a valid 7-day session:
+        // doing so on every reload() failure was issue #21 (a network hiccup
+        // on relaunch silently logged the agent out, and the immediate
+        // re-login attempt then raced the same not-yet-ready network and
+        // failed too, surfacing as a false "server unreachable" alert).
+        const invalidSession = e instanceof ApiError && e.status === 401;
+        if (invalidSession) {
+          setUser(null); setAgent(null);
+          await setToken(null);
+          setLoading(false);
+          return;
+        }
+        if (attempt < RELOAD_RETRY_DELAYS_MS.length) {
+          await new Promise((res) => setTimeout(res, RELOAD_RETRY_DELAYS_MS[attempt]));
+          continue;
+        }
+        // Retries exhausted: still couldn't reach the server. Leave the
+        // token in place — this device just goes back to "not logged in"
+        // for now rather than being deauthenticated; the next successful
+        // reload() (or a manual sign-in, which reuses the same account)
+        // recovers it without losing anything.
+        setUser(null); setAgent(null);
+        setLoading(false);
+        return;
+      }
     }
   };
 
