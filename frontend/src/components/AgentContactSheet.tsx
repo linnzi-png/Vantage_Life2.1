@@ -27,6 +27,11 @@ interface Props {
   // form for that agent. Omitted entirely (no button rendered) for everyone
   // else, since entry permission starts one tier above viewing.
   onEnterNumbers?: () => void;
+  // Team management, gated by the caller (owner's decision tree): onMove for
+  // GA/MGA/RGA moving a downline member, onRemove for removing someone
+  // strictly below the viewer's tier. Omitted = row not rendered.
+  onMove?: () => void;
+  onRemove?: () => void;
 }
 
 export function formatPhone(raw: string | undefined | null): string {
@@ -43,7 +48,7 @@ function openLink(url: string, errorMessage: string) {
   });
 }
 
-export function AgentContactSheet({ agent, onClose, onEnterNumbers }: Props) {
+export function AgentContactSheet({ agent, onClose, onEnterNumbers, onMove, onRemove }: Props) {
   if (!agent) return null;
 
   const label = roleTitle(agent.io_role, agent.role) || agent.role.replace('level_', 'L');
@@ -149,6 +154,42 @@ export function AgentContactSheet({ agent, onClose, onEnterNumbers }: Props) {
             <View style={{ flex: 1 }}>
               <Text style={styles.contactLabel}>NIGHTLY NUMBERS</Text>
               <Text style={styles.contactValue}>Enter numbers for {agent.name.split(' ')[0]}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
+          </TouchableOpacity>
+        ) : null}
+
+        {onMove ? (
+          <TouchableOpacity
+            style={[styles.contactRow, styles.moveRow]}
+            onPress={onMove}
+            activeOpacity={0.7}
+            testID="move-member-row"
+          >
+            <View style={styles.iconWrap}>
+              <Ionicons name="swap-vertical" size={18} color={COLORS.secondary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.contactLabel}>MOVE TO A NEW UPLINE</Text>
+              <Text style={styles.contactValue}>Reassign {agent.name.split(' ')[0]} within your team</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
+          </TouchableOpacity>
+        ) : null}
+
+        {onRemove ? (
+          <TouchableOpacity
+            style={[styles.contactRow, styles.removeRow]}
+            onPress={onRemove}
+            activeOpacity={0.7}
+            testID="remove-member-row"
+          >
+            <View style={styles.iconWrap}>
+              <Ionicons name="person-remove" size={18} color={COLORS.red} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.contactLabel}>REMOVE FROM TEAM</Text>
+              <Text style={styles.contactValue}>Archive {agent.name.split(' ')[0]} — history is kept</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
           </TouchableOpacity>
@@ -265,6 +306,14 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: COLORS.primary,
     marginTop: 4,
+  },
+  moveRow: {
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.secondary,
+  },
+  removeRow: {
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.red,
   },
   contactMissing: {
     color: COLORS.textMuted,

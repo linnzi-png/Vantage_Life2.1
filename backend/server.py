@@ -144,6 +144,24 @@ def iso_utc(d: datetime) -> str:
     return d.isoformat()
 
 
+def role_level(role: Any) -> int:
+    """Numeric tier for a level_N role string; anything unparseable is tier 1.
+    Permission comparisons use tiers, never io_role titles — a person can hold
+    MGA and RGA titles at once, and only the level_N tier is authoritative."""
+    try:
+        return int(str(role).split("_")[1])
+    except (IndexError, ValueError):
+        return 1
+
+
+# Removal archives a profile instead of deleting it (sales history must keep
+# aggregating into the hierarchy's records), so every *active-roster* query
+# must exclude archived profiles explicitly. Entry/history aggregations and
+# name/office lookup maps deliberately do NOT filter — archived agents'
+# production remains attributed and renderable forever.
+ACTIVE_AGENT: Dict[str, Any] = {"archived": {"$ne": True}}
+
+
 def sales_day_for(dt_local: datetime) -> str:
     """Sales day rolls 6 AM → 6 AM in Detroit time. Pulse Gate at 9 PM, Hard Lock at 6 AM."""
     if dt_local.hour < 6:
@@ -213,6 +231,7 @@ class PulseIn(BaseModel):
     sales_day: Optional[str] = None  # buffered flush only — YYYY-MM-DD; see MAX_SELF_BUFFER_DAYS / MAX_UPLINE_BUFFER_DAYS
     target_agent_id: Optional[str] = None  # set only when an MGA/RGA is entering on behalf of a downline agent
     client_entry_id: Optional[str] = None  # client idempotency key — a retried submit with the same key must not double-count
+    is_nif: bool = False  # "Not In Field" shortcut — an all-zero day submitted on purpose, not a missed entry
 
 
 class EraseIn(BaseModel):
@@ -259,6 +278,13 @@ async def get_session_token(request: Request) -> Optional[str]:
     return None
 
 
+# Sessions last 7 days, so login time alone can lag real activity by a week;
+# the admin Login Scoreboard needs "still opening the app", not "still has a
+# cookie". Refreshing at most every 10 minutes keeps it one write per user per
+# interval instead of one per request.
+LAST_SEEN_TOUCH_INTERVAL = timedelta(minutes=10)
+
+
 async def get_current_user(request: Request) -> Dict[str, Any]:
     tok = await get_session_token(request)
     if not tok:
@@ -276,6 +302,14 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     user = await db.users.find_one({"user_id": sess["user_id"]}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    last_seen = user.get("last_seen_at")
+    if isinstance(last_seen, str):
+        last_seen = datetime.fromisoformat(last_seen)
+    if last_seen and last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=timezone.utc)
+    if not last_seen or now_utc() - last_seen >= LAST_SEEN_TOUCH_INTERVAL:
+        user["last_seen_at"] = now_utc()
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_seen_at": user["last_seen_at"]}})
     return user
 
 
@@ -336,13 +370,16 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
     # without error. Authorization (seeing AO Premier data) is gated separately by
     # require_agent: anyone not on the agent roster gets role "pending" and no agent_id,
     # so they land on a harmless pending screen instead of an error during sign-in.
-    agent = await db.agent_profiles.find_one({"email": email}, {"_id": 0})
+    # Archived (removed-from-team) profiles must not re-link: their sign-in
+    # lands on the pending screen exactly like someone never rostered.
+    agent = await db.agent_profiles.find_one({"email": email, **ACTIVE_AGENT}, {"_id": 0})
     role = agent["role"] if agent else "pending"
     agent_id = agent["agent_id"] if agent else None
 
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
+        now = now_utc()
         user_doc = {
             "user_id": user_id,
             "email": email,
@@ -350,17 +387,27 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
             "picture": picture or "",
             "role": role,
             "agent_id": agent_id,
-            "created_at": now_utc(),
+            "created_at": now,
+            "first_login_at": now,
+            "last_seen_at": now,
         }
         await db.users.insert_one(user_doc)
         user_doc.pop("_id", None)
         user = user_doc
     else:
         # role/agent_id always re-synced from the agent roster, the source of truth
-        await db.users.update_one(
-            {"user_id": user["user_id"]},
-            {"$set": {"name": name, "picture": picture or user.get("picture", ""), "role": role, "agent_id": agent_id}},
-        )
+        updates = {
+            "name": name,
+            "picture": picture or user.get("picture", ""),
+            "role": role,
+            "agent_id": agent_id,
+            "last_seen_at": now_utc(),
+        }
+        if not user.get("first_login_at"):
+            # Accounts created before first_login_at existed: their account was
+            # created by their first sign-in, so created_at is that moment.
+            updates["first_login_at"] = user.get("created_at") or now_utc()
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
         user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
 
     await db.user_sessions.insert_one({
@@ -1064,6 +1111,8 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
     agent = await db.agent_profiles.find_one({"agent_id": target_agent_id}, {"_id": 0})
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+    if agent.get("archived"):
+        raise HTTPException(status_code=400, detail="This agent was removed from the team — numbers can't be entered for them")
 
     if payload.client_entry_id:
         # A timed-out or retried submit whose insert already committed must
@@ -1111,6 +1160,11 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
         "entered_by_role": user.get("role"),
         "is_proxy_entry": is_proxy_entry,
         "client_entry_id": payload.client_entry_id,
+        # True only when submitted via the "NIF" (Not In Field) shortcut — an
+        # intentional all-zero day, distinct from an agent who worked and simply
+        # produced nothing. Metrics/aggregates treat it like any other zero-value
+        # entry; this flag exists purely so the UI can label it correctly.
+        "is_nif": payload.is_nif,
         # Row-origin tag (go-live source-tagging convention, issue #12): every
         # row the app writes going forward is tagged "app" at write-time, so
         # reconcile/audits can tell app rows from WAR imports without heuristics.
@@ -1428,7 +1482,8 @@ async def run_pulse_escalation_check():
         d["agent_id"] async for d in db.production_entries.find({"sales_day": today}, {"_id": 0, "agent_id": 1})
     }
     candidates = [
-        a async for a in db.agent_profiles.find({"role": {"$in": ["level_1", "level_2"]}}, {"_id": 0, "agent_id": 1, "name": 1})
+        a async for a in db.agent_profiles.find(
+            {"role": {"$in": ["level_1", "level_2"]}, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1, "name": 1})
         if a["agent_id"] not in submitted_ids
     ]
     roles_by_id = {
@@ -1634,6 +1689,11 @@ async def team_view(
             "phone": a.get("phone") or "",
             "email": a.get("email") or "",
             "is_rookie": a.get("is_rookie", False),
+            "upline_id": a.get("upline_id"),
+            # A removed member's already-logged production stays on the board
+            # for its window ("history is history") — flagged so the UI can
+            # badge the row and withhold team actions.
+            "archived": bool(a.get("archived")),
             "gross_alp": float(r["gross_alp"]),
             "net_alp": float(r["net_alp"]),
             "sits": sits,
@@ -1642,14 +1702,14 @@ async def team_view(
             "avg_deal": round(avg_deal, 2),
             "alerts": alerts,
         })
-    # Add agents with no entries
+    # Add agents with no entries — removed members don't linger as no-pulse rows
     listed = {x["agent_id"] for x in out}
     for aid, a in agents.items():
-        if aid not in listed:
+        if aid not in listed and not a.get("archived"):
             out.append({
                 "agent_id": aid, "name": a["name"], "office": a["office"], "role": a["role"],
                 "io_role": a.get("io_role") or "", "phone": a.get("phone") or "", "email": a.get("email") or "",
-                "is_rookie": a.get("is_rookie", False),
+                "is_rookie": a.get("is_rookie", False), "upline_id": a.get("upline_id"), "archived": False,
                 "gross_alp": 0, "net_alp": 0, "sits": 0, "sales": 0,
                 "close_ratio": 0, "avg_deal": 0, "alerts": ["no_pulse"],
             })
@@ -1813,7 +1873,7 @@ async def agents_directory(user: Dict[str, Any] = Depends(require_agent)):
     """Name-only roster for the nomination picker. Names/offices are already
     org-visible via the ticker and global shoutouts; no production data here."""
     out = [a async for a in db.agent_profiles.find(
-        {}, {"_id": 0, "agent_id": 1, "name": 1, "office": 1}).sort("name", 1)]
+        dict(ACTIVE_AGENT), {"_id": 0, "agent_id": 1, "name": 1, "office": 1}).sort("name", 1)]
     return {"agents": out}
 
 
@@ -1829,7 +1889,8 @@ async def _nomination_visible_to(user: Dict[str, Any], nomination: Dict[str, Any
 
 @api_router.post("/nominations")
 async def create_nomination(payload: NominationIn, user: Dict[str, Any] = Depends(require_agent)):
-    nominee = await db.agent_profiles.find_one({"agent_id": payload.nominee_agent_id}, {"_id": 0})
+    nominee = await db.agent_profiles.find_one(
+        {"agent_id": payload.nominee_agent_id, **ACTIVE_AGENT}, {"_id": 0})
     if not nominee:
         raise HTTPException(status_code=404, detail="Nominee not found")
     if nominee["agent_id"] == user.get("agent_id"):
@@ -2463,7 +2524,7 @@ async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
         "archived_at": now_utc(),
         "totals": totals,
         "by_office": by_office,
-        "agent_count": await db.agent_profiles.count_documents({}),
+        "agent_count": await db.agent_profiles.count_documents(dict(ACTIVE_AGENT)),
     }
     await db.historical_vault.insert_one(snapshot)
     # Retain entries as the permanent transactional record: flag the week's
@@ -2795,23 +2856,49 @@ class SelfRoleIn(BaseModel):
     role: str  # level_1..level_4
 
 
+def _login_ts(value: Any) -> Optional[str]:
+    """Serialize a stored login timestamp for the admin roster (None passes through)."""
+    if isinstance(value, datetime):
+        return iso_utc(value)
+    return value or None
+
+
 @api_router.get("/admin/people")
 async def admin_people(user: Dict[str, Any] = Depends(require_admin)):
-    """Full roster with login-link status and permission flags, for the Admin screen."""
-    agents = [a async for a in db.agent_profiles.find(
+    """Full roster with login-link status, login/activity timestamps, permission
+    flags, and a launch-engagement summary, for the Admin screen. Removed
+    (archived) people are returned separately and excluded from the summary."""
+    everyone = [a async for a in db.agent_profiles.find(
         {}, {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "phone": 1,
              "office": 1, "role": 1, "io_role": 1, "upline_id": 1, "is_rookie": 1,
-             "state": 1},
+             "state": 1, "archived": 1, "archived_at": 1, "archived_by_name": 1,
+             "former_upline_id": 1},
     ).sort("name", 1)]
-    flags_by_email: Dict[str, Dict[str, Any]] = {}
-    async for u in db.users.find({}, {"_id": 0, "email": 1, "is_admin": 1, "can_switch_role": 1}):
-        flags_by_email[str(u.get("email", "")).lower()] = u
-    for a in agents:
-        u = flags_by_email.get(str(a.get("email", "")).lower())
+    users_by_email: Dict[str, Dict[str, Any]] = {}
+    async for u in db.users.find({}, {"_id": 0, "email": 1, "is_admin": 1, "can_switch_role": 1,
+                                      "created_at": 1, "first_login_at": 1, "last_seen_at": 1}):
+        users_by_email[str(u.get("email", "")).lower()] = u
+    agents, archived = [], []
+    for a in everyone:
+        u = users_by_email.get(str(a.get("email", "")).lower())
         a["has_login"] = u is not None
         a["is_admin"] = bool(u and u.get("is_admin")) or str(a.get("email", "")).lower() in ADMIN_EMAILS
         a["can_switch_role"] = bool(u and u.get("can_switch_role"))
-    return {"people": agents}
+        # Accounts predating these fields fall back to created_at — for them the
+        # account was created by their first sign-in.
+        a["first_login_at"] = _login_ts(u.get("first_login_at") or u.get("created_at")) if u else None
+        a["last_seen_at"] = _login_ts(u.get("last_seen_at") or u.get("created_at")) if u else None
+        if a.pop("archived", None):
+            a["archived_at"] = _login_ts(a.get("archived_at"))
+            archived.append(a)
+        else:
+            a.pop("archived_at", None)
+            a.pop("archived_by_name", None)
+            a.pop("former_upline_id", None)
+            agents.append(a)
+    signed_in = sum(1 for a in agents if a["has_login"])
+    return {"people": agents, "archived": archived,
+            "summary": {"roster": len(agents), "signed_in": signed_in}}
 
 
 @api_router.post("/admin/set-role")
@@ -2821,6 +2908,10 @@ async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends
     agent = await db.agent_profiles.find_one({"agent_id": payload.agent_id}, {"_id": 0})
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+    if agent.get("archived"):
+        # The users sync below would re-activate their login role while the
+        # profile stays archived — restore is the only path back.
+        raise HTTPException(status_code=400, detail="This person was removed — restore them first (Admin Panel → Archived)")
     await db.agent_profiles.update_one(
         {"agent_id": payload.agent_id},
         {"$set": {"role": payload.role, "updated_at": now_utc()}},
@@ -2862,11 +2953,16 @@ async def _roster_add_person(
         # agent created without an upline is invisible in every GA/MGA team view.
         raise HTTPException(status_code=400, detail="Upline is required for everyone below RGA tier")
     if upline_agent_id:
-        upline = await db.agent_profiles.find_one({"agent_id": upline_agent_id}, {"_id": 0, "agent_id": 1})
+        upline = await db.agent_profiles.find_one(
+            {"agent_id": upline_agent_id, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1})
         if not upline:
-            raise HTTPException(status_code=404, detail="Upline agent not found")
+            raise HTTPException(status_code=404, detail="Upline agent not found or was removed from the team")
     existing = await db.agent_profiles.find_one({"email": email}, {"_id": 0})
     if existing:
+        if existing.get("archived"):
+            raise HTTPException(
+                status_code=409,
+                detail=f"{existing.get('name', 'Someone')} held this email and was removed — restore them from the Admin Panel instead of re-adding")
         raise HTTPException(status_code=409, detail=f"{existing.get('name', 'Someone')} already has this email on the roster")
     now = now_utc()
     profile = {
@@ -2954,6 +3050,284 @@ async def team_add_person(payload: TeamAddPersonIn, user: Dict[str, Any] = Depen
     return {"ok": True, "agent": profile}
 
 
+# ---------- Remove / reassign / restore (archive-and-detach, never delete) ----------
+
+class TeamRemovePersonIn(BaseModel):
+    agent_id: str
+    # Admin-only: where the removed person's direct reports go when the target
+    # has no upline of their own (a root RGA). For everyone else the decision
+    # tree is fixed — downlines always go to the removed leader's former upline.
+    destination_upline_agent_id: Optional[str] = None
+    dry_run: bool = False
+    reason: str = ""
+
+
+class TeamReassignIn(BaseModel):
+    agent_id: str
+    new_upline_agent_id: str
+
+
+class AdminUnarchivePersonIn(BaseModel):
+    agent_id: str
+    upline_agent_id: Optional[str] = None  # null allowed only when restoring a root RGA
+
+
+async def _remove_person_context(user: Dict[str, Any], agent_id: str) -> Dict[str, Any]:
+    """Shared permission + target resolution for remove-person. Owner's decision
+    tree: you may remove anyone in your own downline whose tier is strictly
+    below yours (so GA cannot remove SA — same tier — and RGA cannot remove
+    RGA); admins may remove anyone but themselves. Built on get_current_user,
+    not require_agent, so an admin without an agent link can still act."""
+    is_admin = user_is_admin(user)
+    my_level = role_level(user.get("role"))
+    if not is_admin and (my_level < 2 or not user.get("agent_id")):
+        raise HTTPException(status_code=403, detail="Removing team members requires SA level or above")
+    target = await db.agent_profiles.find_one({"agent_id": agent_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if target.get("archived"):
+        raise HTTPException(status_code=400, detail=f"{target.get('name', 'This person')} is already removed")
+    if target["agent_id"] == user.get("agent_id"):
+        raise HTTPException(status_code=400, detail="You can't remove yourself from the team")
+    if not is_admin:
+        if role_level(target.get("role")) >= my_level:
+            raise HTTPException(
+                status_code=403,
+                detail="You can only remove team members below your own level — ask an admin for anything else")
+        # level_4 is agency-wide, matching visible_agent_ids and can_enter_for
+        # ("RGA can do whatever they want" — except remove another RGA, above).
+        if my_level < 4 and target["agent_id"] not in await downline_agent_ids(user["agent_id"]):
+            raise HTTPException(status_code=403, detail="You can only remove people in your own downline")
+    return {"target": target, "is_admin": is_admin}
+
+
+@api_router.post("/team/remove-person")
+async def team_remove_person(payload: TeamRemovePersonIn, user: Dict[str, Any] = Depends(get_current_user)):
+    """Remove someone from the team: archive their profile and detach them.
+
+    Nothing is deleted — the profile is flagged archived so their production
+    history keeps aggregating into the hierarchy's sales records, and their
+    login drops to the pending screen on next sign-in. Direct reports are
+    reassigned to the removed leader's former upline, subtrees intact.
+    `dry_run` returns the exact plan (same plan-then-apply shape as the
+    duplicate-merge and hierarchy-audit tools) so the app can show "their N
+    agents will move under X" before the confirm."""
+    ctx = await _remove_person_context(user, payload.agent_id)
+    target, is_admin = ctx["target"], ctx["is_admin"]
+
+    destination_id = target.get("upline_id")
+    if is_admin and payload.destination_upline_agent_id:
+        destination_id = payload.destination_upline_agent_id.strip()
+    children = [c async for c in db.agent_profiles.find(
+        {"upline_id": target["agent_id"], **ACTIVE_AGENT},
+        {"_id": 0, "agent_id": 1, "name": 1, "role": 1, "io_role": 1, "office": 1})]
+
+    destination = None
+    if children and not destination_id:
+        # Owner decision #1: a top-of-tree removal has nowhere to send the
+        # downline, so the admin must pick a destination as part of the removal.
+        raise HTTPException(
+            status_code=400,
+            detail=("They have no upline to inherit their team — an admin must "
+                    "choose a destination upline as part of the removal"))
+    child_ids = {c["agent_id"] for c in children}
+    promoted = False
+    if destination_id and children:
+        # Only validated when there is a downline to move — removing a leaf
+        # never needs a destination, even if their own upline is long gone.
+        destination = await db.agent_profiles.find_one(
+            {"agent_id": destination_id, **ACTIVE_AGENT}, {"_id": 0})
+        if not destination:
+            raise HTTPException(status_code=404, detail="Destination upline not found or is archived")
+        if destination["agent_id"] == target["agent_id"]:
+            raise HTTPException(status_code=400, detail="Destination can't be the person being removed")
+        # A destination inside the target's subtree is allowed in exactly one
+        # form: a DIRECT report, who is promoted into the target's spot (takes
+        # the target's own upline; siblings move under them). Anything deeper
+        # would leave the chain pointing into the removed branch.
+        promoted = destination["agent_id"] in child_ids
+        if not promoted and destination["agent_id"] in await downline_agent_ids(target["agent_id"]):
+            raise HTTPException(
+                status_code=400,
+                detail="Destination reports to the person being removed — pick their direct report to promote, or someone outside the team")
+        if promoted and not target.get("upline_id") and destination.get("role") != "level_4":
+            # Mirrors /admin/set-upline: only an RGA may sit at the top with no upline.
+            raise HTTPException(
+                status_code=400,
+                detail=f"Promoting {destination.get('name', 'them')} to the top requires RGA tier — raise their tier first")
+
+    plan = {
+        "agent_id": target["agent_id"],
+        "name": target.get("name", ""),
+        "role": target.get("role"),
+        "io_role": target.get("io_role") or "",
+        "children": children,
+        "children_count": len(children),
+        "destination_upline": (
+            {"agent_id": destination["agent_id"], "name": destination.get("name", ""),
+             "role": destination.get("role"), "io_role": destination.get("io_role") or "",
+             "promoted": promoted}
+            if destination else None),
+    }
+    if payload.dry_run:
+        return {"ok": True, "dry_run": True, "plan": plan}
+
+    now = now_utc()
+    if children:
+        sibling_ids = [c for c in child_ids if c != destination["agent_id"]]
+        if sibling_ids:
+            await db.agent_profiles.update_many(
+                {"agent_id": {"$in": sibling_ids}},
+                {"$set": {"upline_id": destination["agent_id"], "updated_at": now}})
+        if promoted:
+            await db.agent_profiles.update_one(
+                {"agent_id": destination["agent_id"]},
+                {"$set": {"upline_id": target.get("upline_id"), "updated_at": now}})
+    # upline_id is deliberately left in place on the archived profile: the
+    # hierarchy walk is what keeps their past production inside the team's
+    # sales records. Active-roster queries exclude them via ACTIVE_AGENT.
+    await db.agent_profiles.update_one(
+        {"agent_id": target["agent_id"]},
+        {"$set": {"archived": True, "archived_at": now,
+                  "archived_by": user["user_id"], "archived_by_name": user.get("name"),
+                  "removed_reason": payload.reason.strip(),
+                  "former_upline_id": target.get("upline_id"), "updated_at": now}})
+    email = str(target.get("email", "")).lower()
+    if email:
+        # Lock the login out immediately, not just at next sign-in.
+        await db.users.update_many({"email": email}, {"$set": {"role": "pending", "agent_id": None}})
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now,
+        "action": "remove_agent",
+        "agent_id": target["agent_id"],
+        "agent_name": target.get("name", ""),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "reason": payload.reason.strip(),
+        "children_reassigned": [c["agent_id"] for c in children],
+        "destination_upline_id": destination["agent_id"] if destination and children else None,
+        "former_upline_id": target.get("upline_id"),
+    })
+    return {"ok": True, "dry_run": False, "plan": plan}
+
+
+@api_router.post("/team/reassign")
+async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(get_current_user)):
+    """Move a downline member under a different upline. Owner's decision tree:
+    GA, MGA, and RGA may reassign (not SA — same tier as GA, so the SA display
+    title is the only thing that separates them); scope is the mover's own
+    downline on both ends. Admins may reassign anyone anywhere."""
+    is_admin = user_is_admin(user)
+    my_level = role_level(user.get("role"))
+    my_subtree: Optional[List[str]] = None
+    if not is_admin:
+        if my_level < 2 or not user.get("agent_id"):
+            raise HTTPException(status_code=403, detail="Reassigning requires GA level or above")
+        me = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
+        if not me:
+            raise HTTPException(status_code=404, detail="Your agent profile was not found")
+        if my_level == 2 and str(me.get("io_role") or "").strip().upper() == "SA":
+            raise HTTPException(status_code=403, detail="Reassigning is for GA level and above — ask your GA")
+        # level_4 is agency-wide (None = no subtree restriction), matching
+        # visible_agent_ids and can_enter_for.
+        my_subtree = None if my_level >= 4 else await downline_agent_ids(user["agent_id"])
+
+    target = await db.agent_profiles.find_one({"agent_id": payload.agent_id, **ACTIVE_AGENT}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if target["agent_id"] == user.get("agent_id"):
+        raise HTTPException(status_code=400, detail="You can't reassign yourself")
+    new_upline = await db.agent_profiles.find_one(
+        {"agent_id": payload.new_upline_agent_id, **ACTIVE_AGENT}, {"_id": 0})
+    if not new_upline:
+        raise HTTPException(status_code=404, detail="New upline not found or is archived")
+    if new_upline["agent_id"] == target["agent_id"]:
+        raise HTTPException(status_code=400, detail="An agent cannot be their own upline")
+    if not is_admin:
+        if role_level(target.get("role")) >= my_level:
+            raise HTTPException(status_code=403, detail="You can only move team members below your own level")
+        if my_subtree is not None and target["agent_id"] not in my_subtree:
+            raise HTTPException(status_code=403, detail="You can only move people in your own downline")
+        if my_subtree is not None and new_upline["agent_id"] not in my_subtree:
+            raise HTTPException(status_code=403, detail="The new upline must be in your own downline")
+        if role_level(new_upline.get("role")) < role_level(target.get("role")):
+            raise HTTPException(status_code=400, detail="The new upline must be at or above their level")
+    # Same cycle guard as /admin/set-upline: a loop hides both branches.
+    if target["agent_id"] in await _ancestor_chain(new_upline["agent_id"]):
+        raise HTTPException(
+            status_code=400,
+            detail="That would create a loop — the chosen upline already reports to this agent")
+
+    now = now_utc()
+    await db.agent_profiles.update_one(
+        {"agent_id": target["agent_id"]},
+        {"$set": {"upline_id": new_upline["agent_id"], "updated_at": now}})
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now,
+        "action": "reassign_agent",
+        "agent_id": target["agent_id"],
+        "agent_name": target.get("name", ""),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "old_upline_id": target.get("upline_id"),
+        "new_upline_id": new_upline["agent_id"],
+    })
+    return {"ok": True, "agent_id": target["agent_id"], "upline_id": new_upline["agent_id"]}
+
+
+@api_router.post("/admin/unarchive-person")
+async def admin_unarchive_person(payload: AdminUnarchivePersonIn, user: Dict[str, Any] = Depends(require_admin)):
+    """Restore a removed person to the active roster. The upline is chosen at
+    restore time (their old branch may have been reorganized since); null is
+    allowed only for a root RGA, mirroring /admin/set-upline."""
+    target = await db.agent_profiles.find_one({"agent_id": payload.agent_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if not target.get("archived"):
+        raise HTTPException(status_code=400, detail=f"{target.get('name', 'This person')} is not archived")
+    upline_id = (payload.upline_agent_id or "").strip() or None
+    if upline_id is None:
+        if target.get("role") != "level_4":
+            raise HTTPException(
+                status_code=400,
+                detail="Pick an upline to restore them under — only an RGA may have none")
+    else:
+        upline = await db.agent_profiles.find_one({"agent_id": upline_id, **ACTIVE_AGENT}, {"_id": 1})
+        if not upline:
+            raise HTTPException(status_code=404, detail="Upline agent not found or is archived")
+        if upline_id == target["agent_id"]:
+            raise HTTPException(status_code=400, detail="An agent cannot be their own upline")
+        if target["agent_id"] in await _ancestor_chain(upline_id):
+            raise HTTPException(
+                status_code=400,
+                detail="That would create a loop — the chosen upline already reports to this agent")
+
+    now = now_utc()
+    await db.agent_profiles.update_one(
+        {"agent_id": target["agent_id"]},
+        {"$set": {"archived": False, "upline_id": upline_id,
+                  "restored_at": now, "restored_by": user["user_id"],
+                  "restored_by_name": user.get("name"), "updated_at": now}})
+    email = str(target.get("email", "")).lower()
+    if email:
+        # Re-link any login so their role comes back without a fresh sign-in.
+        await db.users.update_many(
+            {"email": email}, {"$set": {"role": target["role"], "agent_id": target["agent_id"]}})
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now,
+        "action": "restore_agent",
+        "agent_id": target["agent_id"],
+        "agent_name": target.get("name", ""),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "upline_id": upline_id,
+    })
+    return {"ok": True, "agent_id": target["agent_id"], "upline_id": upline_id}
+
+
 @api_router.post("/admin/set-tenure")
 async def admin_set_tenure(payload: AdminSetTenureIn, user: Dict[str, Any] = Depends(require_admin)):
     """Set Veteran/Rookie tenure on an existing agent. This is the resolution path
@@ -3024,9 +3398,12 @@ async def admin_orphans(user: Dict[str, Any] = Depends(require_admin)):
     """
     everyone = [
         a async for a in db.agent_profiles.find(
-            {}, {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1,
-                 "upline_id": 1, "created_by_import": 1})
+            dict(ACTIVE_AGENT), {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1,
+                                 "upline_id": 1, "created_by_import": 1})
     ]
+    # `known` is active-only on purpose: an agent still pointing at a removed
+    # (archived) upline SHOULD be flagged here — removal reassigns children,
+    # so such a link only appears via imports and needs repair.
     known = {a["agent_id"] for a in everyone}
     orphans = []
     for a in everyone:
@@ -3122,8 +3499,8 @@ async def _hierarchy_repair_plan() -> Dict[str, Any]:
     sheet = _committed_hierarchy()
     by_email = {v["email"]: v for v in sheet.values() if v["email"]}
     everyone = [a async for a in db.agent_profiles.find(
-        {}, {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "office": 1,
-             "role": 1, "upline_id": 1})]
+        dict(ACTIVE_AGENT), {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "office": 1,
+                             "role": 1, "upline_id": 1})]
     known = {a["agent_id"] for a in everyone}
     child_count: Dict[str, int] = {}
     for a in everyone:
@@ -3300,6 +3677,11 @@ async def _roster_sync_plan() -> Dict[str, Any]:
             to_create.append(entry)
             continue
         matched_ids.add(prof["agent_id"])
+        if prof.get("archived"):
+            # Removed in-app; the sheet hasn't caught up. Matching (above)
+            # stops a duplicate being created, and skipping here stops a sync
+            # from resurrecting or re-linking them. Restore is the only path back.
+            continue
         change: Dict[str, Any] = {}
         cur_level, sheet_level = _level_of(prof.get("role")), _level_of(entry["role"])
         if sheet_level > cur_level:
@@ -3338,7 +3720,7 @@ async def _roster_sync_plan() -> Dict[str, Any]:
     not_on_sheet = sorted(
         ({"agent_id": a["agent_id"], "name": a.get("name", ""),
           "office": a.get("office") or UNASSIGNED_OFFICE}
-         for a in profiles if a["agent_id"] not in matched_ids),
+         for a in profiles if a["agent_id"] not in matched_ids and not a.get("archived")),
         key=lambda x: x["name"].lower())
     changes.sort(key=lambda c: c["name"].lower())
     return {"changes": changes, "to_create": [e["name"] for e in to_create],
@@ -3493,7 +3875,7 @@ async def admin_duplicates(user: Dict[str, Any] = Depends(require_admin)):
     email. Each member is annotated with what hangs off it, and the group
     carries a suggested keeper: the profile a login is linked to, else the one
     with a login email, else the larger subtree."""
-    profiles = [a async for a in db.agent_profiles.find({}, {"_id": 0})]
+    profiles = [a async for a in db.agent_profiles.find(dict(ACTIVE_AGENT), {"_id": 0})]
     child_count: Dict[str, int] = {}
     for a in profiles:
         up = a.get("upline_id")
@@ -3798,9 +4180,11 @@ async def admin_set_upline(
     database access.
     """
     agent = await db.agent_profiles.find_one(
-        {"agent_id": payload.agent_id}, {"_id": 0, "agent_id": 1, "role": 1})
+        {"agent_id": payload.agent_id}, {"_id": 0, "agent_id": 1, "role": 1, "archived": 1})
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+    if agent.get("archived"):
+        raise HTTPException(status_code=400, detail="This person was removed — restore them first (Admin Panel → Archived)")
 
     upline_id = (payload.upline_agent_id or "").strip() or None
     if upline_id is None:
@@ -3814,8 +4198,8 @@ async def admin_set_upline(
     else:
         if upline_id == payload.agent_id:
             raise HTTPException(status_code=400, detail="An agent cannot be their own upline")
-        if not await db.agent_profiles.find_one({"agent_id": upline_id}, {"_id": 1}):
-            raise HTTPException(status_code=404, detail="Upline agent not found")
+        if not await db.agent_profiles.find_one({"agent_id": upline_id, **ACTIVE_AGENT}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail="Upline agent not found or was removed from the team")
         # A cycle would make downline_agent_ids unable to reach either branch
         # from above, silently hiding both.
         if payload.agent_id in await _ancestor_chain(upline_id):

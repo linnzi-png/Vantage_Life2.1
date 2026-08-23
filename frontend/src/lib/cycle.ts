@@ -28,6 +28,9 @@ export interface PulsePayload {
   vet_sits: number;
   vet_sales: number;
   gross_alp: number;
+  // "Not In Field" shortcut — an intentional all-zero day. Optional so every
+  // existing call site (which never sets it) keeps defaulting to a normal entry.
+  is_nif?: boolean;
 }
 
 export interface BufferedPulse {
@@ -46,10 +49,15 @@ export function makeClientEntryId(): string {
   return `ce_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
 }
 
+// The 14 steppable metric keys — everything in PulsePayload except is_nif,
+// which is a submission-time flag (set by the "NIF" shortcut), not a field
+// anyone steps through or types a value for.
+export type PulseFieldKey = Exclude<keyof PulsePayload, 'is_nif'>;
+
 // Single source of truth for the 14 Nightly Numbers fields — shared by the
 // full stepper (pulse.tsx) and the condensed quick-entry form (proxy entry),
 // so labels/hints never drift between the two.
-export const PULSE_FIELDS: { key: keyof PulsePayload; label: string; hint: string; type: 'int' | 'money' }[] = [
+export const PULSE_FIELDS: { key: PulseFieldKey; label: string; hint: string; type: 'int' | 'money' }[] = [
   { key: 'sets', label: 'Total Appointments (Sets)', hint: 'Total appointments booked.', type: 'int' },
   { key: 'sits', label: 'Total Sits', hint: 'Total appointments you actually ran (excludes N1).', type: 'int' },
   { key: 'sales', label: 'Total Sales', hint: 'Total closed deals today.', type: 'int' },

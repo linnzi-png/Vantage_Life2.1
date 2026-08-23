@@ -9,7 +9,7 @@ import { BufferedPulse, PulsePayload, PULSE_FIELDS, isBufferEntryEligible, isLat
 import GateBanner from '../../src/components/GateBanner';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 import { TourAnchor } from '../../src/components/TourAnchor';
-import { notify } from '../../src/lib/dialog';
+import { confirmAsync, notify } from '../../src/lib/dialog';
 
 const STEPS = PULSE_FIELDS;
 
@@ -40,7 +40,7 @@ interface DayTotals {
   pos_sits: number; pos_sales: number; vet_sits: number; vet_sales: number;
   gross_alp: number; net_alp: number;
 }
-interface DayEntry { entry_id: string; is_adjustment?: boolean; gross_alp: number; sales: number; sits: number; refs_obtained: number; submitted_at: string }
+interface DayEntry { entry_id: string; is_adjustment?: boolean; is_nif?: boolean; gross_alp: number; sales: number; sits: number; refs_obtained: number; submitted_at: string }
 interface DayData { entries: DayEntry[]; totals: DayTotals; sales_day: string }
 
 // Pre-fill the stepper with a day's current summed totals so the agent edits
@@ -128,6 +128,7 @@ export default function PulseScreen() {
   const [today, setToday] = useState<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string } | null>(null);
   const [streak, setStreak] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [nifSubmitting, setNifSubmitting] = useState(false);
   // True during the midnight–6 AM window; drives the "submit now" urgency
   // prompt only. Entries still post immediately.
   const [lateNight, setLateNight] = useState(false);
@@ -248,6 +249,39 @@ export default function PulseScreen() {
       notify('Error', msg);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Available on every step and on the review screen — logs today as NIF
+  // (Not In Field): all 14 numbers zero, regardless of what's been typed so
+  // far. Discards in-progress entries rather than saving them, since a NIF
+  // day is a deliberate all-zero record, not a partial one.
+  const onMarkNif = async () => {
+    const ok = await confirmAsync({
+      title: 'Mark today as NIF?',
+      message: "This logs all 14 numbers as zero for today (Not In Field). Anything you've typed on this entry will be discarded.",
+      confirmText: 'MARK NIF',
+      destructive: true,
+    });
+    if (!ok) return;
+    setNifSubmitting(true);
+    try {
+      const payload = buildPayload(empty);
+      if (!pendingEntryId.current) pendingEntryId.current = makeClientEntryId();
+      await api('/api/pulse', {
+        method: 'POST',
+        body: JSON.stringify({ ...payload, is_nif: true, client_entry_id: pendingEntryId.current }),
+      });
+      pendingEntryId.current = null;
+      notify('Logged NIF', 'Today is recorded as Not In Field — all zeros.');
+      setForm(empty);
+      setStep(0);
+      await refresh();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to submit';
+      notify('Error', msg);
+    } finally {
+      setNifSubmitting(false);
     }
   };
 
@@ -387,6 +421,17 @@ export default function PulseScreen() {
                   <Ionicons name="arrow-forward" size={14} color="#000" />
                 </TouchableOpacity>
               </View>
+              {isToday ? (
+              <TouchableOpacity
+                style={styles.nifBtn}
+                onPress={onMarkNif}
+                disabled={nifSubmitting}
+                testID="pulse-nif"
+              >
+                <Ionicons name="close-circle-outline" size={13} color={COLORS.textDim} />
+                <Text style={styles.nifTxt}>{nifSubmitting ? 'LOGGING NIF…' : 'NOT IN THE FIELD TODAY? MARK NIF'}</Text>
+              </TouchableOpacity>
+              ) : null}
             </View>
           ) : (
             <View style={styles.stepCard} testID="pulse-review-card">
@@ -418,6 +463,17 @@ export default function PulseScreen() {
                   <Ionicons name="checkmark-circle" size={14} color="#000" />
                 </TouchableOpacity>
               </View>
+              {isToday ? (
+              <TouchableOpacity
+                style={styles.nifBtn}
+                onPress={onMarkNif}
+                disabled={nifSubmitting || submitting}
+                testID="pulse-nif-review"
+              >
+                <Ionicons name="close-circle-outline" size={13} color={COLORS.textDim} />
+                <Text style={styles.nifTxt}>{nifSubmitting ? 'LOGGING NIF…' : 'NOT IN THE FIELD TODAY? MARK NIF'}</Text>
+              </TouchableOpacity>
+              ) : null}
             </View>
           )}
           </TourAnchor>
@@ -428,8 +484,14 @@ export default function PulseScreen() {
           ) : (
             entries.filter((e) => !e.is_adjustment).map((e) => (
               <View key={e.entry_id} style={styles.entry}>
-                <Text style={styles.entryAlp}>${Math.round(e.gross_alp || 0).toLocaleString()}</Text>
-                <Text style={styles.entryMeta}>{e.sales} sales · {e.sits} sits · {e.refs_obtained} refs</Text>
+                {e.is_nif ? (
+                  <View style={styles.nifTag}><Text style={styles.nifTagTxt}>NIF</Text></View>
+                ) : (
+                  <Text style={styles.entryAlp}>${Math.round(e.gross_alp || 0).toLocaleString()}</Text>
+                )}
+                <Text style={styles.entryMeta}>
+                  {e.is_nif ? 'Not in the field' : `${e.sales} sales · ${e.sits} sits · ${e.refs_obtained} refs`}
+                </Text>
                 <Text style={styles.entryTs}>{(new Date(e.submitted_at)).toLocaleTimeString()}</Text>
               </View>
             ))
@@ -546,6 +608,10 @@ const styles = StyleSheet.create({
   btnPrimaryTxt: { color: '#000', fontWeight: '900', letterSpacing: 1 },
   btnGhost: { borderWidth: 1, borderColor: COLORS.border, backgroundColor: 'transparent' },
   btnGhostTxt: { color: COLORS.textDim, fontWeight: '900', letterSpacing: 1 },
+  nifBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingVertical: 8 },
+  nifTxt: { color: COLORS.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 0.4, textDecorationLine: 'underline' },
+  nifTag: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: COLORS.border, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 },
+  nifTagTxt: { color: COLORS.textDim, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
   reviewRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderTopWidth: 1, borderTopColor: COLORS.border },
   reviewLabel: { color: COLORS.textDim, fontSize: 12 },
   reviewValue: { color: '#fff', fontWeight: '800', fontSize: 14 },

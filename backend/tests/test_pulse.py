@@ -25,6 +25,29 @@ async def test_agent_can_submit_pulse(client, seeded_db):
     assert entry["office"] == "MCM"
 
 
+async def test_is_nif_defaults_false(client, seeded_db):
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    r = await client.post("/api/pulse", json=FULL_PULSE, headers=auth(token))
+    assert r.status_code == 200, r.text
+    entry = await seeded_db.production_entries.find_one({"agent_id": "AG_1"}, {"_id": 0})
+    assert entry["is_nif"] is False
+
+
+async def test_nif_entry_records_all_zero_and_flag(client, seeded_db):
+    """The app's "NIF" (Not In Field) shortcut posts every metric at zero and
+    sets is_nif so the UI can label it, rather than a normal zero-production day."""
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    zero_pulse = {k: 0 for k in FULL_PULSE if k != "gross_alp"}
+    zero_pulse["gross_alp"] = 0.0
+    r = await client.post("/api/pulse", json={**zero_pulse, "is_nif": True}, headers=auth(token))
+    assert r.status_code == 200, r.text
+
+    entry = await seeded_db.production_entries.find_one({"agent_id": "AG_1"}, {"_id": 0})
+    assert entry["is_nif"] is True
+    for k in zero_pulse:
+        assert entry[k] == 0
+
+
 async def test_midnight_window_posts_immediately_to_open_sales_day(client, seeded_db, monkeypatch):
     """Entries submitted between midnight and 6 AM post immediately (no local
     buffering) and land on the still-open Midnight Miracle sales day — the
