@@ -12,7 +12,7 @@ change (`com.aopremiere.vantagelife` bundle ID, `@aopremiere.com` demo emails).
 - Frontend: Expo (SDK 56) / React Native, TypeScript, file-based routing via Expo Router
 - Backend: Python / FastAPI (`backend/server.py`), Motor async MongoDB driver
 - Database: MongoDB
-- Auth: custom session tokens — Emergent-proxied Google OAuth, Sign in with Apple, and `/api/auth/demo-login` for RBAC-tier testing
+- Auth: custom session tokens — Google OAuth via Auth0, Sign in with Apple, and `/api/auth/demo-login` for RBAC-tier testing
 - Deploy: Railway runs the backend (`railway.json` → `uvicorn server:app`); Vercel hosts the Expo web export (`vercel.json`); iOS builds via EAS (`frontend/eas.json`)
 - Package managers: npm (root), yarn (frontend), pip (backend)
 
@@ -121,7 +121,7 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 - N1 looks like a sales metric but is a medical-disqualification tally. It is NOT part of Sits, so never subtract it from Sits and never add it into production totals.
 - Reporting cycle starts 6AM Detroit time - all date range queries must go through `sales_day_for()`.
 - Users not on the agent roster have role `"pending"` and no `agent_id` — every business-data route must sit behind `require_agent`/`require_level`, which reject them.
-- Google OAuth still flows through Emergent's auth proxy (`EMERGENT_AUTH_URL`); it is not a plain Google client.
+- Google OAuth flows through Auth0 (`AUTH0_DOMAIN`/`AUTH0_CLIENT_IDS`, `/api/auth/auth0`): the app runs Auth0 Universal Login routed to the Google connection, and the backend verifies the resulting Auth0-issued ID token against Auth0's own JWKS/issuer, not Google's directly. Sign in with Apple is unaffected and still verifies natively against Apple's JWKS.
 
 ## AI Agent Notes
 - Ask before modifying any business logic or calculation

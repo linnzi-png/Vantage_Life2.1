@@ -199,8 +199,7 @@ interface AuthCtx {
   reload: () => Promise<void>;
   signInDemo: (level: Role) => Promise<void>;
   signInApple: (identityToken: string, givenName: string | null, familyName: string | null) => Promise<void>;
-  signInGoogleSession: (sessionId: string) => Promise<void>;
-  signInGoogleIdToken: (idToken: string) => Promise<void>;
+  signInAuth0: (idToken: string) => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   switchRole: (role: Role) => Promise<void>;
@@ -292,24 +291,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await reload();
   };
 
-  const signInGoogleSession = async (sessionId: string) => {
-    // Native Google flow: the Emergent portal redirects back to the app with a
-    // session_id; exchange it exactly like the web path does.
+  const signInAuth0 = async (idToken: string) => {
+    // Google flow: Auth0 Universal Login (routed to the Google connection)
+    // hands the app an Auth0-issued ID token, which the backend verifies.
     setLoading(true);
-    const r = await api<{ user: AppUser; session_token: string }>('/api/auth/session', {
-      method: 'POST',
-      body: JSON.stringify({ session_id: sessionId }),
-    });
-    await setToken(r.session_token);
-    setUser(r.user);
-    await reload();
-  };
-
-  const signInGoogleIdToken = async (idToken: string) => {
-    // Direct Google flow: the app got an ID token from Google itself and the
-    // backend verifies it — no Emergent proxy in the path.
-    setLoading(true);
-    const r = await api<{ user: AppUser; session_token: string }>('/api/auth/google', {
+    const r = await api<{ user: AppUser; session_token: string }>('/api/auth/auth0', {
       method: 'POST',
       body: JSON.stringify({ id_token: idToken }),
     });
@@ -339,7 +325,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInGoogleSession, signInGoogleIdToken, signOut, deleteAccount, switchRole }}>
+    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInAuth0, signOut, deleteAccount, switchRole }}>
       {children}
     </AuthContext.Provider>
   );

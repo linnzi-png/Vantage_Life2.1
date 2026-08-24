@@ -15,31 +15,6 @@ export default function Index() {
     else router.replace('/login');
   }, [user, loading]);
 
-  // Handle Emergent OAuth fragment if present (web)
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.location) return;
-    const hash = window.location.hash || '';
-    if (hash.includes('session_id=')) {
-      const sid = hash.split('session_id=')[1].split('&')[0];
-      const url = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api/auth/session`;
-      fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ session_id: sid }),
-      }).then(async (r) => {
-        if (r.ok) {
-          const j = await r.json();
-          // Persist token in AsyncStorage for native fallback
-          const AS = (await import('@react-native-async-storage/async-storage')).default;
-          await AS.setItem('vl_session_token', j.session_token);
-          window.location.hash = '';
-          window.location.href = '/';
-        }
-      }).catch(() => {});
-    }
-  }, []);
-
   return (
     <View style={styles.center}>
       <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text></Text>
