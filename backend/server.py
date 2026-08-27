@@ -1684,6 +1684,16 @@ async def team_view(
     if ids is not None:
         agent_q["agent_id"] = {"$in": ids}
     agents = {a["agent_id"]: a async for a in db.agent_profiles.find(agent_q, {"_id": 0})}
+    # Manager-visible "notifications off" flag (owner, 2026-08-27): a team
+    # member with no registered push token can't get the 9 PM escalation or
+    # upline confirmation pushes at all. Surfaced the same way as any other
+    # alerts chip -- it's a signal for the manager to follow up, never an
+    # in-app block on the agent's own access.
+    reachable_ids = {
+        t["agent_id"] async for t in db.push_tokens.find(
+            {"agent_id": {"$in": list(agents.keys())}}, {"_id": 0, "agent_id": 1}
+        )
+    }
     out = []
     for r in rows:
         a = agents.get(r["_id"])
@@ -1703,6 +1713,8 @@ async def team_view(
             alerts.append("low_close_ratio")
         if sales >= MIN_SALES_FOR_DEAL_ALERT and avg_deal < LOW_AVG_DEAL_USD:
             alerts.append("low_avg_deal")
+        if not a.get("archived") and a["agent_id"] not in reachable_ids:
+            alerts.append("notifications_off")
         out.append({
             "agent_id": a["agent_id"],
             "name": a["name"],
@@ -1729,12 +1741,15 @@ async def team_view(
     listed = {x["agent_id"] for x in out}
     for aid, a in agents.items():
         if aid not in listed and not a.get("archived"):
+            no_entry_alerts = ["no_pulse"]
+            if aid not in reachable_ids:
+                no_entry_alerts.append("notifications_off")
             out.append({
                 "agent_id": aid, "name": a["name"], "office": a["office"], "role": a["role"],
                 "io_role": a.get("io_role") or "", "phone": a.get("phone") or "", "email": a.get("email") or "",
                 "is_rookie": a.get("is_rookie", False), "upline_id": a.get("upline_id"), "archived": False,
                 "gross_alp": 0, "net_alp": 0, "sits": 0, "sales": 0,
-                "close_ratio": 0, "avg_deal": 0, "alerts": ["no_pulse"],
+                "close_ratio": 0, "avg_deal": 0, "alerts": no_entry_alerts,
             })
     return {
         "team": out,
