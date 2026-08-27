@@ -1176,6 +1176,11 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
     # Trigger shoutouts
     await maybe_trigger_shoutouts(agent, entry)
 
+    # Confirmation check-in to the direct upline -- self entries only. Proxy
+    # entries skip it (the upline typed the numbers themselves).
+    if not is_proxy_entry:
+        await notify_upline_of_submission(agent, sd)
+
     return {"ok": True, "entry": _ser_entry(entry)}
 
 
@@ -1457,6 +1462,24 @@ async def _log_and_check(agent_id, sales_day, log_stage):
     except Exception:
         return False  # race: another tick logged it between our check and insert
     return True
+
+
+async def notify_upline_of_submission(agent, sales_day: str) -> None:
+    """Confirmation check-in (owner, 2026-08-27): the agent's DIRECT upline gets
+    one push the first time the agent submits their own numbers for a sales day.
+    Proxy entries and self-corrections never fire this; resubmits for the same
+    sales day are deduped through notification_log (stage 'submitted_upline').
+    Best-effort -- a failure here must never fail the submission itself."""
+    try:
+        upline_id = agent.get("upline_id")
+        if not upline_id:
+            return
+        if not await _log_and_check(agent["agent_id"], sales_day, "submitted_upline"):
+            return
+        tokens = [t["push_token"] async for t in db.push_tokens.find({"agent_id": upline_id}, {"_id": 0, "push_token": 1})]
+        await send_expo_push(tokens, "VantageLife", f"{agent.get('name', 'An agent')} entered their daily numbers.")
+    except Exception as e:
+        logger.warning(f"Upline submission push failed: {e}")
 
 
 async def run_pulse_escalation_check():
