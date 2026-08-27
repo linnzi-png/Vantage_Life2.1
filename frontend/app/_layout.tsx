@@ -7,6 +7,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '../src/lib/auth';
 import { TourProvider } from '../src/lib/tour';
 import { TourOverlay } from '../src/components/TourOverlay';
+import NotificationNagOverlay from '../src/components/NotificationNagOverlay';
 
 // Keep the splash visible until the layout tree is mounted.
 // Without this, the splash auto-hides before React has painted the dark
@@ -51,6 +52,7 @@ export default function RootLayout() {
               <Stack.Screen name="admin" options={{ title: 'Admin Panel' }} />
             </Stack>
             <TourOverlay />
+            <NotificationNagOverlay />
           </TourProvider>
         </AuthProvider>
       </SafeAreaProvider>

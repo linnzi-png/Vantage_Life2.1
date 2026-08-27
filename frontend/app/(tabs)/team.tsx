@@ -23,9 +23,13 @@ interface TeamRow {
 }
 
 const ALERT_LABELS: Record<string, { label: string; color: string }> = {
-  low_close_ratio: { label: 'Low Close', color: COLORS.red },
-  low_avg_deal:    { label: 'Low Avg',   color: COLORS.orange },
-  no_pulse:        { label: 'No Pulse',  color: COLORS.yellow },
+  low_close_ratio:   { label: 'Low Close',  color: COLORS.red },
+  low_avg_deal:      { label: 'Low Avg',    color: COLORS.orange },
+  no_pulse:          { label: 'No Pulse',   color: COLORS.yellow },
+  // Push notifications never reached this device -- they can't get the 9 PM
+  // reminders or upline confirmation pings. A signal for the manager to
+  // follow up directly, not something the app enforces on its own.
+  notifications_off: { label: '🔕 No Push', color: COLORS.secondary },
 };
 
 export default function TeamScreen() {
