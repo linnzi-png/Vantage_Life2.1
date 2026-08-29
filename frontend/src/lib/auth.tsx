@@ -46,6 +46,29 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * fetch() throws the same generic "TypeError: Network request failed" for a
+ * real connectivity problem AND for failures that have nothing to do with
+ * the network — e.g. React Native failing to read a picked file's local URI
+ * (a stale iCloud placeholder that hasn't finished downloading, a revoked
+ * cache path) before the multipart body is even built. Collapsing all of
+ * that into "Unable to reach the server" left a real bug undiagnosable: a
+ * WAR-report upload that failed for a local-file reason looked identical to
+ * a dead connection (issue #23). This surfaces whatever detail is actually
+ * available instead of guessing at connectivity.
+ */
+function describeFetchFailure(e: unknown, kind: 'request' | 'upload'): string {
+  const err = e as { name?: string; message?: string };
+  if (err.name === 'AbortError') {
+    return kind === 'upload'
+      ? 'The upload took too long. Please try again.'
+      : 'The server took too long to respond. Please try again.';
+  }
+  const generic = err.message === 'Network request failed' || !err.message;
+  const detail = generic ? '' : ` (${err.message})`;
+  return `Unable to reach the server${detail}. Please check your connection and try again.`;
+}
+
 export async function getToken(): Promise<string | null> {
   try {
     return await AsyncStorage.getItem(SESSION_KEY);
@@ -88,8 +111,7 @@ export async function apiUpload<T = any>(
       signal: controller.signal,
     });
   } catch (e: unknown) {
-    const aborted = (e as { name?: string }).name === 'AbortError';
-    throw new Error(aborted ? 'The upload took too long. Please try again.' : 'Unable to reach the server. Please check your connection and try again.');
+    throw new Error(describeFetchFailure(e, 'upload'));
   } finally {
     clearTimeout(timer);
   }
@@ -119,9 +141,7 @@ export async function api<T = any>(path: string, opts: RequestInit = {}): Promis
       signal: controller.signal,
     });
   } catch (e: unknown) {
-    // Surface a human-readable message instead of "TypeError: Network request failed".
-    const aborted = (e as { name?: string }).name === 'AbortError';
-    throw new Error(aborted ? 'The server took too long to respond. Please try again.' : 'Unable to reach the server. Please check your connection and try again.');
+    throw new Error(describeFetchFailure(e, 'request'));
   } finally {
     clearTimeout(timer);
   }
@@ -148,10 +168,7 @@ export async function apiText(path: string): Promise<string> {
       headers, credentials: 'include', signal: controller.signal,
     });
   } catch (e: unknown) {
-    const aborted = (e as { name?: string }).name === 'AbortError';
-    throw new Error(aborted
-      ? 'The server took too long to respond. Please try again.'
-      : 'Unable to reach the server. Please check your connection and try again.');
+    throw new Error(describeFetchFailure(e, 'request'));
   } finally {
     clearTimeout(timer);
   }
@@ -176,10 +193,7 @@ export async function apiBlob(path: string): Promise<Blob> {
       headers, credentials: 'include', signal: controller.signal,
     });
   } catch (e: unknown) {
-    const aborted = (e as { name?: string }).name === 'AbortError';
-    throw new Error(aborted
-      ? 'The server took too long to respond. Please try again.'
-      : 'Unable to reach the server. Please check your connection and try again.');
+    throw new Error(describeFetchFailure(e, 'request'));
   } finally {
     clearTimeout(timer);
   }
