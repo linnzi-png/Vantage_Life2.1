@@ -33,6 +33,9 @@ interface Person {
   can_switch_role: boolean;
   first_login_at?: string | null; // null until they sign in for the first time
   last_seen_at?: string | null;   // refreshed by activity, not just login
+  self_registered?: boolean;      // came in through the public /join web form
+  needs_review?: boolean;         // self-registered and not yet verified by an admin
+  requested_title?: string;       // e.g. "RGA" — title claimed above the join-form tier cap
 }
 
 interface LoginSummary {
@@ -229,6 +232,15 @@ export default function AdminScreen() {
     }
   };
 
+  const clearReview = async (p: Person) => {
+    try {
+      await api('/api/admin/clear-review', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id }) });
+      setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, needs_review: false } : x)));
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'Could not mark verified');
+    }
+  };
+
   const setTenure = async (p: Person, isRookie: boolean) => {
     if (p.is_rookie === isRookie) return;
     try {
@@ -412,6 +424,11 @@ export default function AdminScreen() {
                     {p.is_rookie === true ? ' · Rookie' : p.is_rookie === false ? ' · Veteran' : ' · Tenure unknown'}
                   </Text>
                 </View>
+                {p.needs_review ? (
+                  <View style={styles.reviewBadge}>
+                    <Text style={styles.reviewBadgeTxt}>VERIFY</Text>
+                  </View>
+                ) : null}
                 <View style={[styles.tierBadge, !p.has_login && styles.tierBadgeDim]}>
                   <Text style={styles.tierBadgeTxt}>{TIER_SHORT[p.role] || '—'}</Text>
                 </View>
@@ -427,6 +444,19 @@ export default function AdminScreen() {
                       ? `First login ${fmtWhen(p.first_login_at)} · Last seen ${fmtWhen(p.last_seen_at)}`
                       : 'Never signed in'}
                   </Text>
+
+                  {p.needs_review ? (
+                    <View style={styles.reviewCard}>
+                      <Text style={styles.reviewCardTxt}>
+                        Self-registered via the /join web form — check their tier, upline, and team.
+                        {p.requested_title ? ` They said they're ${p.requested_title === 'RGA' ? 'an' : 'a'} ${p.requested_title}; the form capped them at L3 — bump the tier if that's right.` : ''}
+                      </Text>
+                      <TouchableOpacity style={styles.reviewBtn} onPress={() => clearReview(p)} testID={`admin-verify-${p.agent_id}`}>
+                        <Ionicons name="checkmark-circle" size={14} color="#000" />
+                        <Text style={styles.reviewBtnTxt}>MARK VERIFIED</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
 
                   <Text style={styles.lab}>ACCESS TIER</Text>
                   <View style={styles.tierRow}>
@@ -612,6 +642,12 @@ const styles = StyleSheet.create({
   personHead: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 },
   personName: { color: '#fff', fontWeight: '800', fontSize: 14 },
   personSub: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
+  reviewBadge: { backgroundColor: 'rgba(255,215,0,0.16)', borderWidth: 1, borderColor: COLORS.gold, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  reviewBadgeTxt: { color: COLORS.gold, fontWeight: '900', fontSize: 9, letterSpacing: 1 },
+  reviewCard: { backgroundColor: 'rgba(255,215,0,0.10)', borderWidth: 1, borderColor: 'rgba(255,215,0,0.45)', borderRadius: 8, padding: 10, marginTop: 10 },
+  reviewCardTxt: { color: COLORS.gold, fontSize: 12, lineHeight: 17 },
+  reviewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORS.gold, borderRadius: 6, paddingVertical: 8, marginTop: 10 },
+  reviewBtnTxt: { color: '#000', fontWeight: '900', fontSize: 11, letterSpacing: 1 },
   tierBadge: { backgroundColor: COLORS.secondary, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   tierBadgeDim: { backgroundColor: COLORS.surface2 },
   tierBadgeTxt: { color: '#fff', fontWeight: '900', fontSize: 10 },

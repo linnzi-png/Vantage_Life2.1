@@ -7,6 +7,7 @@
     { "source": "/get-android", "destination": "https://expo.dev/artifacts/eas/GLn8zcD_XiVWWgFNJIVw9YbvxJygLtNLGa5yBNFNCXY.apk", "permanent": false }
   ],
   "rewrites": [
+    { "source": "/join", "destination": "/join.html" },
     { "source": "/tour", "destination": "/tour.html" },
     { "source": "/iphone", "destination": "/iphone.html" },
     { "source": "/android", "destination": "/android.html" },

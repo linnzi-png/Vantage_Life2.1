@@ -2910,7 +2910,8 @@ async def admin_people(user: Dict[str, Any] = Depends(require_admin)):
         {}, {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "phone": 1,
              "office": 1, "role": 1, "io_role": 1, "upline_id": 1, "is_rookie": 1,
              "state": 1, "archived": 1, "archived_at": 1, "archived_by_name": 1,
-             "former_upline_id": 1},
+             "former_upline_id": 1,
+             "self_registered": 1, "needs_review": 1, "requested_title": 1},
     ).sort("name", 1)]
     users_by_email: Dict[str, Dict[str, Any]] = {}
     async for u in db.users.find({}, {"_id": 0, "email": 1, "is_admin": 1, "can_switch_role": 1,
@@ -3086,6 +3087,159 @@ async def team_add_person(payload: TeamAddPersonIn, user: Dict[str, Any] = Depen
         is_rookie=payload.is_rookie, state=payload.state, changed_by=user,
     )
     return {"ok": True, "agent": profile}
+
+
+# =========================================================
+#        SELF-SERVICE REGISTRATION — the /join web form
+# =========================================================
+# Public (unauthenticated) endpoints behind the frontend/public/join.html page
+# at app.aovantagelife.com/join. Launch fallback for agents who can't log in:
+# sign-in re-derives role/agent_id from agent_profiles by EMAIL, so someone
+# missing from the roster (or rostered under a different email) lands on the
+# "pending" screen. This form lets them roster themselves and sign straight in.
+#
+# Safety model (owner's choice: auto-add + admin review, not an approval queue):
+#   - The entry goes live immediately but is flagged self_registered +
+#     needs_review, which badges it in the Admin panel until an admin verifies.
+#   - Tier is DERIVED from the field title, never client-chosen, and is capped
+#     at level_3 — a self-registration can never mint a full-agency level_4;
+#     an admin promotes a real RGA after verifying (requested_title records it).
+#   - An upline pick from the active roster is required for everyone, so the
+#     new person always rolls up into team views (never an orphan).
+#   - Per-IP rate limit + honeypot field keep drive-by junk out.
+
+# Field title → RBAC tier, mirroring AddTeamMemberSheet (Agent→L1, SA→L2,
+# GA→L3) and the MGA/RGA=level_3+ convention used across permissions.
+JOIN_TITLE_TIERS = {
+    "inTraining": "level_1",
+    "Agent": "level_1",
+    "SA": "level_2",
+    "GA": "level_3",
+    "MGA": "level_3",
+    "RGA": "level_3",  # capped — see note above; requested_title preserves the ask
+}
+JOIN_TIER_CAP_TITLES = {"RGA"}  # titles whose real tier exceeds the public cap
+
+# Sliding-window per-IP throttle. In-memory is fine: one Railway instance, and
+# a restart resetting the window is harmless.
+_JOIN_RATE: Dict[str, List[float]] = {}
+_JOIN_RATE_MAX = 6          # submissions
+_JOIN_RATE_WINDOW = 3600.0  # per hour per IP
+
+
+def _join_client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _join_rate_ok(ip: str) -> bool:
+    import time as _time
+    now = _time.monotonic()
+    window = [t for t in _JOIN_RATE.get(ip, []) if now - t < _JOIN_RATE_WINDOW]
+    if len(window) >= _JOIN_RATE_MAX:
+        _JOIN_RATE[ip] = window
+        return False
+    window.append(now)
+    _JOIN_RATE[ip] = window
+    return True
+
+
+class JoinSubmitIn(BaseModel):
+    first_name: str
+    last_name: str
+    email: str
+    phone: str
+    title: str                      # field title: Agent / SA / GA / MGA / RGA / inTraining
+    is_rookie: Optional[bool] = None  # tenure — required, surfaced as a clear 400
+    state: Optional[str] = None     # two-letter resident state, optional
+    upline_agent_id: str            # required for everyone — see safety model
+    website: str = ""               # honeypot: real users never fill this
+
+
+@api_router.get("/join/options")
+async def join_options():
+    """Everything the public form needs: the upline picker roster (active
+    level_2+ only) and the title list. Name/office/title are already org-visible
+    (ticker, shoutouts, directory); no emails, phones, or production data."""
+    uplines = [a async for a in db.agent_profiles.find(
+        {**ACTIVE_AGENT, "role": {"$in": ["level_2", "level_3", "level_4"]}},
+        {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "io_role": 1},
+    ).sort("name", 1)]
+    return {"uplines": uplines, "titles": list(JOIN_TITLE_TIERS.keys())}
+
+
+@api_router.post("/join/submit")
+async def join_submit(payload: JoinSubmitIn, request: Request):
+    if payload.website.strip():
+        # Honeypot tripped — answer 200 so bots don't learn, write nothing.
+        return {"ok": True}
+    ip = _join_client_ip(request)
+    if not _join_rate_ok(ip):
+        raise HTTPException(status_code=429, detail="Too many sign-ups from this connection — try again in an hour")
+    title = payload.title.strip()
+    if title not in JOIN_TITLE_TIERS:
+        raise HTTPException(status_code=400, detail="Pick your role from the list")
+    name = f"{payload.first_name.strip()} {payload.last_name.strip()}".strip()
+    if not payload.first_name.strip() or not payload.last_name.strip():
+        raise HTTPException(status_code=400, detail="First and last name are required")
+    phone_digits = re.sub(r"\D", "", payload.phone or "")
+    if len(phone_digits) < 10:
+        raise HTTPException(status_code=400, detail="A valid cell number is required")
+    upline = await db.agent_profiles.find_one(
+        {"agent_id": payload.upline_agent_id, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1, "office": 1, "name": 1})
+    if not upline:
+        raise HTTPException(status_code=404, detail="Pick your upline from the list")
+    # Office is inherited from the upline (same rule as /team/add-person) so a
+    # self-registration can never land on a nonexistent or misspelled team.
+    profile = await _roster_add_person(
+        name=name, email=payload.email, phone=payload.phone,
+        office=str(upline.get("office") or "").strip() or UNASSIGNED_OFFICE,
+        role=JOIN_TITLE_TIERS[title], io_role=title,
+        upline_agent_id=upline["agent_id"], is_rookie=payload.is_rookie,
+        state=payload.state,
+        changed_by={"user_id": "join_form", "name": "Self-registration (/join)"},
+    )
+    flags: Dict[str, Any] = {"self_registered": True, "needs_review": True}
+    if title in JOIN_TIER_CAP_TITLES:
+        flags["requested_title"] = title
+    await db.agent_profiles.update_one({"agent_id": profile["agent_id"]}, {"$set": flags})
+    # Nudge the admins' phones; best-effort — a push failure never fails the sign-up.
+    try:
+        admin_emails = set(ADMIN_EMAILS)
+        async for u in db.users.find({"is_admin": True}, {"_id": 0, "email": 1}):
+            if u.get("email"):
+                admin_emails.add(str(u["email"]).lower())
+        admin_ids = [u["user_id"] async for u in db.users.find(
+            {"email": {"$in": list(admin_emails)}}, {"_id": 0, "user_id": 1})]
+        tokens = [t["push_token"] async for t in db.push_tokens.find(
+            {"user_id": {"$in": admin_ids}}, {"_id": 0, "push_token": 1})]
+        await send_expo_push(
+            tokens, "VantageLife",
+            f"Self-registration: {name} ({title}, {profile.get('office')}) — verify in the Admin panel.")
+    except Exception as e:
+        logger.warning(f"join_submit admin push failed: {e}")
+    return {
+        "ok": True,
+        "name": name,
+        "office": profile.get("office"),
+        "message": f"You're on the roster, {payload.first_name.strip()}! Open the app and sign in with Google or Apple using {profile['email']}.",
+    }
+
+
+class AdminClearReviewIn(BaseModel):
+    agent_id: str
+
+
+@api_router.post("/admin/clear-review")
+async def admin_clear_review(payload: AdminClearReviewIn, user: Dict[str, Any] = Depends(require_admin)):
+    """Mark a self-registered entry verified — clears the Admin-panel badge."""
+    r = await db.agent_profiles.update_one(
+        {"agent_id": payload.agent_id}, {"$set": {"needs_review": False}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {"ok": True}
 
 
 # ---------- Remove / reassign / restore (archive-and-detach, never delete) ----------
