@@ -12,6 +12,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import asyncio
 import csv
+import hmac
 import io
 import logging
 import re
@@ -3240,6 +3241,48 @@ async def admin_clear_review(payload: AdminClearReviewIn, user: Dict[str, Any] =
     if not r.matched_count:
         raise HTTPException(status_code=404, detail="Agent not found")
     return {"ok": True}
+
+
+# Shared-secret feed for the Google Sheet sync (AO Premier Agent List →
+# "sourced from app" tab). A Google Apps Script on the sheet polls this on a
+# time trigger and appends/updates rows. Gated by JOIN_SYNC_KEY (Railway env);
+# unset = endpoint disabled. Contains emails/phones, so never expose keyless.
+JOIN_SYNC_KEY = os.environ.get("JOIN_SYNC_KEY", "").strip()
+
+
+@api_router.get("/join/registrants")
+async def join_registrants(key: str = ""):
+    if not JOIN_SYNC_KEY:
+        raise HTTPException(status_code=503, detail="Sync is not configured (JOIN_SYNC_KEY unset)")
+    if not key or not hmac.compare_digest(key, JOIN_SYNC_KEY):
+        raise HTTPException(status_code=403, detail="Bad key")
+    regs = [a async for a in db.agent_profiles.find(
+        {"self_registered": True},
+        {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "phone": 1, "office": 1,
+         "role": 1, "io_role": 1, "is_rookie": 1, "state": 1, "upline_id": 1,
+         "needs_review": 1, "requested_title": 1, "created_at": 1, "archived": 1},
+    ).sort("created_at", 1)]
+    upline_ids = list({r.get("upline_id") for r in regs if r.get("upline_id")})
+    upline_names = {a["agent_id"]: a.get("name", "") async for a in db.agent_profiles.find(
+        {"agent_id": {"$in": upline_ids}}, {"_id": 0, "agent_id": 1, "name": 1})}
+    out = []
+    for r in regs:
+        created = r.get("created_at")
+        out.append({
+            "agent_id": r.get("agent_id"),
+            "registered_at": iso_utc(created) if isinstance(created, datetime) else (created or ""),
+            "name": r.get("name", ""),
+            "phone": r.get("phone", ""),
+            "email": r.get("email", ""),
+            "title": r.get("requested_title") or r.get("io_role") or "",
+            "tenure": "Rookie" if r.get("is_rookie") else "Vet",
+            "team": r.get("office", ""),
+            "state": r.get("state", ""),
+            "upline": upline_names.get(r.get("upline_id"), ""),
+            "verified": not r.get("needs_review", False),
+            "removed": bool(r.get("archived")),
+        })
+    return {"registrants": out}
 
 
 # ---------- Remove / reassign / restore (archive-and-detach, never delete) ----------
