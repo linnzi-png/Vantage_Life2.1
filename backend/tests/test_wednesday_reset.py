@@ -88,3 +88,12 @@ async def test_reset_still_requires_level_4(client, seeded_db, detroit_clock):
     token = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
     r = await client.post("/api/admin/wednesday-reset", headers=auth(token))
     assert r.status_code == 403
+
+
+async def test_reset_allows_is_admin_without_level_4(client, seeded_db, detroit_clock):
+    # Per owner (2026-09-01): is_admin holds every capability the highest
+    # RBAC tier has, and then some — see has_full_control() in server.py.
+    detroit_clock(2026, 7, 1, 14, 0)
+    token = await make_session(seeded_db, role="pending", agent_id=None, email="linnzi@aoluxor.com")
+    r = await client.post("/api/admin/wednesday-reset", headers=auth(token))
+    assert r.status_code == 200, r.text

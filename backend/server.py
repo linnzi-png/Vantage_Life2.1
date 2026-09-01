@@ -380,15 +380,31 @@ async def require_admin_or_finance_admin(user: Dict[str, Any] = Depends(get_curr
     return user
 
 
-async def require_level4_or_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    """Read-only gate for Historical Vault list/download views: true RGA
-    (level_4) or finance_admin. Restore/delete routes must stay on
-    require_level(4) alone — finance_admin never gets write access here."""
-    if user_is_finance_admin(user):
-        return user
-    if not str(user.get("role", "")).startswith("level_") or role_level(user.get("role")) < 4:
-        raise HTTPException(status_code=403, detail="Requires level 4+")
+def has_full_control(user: Dict[str, Any]) -> bool:
+    """True RGA (level_4) OR the is_admin flag. Per owner (2026-09-01): the
+    is_admin account is meant to hold every capability the highest RBAC tier
+    has, and then some — never excluded from anything RGA can reach. Used
+    wherever a route was (or would otherwise be) gated to level_4 alone."""
+    return user_is_admin(user) or (
+        str(user.get("role", "")).startswith("level_") and role_level(user.get("role")) >= 4
+    )
+
+
+async def require_level4_or_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """True RGA or is_admin — see has_full_control(). Replaces a bare
+    require_level(4) wherever is_admin should have RGA's full reach."""
+    if not has_full_control(user):
+        raise HTTPException(status_code=403, detail="Requires level 4+ or admin access")
     return user
+
+
+async def require_level4_or_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Read-only gate for Historical Vault list/download views: RGA, is_admin,
+    or finance_admin. Restore/delete routes must stay on require_level4_or_admin
+    alone — finance_admin never gets write access here."""
+    if user_is_finance_admin(user) or has_full_control(user):
+        return user
+    raise HTTPException(status_code=403, detail="Requires level 4+")
 
 
 async def require_agent_or_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -2149,7 +2165,7 @@ async def manager_erase(payload: EraseIn, user: Dict[str, Any] = Depends(require
 
 
 @api_router.get("/manager/audit")
-async def manager_audit(user: Dict[str, Any] = Depends(require_level(4))):
+async def manager_audit(user: Dict[str, Any] = Depends(require_level4_or_admin)):
     cur = db.audit_log.find({}, {"_id": 0}).sort("ts", -1).limit(200)
     items = []
     async for a in cur:
@@ -2319,7 +2335,7 @@ async def agent_history(
 async def vault_trends(
     office: Optional[str] = None,
     weeks: Optional[int] = None,
-    user: Dict[str, Any] = Depends(require_level(4)),
+    user: Dict[str, Any] = Depends(require_level4_or_admin),
 ):
     """Week-over-week production series for the health dashboard.
 
@@ -2564,7 +2580,7 @@ async def vault_export(
 
 
 @api_router.post("/admin/wednesday-reset")
-async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
+async def wednesday_reset(user: Dict[str, Any] = Depends(require_level4_or_admin)):
     """Archive current week's data into historical_vault, then clear/mark active dataset."""
     now = now_detroit()
     # Business rule: the weekly reset may only run on Wednesday at/after
@@ -2637,7 +2653,7 @@ async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
 async def purge_archived(
     older_than_days: int = 365,
     dry_run: bool = False,
-    user: Dict[str, Any] = Depends(require_level(4)),
+    user: Dict[str, Any] = Depends(require_level4_or_admin),
 ):
     """Retention purge: delete archived entries older than `older_than_days`
     (default 365) — but only for weeks already snapshotted in historical_vault,
@@ -3006,11 +3022,12 @@ async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends
         # profile stays archived — restore is the only path back.
         raise HTTPException(status_code=400, detail="This person was removed — restore them first (Admin Panel → Archived)")
     current_role = agent.get("role")
-    # Creating, removing, or reassigning the Financial Admin role is RGA-only —
-    # never available to a plain is_admin actor or to a finance_admin itself.
+    # Creating, removing, or reassigning the Financial Admin role requires
+    # full control (true RGA or is_admin — see has_full_control) — never
+    # available to a finance_admin itself.
     if (payload.role == FINANCE_ADMIN_ROLE or current_role == FINANCE_ADMIN_ROLE) \
-            and role_level(user.get("role")) < 4:
-        raise HTTPException(status_code=403, detail="Only an RGA can create, remove, or reassign the Financial Admin role")
+            and not has_full_control(user):
+        raise HTTPException(status_code=403, detail="Only an RGA or admin can create, remove, or reassign the Financial Admin role")
     if user_is_finance_admin(user):
         # finance_admin's own range: level_1..level_3 only, both ends. RGA and
         # other finance_admin accounts are untouchable at every operation.
@@ -3127,8 +3144,8 @@ async def _roster_add_person(
 @api_router.post("/admin/add-person")
 async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Depends(require_admin_or_finance_admin)):
     """Onboard a person with full control (any office, any upline) — admin or finance_admin."""
-    if payload.role == FINANCE_ADMIN_ROLE and role_level(user.get("role")) < 4:
-        raise HTTPException(status_code=403, detail="Only an RGA can create a Financial Admin")
+    if payload.role == FINANCE_ADMIN_ROLE and not has_full_control(user):
+        raise HTTPException(status_code=403, detail="Only an RGA or admin can create a Financial Admin")
     if user_is_finance_admin(user) and payload.role in ("level_4", FINANCE_ADMIN_ROLE):
         raise HTTPException(status_code=403, detail="A Financial Admin may only add team members up to MGA")
     profile = await _roster_add_person(
@@ -3415,11 +3432,12 @@ async def _remove_person_context(user: Dict[str, Any], agent_id: str) -> Dict[st
         raise HTTPException(status_code=400, detail=f"{target.get('name', 'This person')} is already removed")
     if target["agent_id"] == user.get("agent_id"):
         raise HTTPException(status_code=400, detail="You can't remove yourself from the team")
-    # Managing another Financial Admin is RGA-only, regardless of is_admin —
-    # this is new with the finance_admin role and must not touch the
-    # pre-existing (unrelated) is_admin-can-remove-an-RGA behavior below.
-    if target.get("role") == FINANCE_ADMIN_ROLE and role_level(user.get("role")) < 4:
-        raise HTTPException(status_code=403, detail="Only an RGA can remove a Financial Admin")
+    # Managing another Financial Admin requires full control (true RGA or
+    # is_admin — see has_full_control); this is new with the finance_admin
+    # role and must not touch the pre-existing is_admin-can-remove-an-RGA
+    # behavior below.
+    if target.get("role") == FINANCE_ADMIN_ROLE and not has_full_control(user):
+        raise HTTPException(status_code=403, detail="Only an RGA or admin can remove a Financial Admin")
     if is_finance_admin_actor:
         if target.get("role") == "level_4":
             raise HTTPException(status_code=403, detail="Only an RGA can remove an RGA")

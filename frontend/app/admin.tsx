@@ -82,9 +82,10 @@ export default function AdminScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const isFA = isFinanceAdmin(user?.role);
-  // True RGA tier — not just is_admin. Only an RGA may create, remove, or
-  // reassign the Financial Admin role itself (see backend/server.py).
-  const isRGA = levelNum(user?.role) >= 4;
+  // True RGA tier OR is_admin — see has_full_control() in server.py. Per
+  // owner (2026-09-01): is_admin holds every capability RGA has, and then
+  // some, so it may create/remove/reassign the Financial Admin role too.
+  const isRGA = !!user?.is_admin || levelNum(user?.role) >= 4;
   const tiersForViewer: Role[] = isFA ? TIERS_FOR_FINANCE_ADMIN : isRGA ? TIERS_FOR_RGA : TIERS;
   const [people, setPeople] = useState<Person[]>([]);
   const [archivedPeople, setArchivedPeople] = useState<ArchivedPerson[]>([]);

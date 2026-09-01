@@ -34,10 +34,15 @@ export default function MoreScreen() {
     { id: 'admin', icon: 'shield-checkmark', label: 'Admin Panel', onPress: () => router.push('/admin'), show: !!user?.is_admin },
     { id: 'nominations', icon: 'medal', label: 'Platinum Nominations', onPress: () => router.push('/nominations'), show: lvl >= 2 },
     // Eraser access was opened from RGA-only to MGA+RGA on the backend
-    // (/api/manager/erase is level_3+); audit + vault stay level_4.
+    // (/api/manager/erase is level_3+); it's scoped to the caller's own
+    // downline (can_enter_for), so it stays tier-gated even for is_admin —
+    // an admin account with no agent link has no downline to correct.
     { id: 'manager', icon: 'construct', label: 'Manager Command Panel', onPress: () => router.push('/manager'), show: lvl >= 3 },
-    { id: 'audit', icon: 'list', label: 'Audit Log', onPress: () => router.push('/audit'), show: lvl >= 4 },
-    { id: 'vault', icon: 'stats-chart', label: 'Company Health', onPress: () => router.push('/vault'), show: lvl >= 4 },
+    // Audit + vault reads carry no agent-identity requirement, so per owner
+    // (2026-09-01) is_admin gets them too — see has_full_control() in
+    // backend/server.py.
+    { id: 'audit', icon: 'list', label: 'Audit Log', onPress: () => router.push('/audit'), show: lvl >= 4 || !!user?.is_admin },
+    { id: 'vault', icon: 'stats-chart', label: 'Company Health', onPress: () => router.push('/vault'), show: lvl >= 4 || !!user?.is_admin },
   ];
 
   const onSwitch = async (role: Role) => {

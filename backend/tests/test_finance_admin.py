@@ -185,10 +185,20 @@ async def test_rga_grant_blocked_if_target_has_active_reports(client, seeded_db)
     assert r.status_code == 400
 
 
-async def test_is_admin_non_rga_cannot_grant_finance_admin(client, seeded_db):
-    # Bootstrap/is_admin power predates finance_admin and must not silently
-    # extend to it — only a TRUE level_4 (RGA) may create a finance_admin.
+async def test_is_admin_non_rga_can_grant_finance_admin(client, seeded_db):
+    # Per owner (2026-09-01): is_admin is meant to have every capability the
+    # highest RBAC tier (RGA) has, and then some — never excluded from
+    # anything RGA can reach, including granting Financial Admin.
     token = await make_session(seeded_db, role="pending", agent_id=None, email="linnzi@aoluxor.com")
+    r = await client.post("/api/admin/set-role", headers=auth(token), json={
+        "agent_id": "AG_1", "role": "finance_admin",
+    })
+    assert r.status_code == 200
+
+
+async def test_plain_agent_cannot_grant_finance_admin(client, seeded_db):
+    # Neither is_admin nor a true RGA — must still be blocked.
+    token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
     r = await client.post("/api/admin/set-role", headers=auth(token), json={
         "agent_id": "AG_1", "role": "finance_admin",
     })
@@ -200,6 +210,42 @@ async def test_is_admin_non_rga_cannot_grant_finance_admin(client, seeded_db):
 async def test_finance_admin_rejected_from_wednesday_reset(client, seeded_db):
     token = await finance_admin_session(seeded_db)
     r = await client.post("/api/admin/wednesday-reset", headers=auth(token))
+    assert r.status_code == 403
+
+
+# ---------------- is_admin has full RGA control (has_full_control) --------
+# Per owner (2026-09-01): is_admin is meant to hold every capability the
+# highest RBAC tier (RGA) has, and then some — never excluded from anything
+# RGA can reach. These routes used to be require_level(4)-only (true RGA
+# tier), which silently excluded a plain is_admin account without level_4.
+
+async def test_is_admin_non_rga_reaches_vault_weeks(client, seeded_db):
+    token = await make_session(seeded_db, role="pending", agent_id=None, email="linnzi@aoluxor.com")
+    r = await client.get("/api/vault/weeks", headers=auth(token))
+    assert r.status_code == 200
+
+
+async def test_is_admin_non_rga_reaches_vault_trends(client, seeded_db):
+    token = await make_session(seeded_db, role="pending", agent_id=None, email="linnzi@aoluxor.com")
+    r = await client.get("/api/vault/trends", headers=auth(token))
+    assert r.status_code == 200
+
+
+async def test_is_admin_non_rga_reaches_manager_audit(client, seeded_db):
+    token = await make_session(seeded_db, role="pending", agent_id=None, email="linnzi@aoluxor.com")
+    r = await client.get("/api/manager/audit", headers=auth(token))
+    assert r.status_code == 200
+
+
+async def test_is_admin_non_rga_reaches_purge_archived(client, seeded_db):
+    token = await make_session(seeded_db, role="pending", agent_id=None, email="linnzi@aoluxor.com")
+    r = await client.post("/api/admin/purge-archived", headers=auth(token), params={"dry_run": True})
+    assert r.status_code == 200
+
+
+async def test_plain_agent_still_rejected_from_manager_audit(client, seeded_db):
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    r = await client.get("/api/manager/audit", headers=auth(token))
     assert r.status_code == 403
 
 
