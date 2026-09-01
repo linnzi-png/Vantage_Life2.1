@@ -377,5 +377,9 @@ export function stepsForRole(role: Role): TourStep[] {
       ];
     case 'pending':
       return [];
+    case 'finance_admin':
+      // No production identity, no tab bar (see (tabs)/_layout.tsx) — nothing
+      // in this walkthrough applies.
+      return [];
   }
 }
