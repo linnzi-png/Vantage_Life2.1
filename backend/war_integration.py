@@ -38,8 +38,13 @@ WAR_WEEK_DAYS = 9
 
 # Fields on PulseIn that are not one of the 14 nightly metrics. Everything else
 # on the model is a metric, in declaration order — see `_metric_fields()`.
+# is_nif ("Not In Field") is a shortcut flag on nightly entry, not a metric —
+# WarRow (this module's own schema) has no such field, so leaving it out of
+# this set makes `_metric_fields()` include a name `entry[field] = getattr(row,
+# field)` can't resolve, raising AttributeError on every WAR-integration call.
+# Ported from fix/war-integration-is-nif (PR #92) — main is red on this too.
 _NON_METRIC_FIELDS = frozenset(
-    {"market", "sales_day", "target_agent_id", "client_entry_id"}
+    {"market", "sales_day", "target_agent_id", "client_entry_id", "is_nif"}
 )
 
 # gross_alp is a float; compare money with a cent of tolerance rather than ==.
