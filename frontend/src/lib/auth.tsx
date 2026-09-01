@@ -6,7 +6,7 @@ import { registerForPulseNotifications } from './push';
 const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const SESSION_KEY = 'vl_session_token';
 
-export type Role = 'level_1' | 'level_2' | 'level_3' | 'level_4' | 'pending';
+export type Role = 'level_1' | 'level_2' | 'level_3' | 'level_4' | 'pending' | 'finance_admin';
 
 export interface AppUser {
   user_id: string;
@@ -367,7 +367,15 @@ export function useAuth(): AuthCtx {
 
 export function levelNum(role?: Role | null): number {
   if (!role) return 0;
+  // finance_admin sits outside the level_1..level_4 ladder entirely — it must
+  // never satisfy a level-N gate (that's what require_agent/require_level
+  // enforce server-side too; see FINANCE_ADMIN_ROLE in backend/server.py).
+  if (role === 'finance_admin') return 0;
   return parseInt(role.split('_')[1] || '1', 10);
+}
+
+export function isFinanceAdmin(role?: Role | null): boolean {
+  return role === 'finance_admin';
 }
 
 // Producer-track display titles for io_role codes. Titles are display-only:
@@ -392,6 +400,7 @@ const TIER_TITLES: Record<string, string> = {
   level_3: 'Executive Producer',
   level_4: 'Chief Executive Producer',
   pending: 'Pending Approval',
+  finance_admin: 'Financial Administrator',
 };
 
 export function roleTitle(io_role?: string | null, role?: string | null): string {
