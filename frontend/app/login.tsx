@@ -27,7 +27,6 @@ const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] =
   { level: 'level_2', title: 'GA', subtitle: 'Co-Executive Producer · Team view', tint: COLORS.secondary },
   { level: 'level_3', title: 'MGA', subtitle: 'Executive Producer · Full agency hierarchy', tint: COLORS.gold },
   { level: 'level_4', title: 'RGA', subtitle: 'Executive · Global view + Eraser + Vault', tint: COLORS.orange },
-  { level: 'finance_admin', title: 'FINANCE ADMIN', subtitle: 'Back office · Roster, WAR upload, Vault — no Pulse', tint: COLORS.red },
 ];
 
 export default function LoginScreen() {
