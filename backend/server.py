@@ -351,6 +351,55 @@ def require_level(min_level: int):
     return dep
 
 
+# Financial Admin: a standalone back-office role (agent_profiles.role ==
+# "finance_admin") that sits OUTSIDE the level_1..level_4 ladder — never add it
+# to LEVELS or VALID_ROLES, and never let it satisfy require_agent/require_level
+# (it has no production identity: no Pulse entry, no Platinum Wall, no streaks).
+# It is granted read scope matching level_4 on specific production/roster views
+# and write scope over level_1..level_3 roster management, nothing more.
+FINANCE_ADMIN_ROLE = "finance_admin"
+
+
+def user_is_finance_admin(user: Dict[str, Any]) -> bool:
+    return user.get("role") == FINANCE_ADMIN_ROLE
+
+
+async def require_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    if not user_is_finance_admin(user):
+        raise HTTPException(status_code=403, detail="Financial Admin access required")
+    return user
+
+
+async def require_admin_or_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Roster-management gate (add/remove/change role, WAR import): the existing
+    is_admin flag OR the finance_admin role. Does NOT widen require_admin or
+    require_level(4) themselves — callers still enforce the RGA-untouchable and
+    level_1..level_3-only guards for a finance_admin actor specifically."""
+    if not user_is_admin(user) and not user_is_finance_admin(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+async def require_level4_or_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Read-only gate for Historical Vault list/download views: true RGA
+    (level_4) or finance_admin. Restore/delete routes must stay on
+    require_level(4) alone — finance_admin never gets write access here."""
+    if user_is_finance_admin(user):
+        return user
+    if not str(user.get("role", "")).startswith("level_") or role_level(user.get("role")) < 4:
+        raise HTTPException(status_code=403, detail="Requires level 4+")
+    return user
+
+
+async def require_agent_or_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Read-only gate for production-data GET routes (dashboards, WAR reconcile
+    views): a rostered agent (require_agent) or finance_admin's full-office,
+    read-only view. Never use this for a write route."""
+    if user_is_finance_admin(user):
+        return user
+    return await require_agent(user)
+
+
 def set_session_cookie(resp: Response, token: str):
     # 7 days; secure + samesite none for cross-domain preview
     resp.set_cookie(
@@ -617,14 +666,15 @@ async def demo_login(payload: DemoLoginIn, response: Response):
     App Store review. Once the app is approved and released to the App Store,
     disable or auth-gate this endpoint — it is unauthenticated and maps onto
     the first REAL agent of each role, so demo writes attribute to real people."""
-    if payload.level not in LEVELS:
+    if payload.level not in LEVELS and payload.level != FINANCE_ADMIN_ROLE:
         raise HTTPException(status_code=400, detail="Invalid level")
-    role_label = LEVELS[payload.level]
+    role_label = "Financial Administrator" if payload.level == FINANCE_ADMIN_ROLE else LEVELS[payload.level]
     email_map = {
         "level_1": ("demo.agent@vantagelife.dev", "Demo Agent"),
         "level_2": ("demo.ga@vantagelife.dev", "Demo GA"),
         "level_3": ("demo.mga@vantagelife.dev", "Demo MGA"),
         "level_4": ("demo.rga@vantagelife.dev", "Demo RGA"),
+        FINANCE_ADMIN_ROLE: ("demo.financeadmin@vantagelife.dev", "Demo Financial Admin"),
     }
     email, name = email_map[payload.level]
 
@@ -677,7 +727,8 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
     # the other and offer a button the server will refuse.
     user["can_export"] = user_may_export(user)
     user["can_switch_role"] = bool(user.get("can_switch_role"))
-    return {"user": user, "agent": agent, "role_label": LEVELS.get(user.get("role", "level_1"), "Agent")}
+    role_label = "Financial Administrator" if user_is_finance_admin(user) else LEVELS.get(user.get("role", "level_1"), "Agent")
+    return {"user": user, "agent": agent, "role_label": role_label}
 
 
 @api_router.post("/auth/logout")
@@ -752,8 +803,8 @@ async def downline_agent_ids(agent_id: str) -> List[str]:
 async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
     """Return list of agent_ids visible to this user, or None for full access (level_4)."""
     role = user.get("role", "level_1")
-    if role == "level_4":
-        return None  # full agency
+    if role == "level_4" or role == FINANCE_ADMIN_ROLE:
+        return None  # full agency — finance_admin gets level_4's read scope, never write
     agent_id = user.get("agent_id")
     if not agent_id:
         return []
@@ -886,7 +937,7 @@ def scoreboard_prev_window(period: str) -> Dict[str, Any]:
 async def dashboard_summary(
     sales_day: Optional[str] = None,
     period: Optional[str] = None,
-    user: Dict[str, Any] = Depends(require_agent),
+    user: Dict[str, Any] = Depends(require_agent_or_finance_admin),
 ):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
@@ -1039,7 +1090,7 @@ async def dashboard_platinum_wall(
 async def dashboard_offices(
     sales_day: Optional[str] = None,
     period: Optional[str] = None,
-    user: Dict[str, Any] = Depends(require_agent),
+    user: Dict[str, Any] = Depends(require_agent_or_finance_admin),
 ):
     ids = await visible_agent_ids(user)
     # Weekly/monthly use a rolling window; daily/default keeps the single-day
@@ -2113,7 +2164,7 @@ async def manager_audit(user: Dict[str, Any] = Depends(require_level(4))):
 # =========================================================
 
 @api_router.get("/vault/weeks")
-async def vault_weeks(user: Dict[str, Any] = Depends(require_level(4))):
+async def vault_weeks(user: Dict[str, Any] = Depends(require_level4_or_finance_admin)):
     cur = db.historical_vault.find({}, {"_id": 0}).sort("week_start", -1).limit(8)
     items = [d async for d in cur]
     for it in items:
@@ -2237,13 +2288,15 @@ async def weekly_series(
 async def agent_history(
     agent_id: str,
     weeks: Optional[int] = None,
-    user: Dict[str, Any] = Depends(require_agent),
+    user: Dict[str, Any] = Depends(require_agent_or_finance_admin),
 ):
     """Weekly production history for one agent.
 
     Authorization mirrors every other business route: an agent may read their
     own history, and an upline may read anyone in their downline — resolved by
-    visible_agent_ids(), never by tier label. RGAs get ids=None (full agency).
+    visible_agent_ids(), never by tier label. RGAs get ids=None (full agency),
+    and so does finance_admin (read-only, same scope, enforced by the route
+    dependency rather than by visible_agent_ids letting it write anywhere).
     """
     ids = await visible_agent_ids(user)
     if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
@@ -2302,7 +2355,7 @@ async def vault_trends(
 
 
 @api_router.get("/vault/offices")
-async def vault_offices(user: Dict[str, Any] = Depends(require_level(4))):
+async def vault_offices(user: Dict[str, Any] = Depends(require_level4_or_finance_admin)):
     """Offices for the dashboard tabs, from agent_profiles — the source of
     truth — matching /dashboard/offices and the Wednesday reset."""
     found = [o for o in await db.agent_profiles.distinct("office") if o]
@@ -2310,7 +2363,7 @@ async def vault_offices(user: Dict[str, Any] = Depends(require_level(4))):
 
 
 @api_router.get("/vault/compare")
-async def vault_compare(week_a: str, week_b: str, user: Dict[str, Any] = Depends(require_level(4))):
+async def vault_compare(week_a: str, week_b: str, user: Dict[str, Any] = Depends(require_level4_or_finance_admin)):
     a = await db.historical_vault.find_one({"week_start": week_a}, {"_id": 0})
     b = await db.historical_vault.find_one({"week_start": week_b}, {"_id": 0})
     if not a or not b:
@@ -2335,7 +2388,7 @@ async def vault_export(
     end: Optional[str] = None,
     format: str = "json",
     office: Optional[str] = None,
-    user: Dict[str, Any] = Depends(require_level(4)),
+    user: Dict[str, Any] = Depends(require_level4_or_finance_admin),
 ):
     """Export retained production entries as a WAR-format weekly report — the
     same shape import_war_data.py reads, so the JSON round-trips and serves as
@@ -2903,7 +2956,7 @@ def _login_ts(value: Any) -> Optional[str]:
 
 
 @api_router.get("/admin/people")
-async def admin_people(user: Dict[str, Any] = Depends(require_admin)):
+async def admin_people(user: Dict[str, Any] = Depends(require_admin_or_finance_admin)):
     """Full roster with login-link status, login/activity timestamps, permission
     flags, and a launch-engagement summary, for the Admin screen. Removed
     (archived) people are returned separately and excluded from the summary."""
@@ -2942,8 +2995,8 @@ async def admin_people(user: Dict[str, Any] = Depends(require_admin)):
 
 
 @api_router.post("/admin/set-role")
-async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends(require_admin)):
-    if payload.role not in VALID_ROLES:
+async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends(require_admin_or_finance_admin)):
+    if payload.role not in VALID_ROLES and payload.role != FINANCE_ADMIN_ROLE:
         raise HTTPException(status_code=400, detail="Invalid role")
     agent = await db.agent_profiles.find_one({"agent_id": payload.agent_id}, {"_id": 0})
     if not agent:
@@ -2952,9 +3005,34 @@ async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends
         # The users sync below would re-activate their login role while the
         # profile stays archived — restore is the only path back.
         raise HTTPException(status_code=400, detail="This person was removed — restore them first (Admin Panel → Archived)")
+    current_role = agent.get("role")
+    # Creating, removing, or reassigning the Financial Admin role is RGA-only —
+    # never available to a plain is_admin actor or to a finance_admin itself.
+    if (payload.role == FINANCE_ADMIN_ROLE or current_role == FINANCE_ADMIN_ROLE) \
+            and role_level(user.get("role")) < 4:
+        raise HTTPException(status_code=403, detail="Only an RGA can create, remove, or reassign the Financial Admin role")
+    if user_is_finance_admin(user):
+        # finance_admin's own range: level_1..level_3 only, both ends. RGA and
+        # other finance_admin accounts are untouchable at every operation.
+        if current_role == "level_4" or current_role == FINANCE_ADMIN_ROLE:
+            raise HTTPException(status_code=403, detail="RGA and Financial Admin accounts cannot be changed by a Financial Admin")
+        if payload.role == "level_4" or payload.role == FINANCE_ADMIN_ROLE:
+            raise HTTPException(status_code=403, detail="A Financial Admin may only assign roles up to MGA")
+    if payload.role == FINANCE_ADMIN_ROLE:
+        # Financial Admin has no production life and no place in the upline
+        # ladder — converting an agent with active reports would orphan their
+        # subtree, so require they be detached (via /team/reassign or removal)
+        # first, and clear the now-meaningless upline_id.
+        if await db.agent_profiles.count_documents({"upline_id": agent["agent_id"], **ACTIVE_AGENT}) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Reassign or remove this person's direct reports before converting them to Financial Admin")
+    update: Dict[str, Any] = {"role": payload.role, "updated_at": now_utc()}
+    if payload.role == FINANCE_ADMIN_ROLE:
+        update["upline_id"] = None  # no place in the ladder
     await db.agent_profiles.update_one(
         {"agent_id": payload.agent_id},
-        {"$set": {"role": payload.role, "updated_at": now_utc()}},
+        {"$set": update},
     )
     # Sync any linked login so the change takes effect without a re-login.
     email = str(agent.get("email", "")).lower()
@@ -2979,19 +3057,25 @@ async def _roster_add_person(
     """Shared onboarding core for /admin/add-person and /team/add-person: creates
     the agent_profile keyed by email so their very first Google/Apple sign-in
     links to the right role automatically. Callers own their permission checks;
-    all business validation lives here so the two paths cannot drift."""
-    if role not in VALID_ROLES:
+    all business validation lives here so the two paths cannot drift.
+
+    A finance_admin role bypasses the tenure/upline requirements below — it has
+    no production life and no place in the upline ladder (see FINANCE_ADMIN_ROLE)."""
+    if role not in VALID_ROLES and role != FINANCE_ADMIN_ROLE:
         raise HTTPException(status_code=400, detail="Invalid role")
-    if is_rookie is None:
+    if role != FINANCE_ADMIN_ROLE and is_rookie is None:
         raise HTTPException(status_code=400, detail="Tenure is required — choose Veteran or Rookie")
     email = email.lower().strip()
     name = name.strip()
     if not email or "@" not in email or not name:
         raise HTTPException(status_code=400, detail="Name and a valid email are required")
-    if role != "level_4" and not upline_agent_id:
+    if role not in ("level_4", FINANCE_ADMIN_ROLE) and not upline_agent_id:
         # Team rollups walk agent_profiles.upline_id (visible_agent_ids BFS) — an
         # agent created without an upline is invisible in every GA/MGA team view.
         raise HTTPException(status_code=400, detail="Upline is required for everyone below RGA tier")
+    if role == FINANCE_ADMIN_ROLE:
+        upline_agent_id = None  # no place in the ladder, regardless of what was passed
+        is_rookie = None
     if upline_agent_id:
         upline = await db.agent_profiles.find_one(
             {"agent_id": upline_agent_id, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1})
@@ -3041,8 +3125,12 @@ async def _roster_add_person(
 
 
 @api_router.post("/admin/add-person")
-async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Depends(require_admin)):
-    """Onboard a person with full control (any office, any upline) — admin only."""
+async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Depends(require_admin_or_finance_admin)):
+    """Onboard a person with full control (any office, any upline) — admin or finance_admin."""
+    if payload.role == FINANCE_ADMIN_ROLE and role_level(user.get("role")) < 4:
+        raise HTTPException(status_code=403, detail="Only an RGA can create a Financial Admin")
+    if user_is_finance_admin(user) and payload.role in ("level_4", FINANCE_ADMIN_ROLE):
+        raise HTTPException(status_code=403, detail="A Financial Admin may only add team members up to MGA")
     profile = await _roster_add_person(
         name=payload.name, email=payload.email, phone=payload.phone,
         office=payload.office, role=payload.role, io_role=payload.io_role,
@@ -3311,11 +3399,14 @@ async def _remove_person_context(user: Dict[str, Any], agent_id: str) -> Dict[st
     """Shared permission + target resolution for remove-person. Owner's decision
     tree: you may remove anyone in your own downline whose tier is strictly
     below yours (so GA cannot remove SA — same tier — and RGA cannot remove
-    RGA); admins may remove anyone but themselves. Built on get_current_user,
-    not require_agent, so an admin without an agent link can still act."""
+    RGA); admins may remove anyone but themselves; finance_admin may remove
+    level_1..level_3 only (RGA and other finance_admins are RGA-only to touch).
+    Built on get_current_user, not require_agent, so an admin without an agent
+    link can still act."""
     is_admin = user_is_admin(user)
+    is_finance_admin_actor = user_is_finance_admin(user)
     my_level = role_level(user.get("role"))
-    if not is_admin and (my_level < 2 or not user.get("agent_id")):
+    if not is_admin and not is_finance_admin_actor and (my_level < 2 or not user.get("agent_id")):
         raise HTTPException(status_code=403, detail="Removing team members requires SA level or above")
     target = await db.agent_profiles.find_one({"agent_id": agent_id}, {"_id": 0})
     if not target:
@@ -3324,7 +3415,16 @@ async def _remove_person_context(user: Dict[str, Any], agent_id: str) -> Dict[st
         raise HTTPException(status_code=400, detail=f"{target.get('name', 'This person')} is already removed")
     if target["agent_id"] == user.get("agent_id"):
         raise HTTPException(status_code=400, detail="You can't remove yourself from the team")
-    if not is_admin:
+    # Managing another Financial Admin is RGA-only, regardless of is_admin —
+    # this is new with the finance_admin role and must not touch the
+    # pre-existing (unrelated) is_admin-can-remove-an-RGA behavior below.
+    if target.get("role") == FINANCE_ADMIN_ROLE and role_level(user.get("role")) < 4:
+        raise HTTPException(status_code=403, detail="Only an RGA can remove a Financial Admin")
+    if is_finance_admin_actor:
+        if target.get("role") == "level_4":
+            raise HTTPException(status_code=403, detail="Only an RGA can remove an RGA")
+        # remaining range (level_1..level_3) already enforced above/below
+    elif not is_admin:
         if role_level(target.get("role")) >= my_level:
             raise HTTPException(
                 status_code=403,
@@ -4386,7 +4486,7 @@ def _run_roster_audit(fix: bool, changed_by: str) -> Dict[str, Any]:
 
 
 @api_router.get("/admin/roster-audit")
-async def admin_roster_audit(user: Dict[str, Any] = Depends(require_admin)):
+async def admin_roster_audit(user: Dict[str, Any] = Depends(require_admin_or_finance_admin)):
     """Dry-run report only — nothing is written."""
     return await asyncio.to_thread(_run_roster_audit, False, f"admin:{user['user_id']}")
 
@@ -4542,7 +4642,7 @@ async def admin_import_war_report(
     week_start: Optional[str] = Form(None),
     dry_run: bool = Form(False),
     create_missing: bool = Form(False),
-    user: Dict[str, Any] = Depends(require_admin),
+    user: Dict[str, Any] = Depends(require_admin_or_finance_admin),
 ):
     """Import one weekly WAR spreadsheet into production_entries.
 
