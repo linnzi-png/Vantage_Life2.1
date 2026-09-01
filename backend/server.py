@@ -2335,7 +2335,7 @@ async def agent_history(
 async def vault_trends(
     office: Optional[str] = None,
     weeks: Optional[int] = None,
-    user: Dict[str, Any] = Depends(require_level4_or_admin),
+    user: Dict[str, Any] = Depends(require_level4_or_finance_admin),
 ):
     """Week-over-week production series for the health dashboard.
 
@@ -2912,7 +2912,11 @@ VALID_ROLES = {"level_1", "level_2", "level_3", "level_4"}
 
 class AdminSetRoleIn(BaseModel):
     agent_id: str
-    role: str  # level_1..level_4
+    role: str  # level_1..level_4, or finance_admin
+    # Required only when reversing an existing finance_admin back to
+    # level_1..level_3 — finance_admin carries no upline_id, so without this
+    # the restored agent would be an orphan invisible to every team rollup.
+    upline_agent_id: Optional[str] = None
 
 
 class AdminAddPersonIn(BaseModel):
@@ -3044,9 +3048,25 @@ async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends
             raise HTTPException(
                 status_code=400,
                 detail="Reassign or remove this person's direct reports before converting them to Financial Admin")
+    upline_agent_id: Optional[str] = None
+    if current_role == FINANCE_ADMIN_ROLE and payload.role != "level_4" and payload.role != FINANCE_ADMIN_ROLE:
+        # Reversing out of finance_admin into level_1..level_3: they have no
+        # upline_id (cleared on the way in), and team rollups walk it via BFS
+        # — without one they'd be restored invisible to every manager view.
+        upline_agent_id = (payload.upline_agent_id or "").strip() or None
+        if not upline_agent_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Pick an upline before moving this person out of Financial Admin")
+        upline = await db.agent_profiles.find_one(
+            {"agent_id": upline_agent_id, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1})
+        if not upline:
+            raise HTTPException(status_code=404, detail="Upline agent not found or was removed from the team")
     update: Dict[str, Any] = {"role": payload.role, "updated_at": now_utc()}
     if payload.role == FINANCE_ADMIN_ROLE:
         update["upline_id"] = None  # no place in the ladder
+    elif current_role == FINANCE_ADMIN_ROLE:
+        update["upline_id"] = upline_agent_id
     await db.agent_profiles.update_one(
         {"agent_id": payload.agent_id},
         {"$set": update},

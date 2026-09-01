@@ -69,6 +69,14 @@ async def test_finance_admin_reads_vault_weeks(client, seeded_db):
     assert r.status_code == 200
 
 
+async def test_finance_admin_reads_vault_trends(client, seeded_db):
+    # Found by Codex review on #91: vault_trends was left on require_level(4)
+    # while every other vault route was widened for finance_admin.
+    token = await finance_admin_session(seeded_db)
+    r = await client.get("/api/vault/trends", headers=auth(token))
+    assert r.status_code == 200
+
+
 async def test_plain_agent_still_rejected_from_vault(client, seeded_db):
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     r = await client.get("/api/vault/weeks", headers=auth(token))
@@ -174,6 +182,45 @@ async def test_rga_can_grant_finance_admin_to_a_leaf_agent(client, seeded_db):
     agent = await seeded_db.agent_profiles.find_one({"agent_id": "AG_1"})
     assert agent["role"] == "finance_admin"
     assert agent["upline_id"] is None  # no place in the ladder
+
+
+async def test_revoking_finance_admin_requires_an_upline(client, seeded_db):
+    # Found by Codex review on #91: moving finance_admin back to a level_N
+    # tier without an upline orphans them — invisible to every team rollup.
+    token = await rga_session(seeded_db)
+    await client.post("/api/admin/set-role", headers=auth(token), json={
+        "agent_id": "AG_1", "role": "finance_admin",
+    })
+    r = await client.post("/api/admin/set-role", headers=auth(token), json={
+        "agent_id": "AG_1", "role": "level_1",
+    })
+    assert r.status_code == 400
+
+
+async def test_revoking_finance_admin_with_upline_restores_them(client, seeded_db):
+    token = await rga_session(seeded_db)
+    await client.post("/api/admin/set-role", headers=auth(token), json={
+        "agent_id": "AG_1", "role": "finance_admin",
+    })
+    r = await client.post("/api/admin/set-role", headers=auth(token), json={
+        "agent_id": "AG_1", "role": "level_1", "upline_agent_id": "SA_1",
+    })
+    assert r.status_code == 200
+    agent = await seeded_db.agent_profiles.find_one({"agent_id": "AG_1"})
+    assert agent["role"] == "level_1"
+    assert agent["upline_id"] == "SA_1"
+
+
+async def test_revoking_finance_admin_to_rga_needs_no_upline(client, seeded_db):
+    # level_4 (RGA) is the one tier that's allowed to have no upline.
+    token = await rga_session(seeded_db)
+    await client.post("/api/admin/set-role", headers=auth(token), json={
+        "agent_id": "AG_1", "role": "finance_admin",
+    })
+    r = await client.post("/api/admin/set-role", headers=auth(token), json={
+        "agent_id": "AG_1", "role": "level_4",
+    })
+    assert r.status_code == 200
 
 
 async def test_rga_grant_blocked_if_target_has_active_reports(client, seeded_db):
