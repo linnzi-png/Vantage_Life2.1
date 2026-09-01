@@ -4812,6 +4812,11 @@ async def self_set_role(payload: SelfRoleIn, user: Dict[str, Any] = Depends(requ
 # Mount router & app
 app.include_router(api_router)
 
+# WAR integration (token-secured HTTPS ingest + reconciliation) — additive, see war_integration.py.
+# `db` is passed as a getter so tests that monkeypatch server.db reach this router too.
+from war_integration import make_war_router
+app.include_router(make_war_router(lambda: db))
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
