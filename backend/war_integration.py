@@ -42,7 +42,6 @@ WAR_WEEK_DAYS = 9
 # WarRow (this module's own schema) has no such field, so leaving it out of
 # this set makes `_metric_fields()` include a name `entry[field] = getattr(row,
 # field)` can't resolve, raising AttributeError on every WAR-integration call.
-# Ported from fix/war-integration-is-nif (PR #92) — main is red on this too.
 _NON_METRIC_FIELDS = frozenset(
     {"market", "sales_day", "target_agent_id", "client_entry_id", "is_nif"}
 )
