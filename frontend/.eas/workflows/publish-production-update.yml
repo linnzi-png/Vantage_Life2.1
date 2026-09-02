@@ -5,16 +5,34 @@ name: Publish production OTA update
 # what the installed App Store / Play Store builds check for OTA updates.
 # Only safe for JS-only changes — a native/runtime-version change still needs
 # a real build (see build-and-deploy or the "production" eas.json profile).
+#
+# IMPORTANT: `type: update` jobs do NOT read `build.<profile>.env` from
+# eas.json — that's only consulted by `eas build`. Without `environment`/`env`
+# set here, EXPO_PUBLIC_ vars are absent from the published JS bundle, so any
+# device that applies the update gets an empty BACKEND in
+# frontend/src/lib/auth.tsx and every API call (including sign-in) fails with
+# "Invalid URL: /api/auth/session". This exact regression shipped via this
+# workflow on 2026-09-02 (vantagelife-feedback-db issues #24, #25) — the
+# inline `env` below is the same value as eas.json's build.production.env and
+# is authoritative regardless of whether an EAS "production" Environment is
+# also configured in the dashboard; keep both in sync if the backend URL
+# ever changes.
 jobs:
   publish_android_update:
     name: Publish Android update
     type: update
+    environment: production
+    env:
+      EXPO_PUBLIC_BACKEND_URL: https://vantagelife21-production.up.railway.app
     params:
       branch: production
       platform: android
   publish_ios_update:
     name: Publish iOS update
     type: update
+    environment: production
+    env:
+      EXPO_PUBLIC_BACKEND_URL: https://vantagelife21-production.up.railway.app
     params:
       branch: production
       platform: ios
