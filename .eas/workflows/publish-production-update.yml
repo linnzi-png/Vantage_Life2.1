@@ -1,0 +1,20 @@
+name: Publish production OTA update
+
+# Manual only (eas workflow:run / the Expo MCP's workflow_run). Publishes the
+# current JS bundle to the "production" EAS Update branch/channel, which is
+# what the installed App Store / Play Store builds check for OTA updates.
+# Only safe for JS-only changes — a native/runtime-version change still needs
+# a real build (see build-and-deploy or the "production" eas.json profile).
+jobs:
+  publish_android_update:
+    name: Publish Android update
+    type: update
+    params:
+      branch: production
+      platform: android
+  publish_ios_update:
+    name: Publish iOS update
+    type: update
+    params:
+      branch: production
+      platform: ios
