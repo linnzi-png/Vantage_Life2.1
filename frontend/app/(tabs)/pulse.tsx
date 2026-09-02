@@ -174,6 +174,7 @@ export default function PulseScreen() {
 
   const scrollRef = useRef<ScrollView | null>(null);
   const stepCardY = useRef(0);
+  const inputRef = useRef<TextInput | null>(null);
 
   // Pin the step card to a uniform position whenever the step changes or the
   // keyboard opens, so the label + input are never hidden behind the keypad.
@@ -187,6 +188,17 @@ export default function PulseScreen() {
     const sub = Keyboard.addListener('keyboardDidShow', scrollToStepCard);
     return () => sub.remove();
   }, [scrollToStepCard]);
+
+  // The TextInput never unmounts between steps (same JSX slot, just a new
+  // `value`/key each render), so `autoFocus` only ever fires once on the
+  // very first step. Tapping NEXT — an in-card button or the keyboard-docked
+  // accessory bar — blurs the field, and without this it stayed blurred on
+  // the next step, forcing a manual tap to reopen the keyboard for every one
+  // of the 14 fields. Re-focus imperatively so the keyboard stays open and
+  // entry stays continuous.
+  useEffect(() => {
+    if (!done) inputRef.current?.focus();
+  }, [step, done]);
 
   const goNext = useCallback(() => {
     if (step === STEPS.length - 1) Keyboard.dismiss();
@@ -391,6 +403,7 @@ export default function PulseScreen() {
                 <Text style={styles.wallNote}>This updates the Platinum Wall.</Text>
               ) : null}
               <TextInput
+                ref={inputRef}
                 testID={`pulse-input-${cur.key}`}
                 style={styles.input}
                 value={form[cur.key]}
