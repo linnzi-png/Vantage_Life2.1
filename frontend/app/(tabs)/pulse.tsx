@@ -424,14 +424,20 @@ export default function PulseScreen() {
                     <Text style={styles.btnGhostTxt}>BACK</Text>
                   </TouchableOpacity>
                 ) : <View style={{ flex: 1 }} />}
-                <TouchableOpacity
-                  style={[styles.btn, styles.btnPrimary]}
-                  testID="pulse-next"
-                  onPress={goNext}
-                >
-                  <Text style={styles.btnPrimaryTxt}>{step === STEPS.length - 1 ? 'REVIEW' : 'NEXT'}</Text>
-                  <Ionicons name="arrow-forward" size={14} color="#000" />
-                </TouchableOpacity>
+                {/* On iOS the keyboard-docked accessory bar already carries a NEXT/REVIEW
+                    button right above the keypad — showing this one too meant tapping
+                    NEXT twice (once on each) to advance. Android has no accessory view,
+                    so it keeps this as its only NEXT affordance. */}
+                {Platform.OS !== 'ios' ? (
+                  <TouchableOpacity
+                    style={[styles.btn, styles.btnPrimary]}
+                    testID="pulse-next"
+                    onPress={goNext}
+                  >
+                    <Text style={styles.btnPrimaryTxt}>{step === STEPS.length - 1 ? 'REVIEW' : 'NEXT'}</Text>
+                    <Ionicons name="arrow-forward" size={14} color="#000" />
+                  </TouchableOpacity>
+                ) : null}
               </View>
               {isToday ? (
               <TouchableOpacity
