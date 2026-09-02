@@ -82,9 +82,10 @@ export default function AdminScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const isFA = isFinanceAdmin(user?.role);
-  // True RGA tier — not just is_admin. Only an RGA may create, remove, or
-  // reassign the Financial Admin role itself (see backend/server.py).
-  const isRGA = levelNum(user?.role) >= 4;
+  // True RGA tier OR is_admin — see has_full_control() in server.py. Per
+  // owner (2026-09-01): is_admin holds every capability RGA has, and then
+  // some, so it may create/remove/reassign the Financial Admin role too.
+  const isRGA = !!user?.is_admin || levelNum(user?.role) >= 4;
   const tiersForViewer: Role[] = isFA ? TIERS_FOR_FINANCE_ADMIN : isRGA ? TIERS_FOR_RGA : TIERS;
   const [people, setPeople] = useState<Person[]>([]);
   const [archivedPeople, setArchivedPeople] = useState<ArchivedPerson[]>([]);
@@ -95,6 +96,10 @@ export default function AdminScreen() {
   const [destQuery, setDestQuery] = useState('');
   const [restoreFor, setRestoreFor] = useState<ArchivedPerson | null>(null);
   const [restoreQuery, setRestoreQuery] = useState('');
+  // Moving someone OUT of Financial Admin into level_1..3 needs a fresh
+  // upline pick (finance_admin carries none) — pending person + new tier.
+  const [revokeFAFor, setRevokeFAFor] = useState<{ person: Person; role: Role } | null>(null);
+  const [revokeFAQuery, setRevokeFAQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [loginFilter, setLoginFilter] = useState<LoginFilter>('all');
@@ -152,6 +157,19 @@ export default function AdminScreen() {
     return people.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 5);
   }, [people, fUplineQuery]);
 
+  const applyRoleChange = async (p: Person, role: Role, uplineAgentId?: string) => {
+    setRevokeFAFor(null); setRevokeFAQuery('');
+    try {
+      await api('/api/admin/set-role', {
+        method: 'POST',
+        body: JSON.stringify({ agent_id: p.agent_id, role, upline_agent_id: uplineAgentId || null }),
+      });
+      setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, role } : x)));
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'Role change failed');
+    }
+  };
+
   const setRole = async (p: Person, role: Role) => {
     if (p.role === role) return;
     const ok = await confirmAsync({
@@ -160,12 +178,14 @@ export default function AdminScreen() {
       confirmText: 'Change',
     });
     if (!ok) return;
-    try {
-      await api('/api/admin/set-role', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id, role }) });
-      setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, role } : x)));
-    } catch (e: unknown) {
-      notify('Error', e instanceof Error ? e.message : 'Role change failed');
+    if (p.role === 'finance_admin' && role !== 'level_4') {
+      // Financial Admin carries no upline_id — moving them into level_1..3
+      // needs one picked now, or they'd be restored invisible to every
+      // manager rollup (backend requires this too).
+      setRevokeFAFor({ person: p, role });
+      return;
     }
+    await applyRoleChange(p, role);
   };
 
   const setFlag = async (p: Person, flag: 'is_admin' | 'can_switch_role', value: boolean) => {
@@ -523,23 +543,60 @@ export default function AdminScreen() {
                         ))}
                       </View>
 
-                      <Text style={styles.lab}>TENURE{p.is_rookie === undefined ? ' — NOT RECORDED YET' : ''}</Text>
-                      <View style={styles.tierRow}>
-                        <TouchableOpacity
-                          style={[styles.tierBtn, p.is_rookie === false && styles.tierBtnOn]}
-                          onPress={() => setTenure(p, false)}
-                          testID={`admin-tenure-${p.agent_id}-vet`}
-                        >
-                          <Text style={[styles.tierTxt, p.is_rookie === false && styles.tierTxtOn]}>VETERAN</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.tierBtn, p.is_rookie === true && styles.tierBtnOn]}
-                          onPress={() => setTenure(p, true)}
-                          testID={`admin-tenure-${p.agent_id}-rookie`}
-                        >
-                          <Text style={[styles.tierTxt, p.is_rookie === true && styles.tierTxtOn]}>ROOKIE</Text>
-                        </TouchableOpacity>
-                      </View>
+                      {revokeFAFor?.person.agent_id === p.agent_id ? (
+                        <View style={styles.pickerBox}>
+                          <Text style={styles.fieldNote}>
+                            Financial Admin has no upline on file — pick one for {p.name} before moving them to {TIER_SHORT[revokeFAFor.role]}.
+                          </Text>
+                          <TextInput
+                            style={styles.input}
+                            value={revokeFAQuery}
+                            onChangeText={setRevokeFAQuery}
+                            placeholder="Search upline by name"
+                            placeholderTextColor={COLORS.textMuted}
+                            testID="admin-revoke-fa-upline-search"
+                          />
+                          {people
+                            .filter((c) => c.agent_id !== p.agent_id &&
+                              revokeFAQuery.trim() && c.name.toLowerCase().includes(revokeFAQuery.trim().toLowerCase()))
+                            .slice(0, 5)
+                            .map((c) => (
+                              <TouchableOpacity
+                                key={c.agent_id}
+                                style={styles.uplineRow}
+                                onPress={() => applyRoleChange(revokeFAFor.person, revokeFAFor.role, c.agent_id)}
+                              >
+                                <Text style={styles.uplineName}>{c.name} <Text style={styles.dim}>· {TIER_SHORT[c.role]} · {c.office}</Text></Text>
+                              </TouchableOpacity>
+                            ))}
+                        </View>
+                      ) : null}
+
+                      {/* /api/admin/set-tenure stays is_admin-only — tenure
+                          isn't in finance_admin's granted range (roles/titles
+                          up to MGA, not tenure), so hide rather than show
+                          buttons that would 403. */}
+                      {!isFA ? (
+                        <>
+                          <Text style={styles.lab}>TENURE{p.is_rookie === undefined ? ' — NOT RECORDED YET' : ''}</Text>
+                          <View style={styles.tierRow}>
+                            <TouchableOpacity
+                              style={[styles.tierBtn, p.is_rookie === false && styles.tierBtnOn]}
+                              onPress={() => setTenure(p, false)}
+                              testID={`admin-tenure-${p.agent_id}-vet`}
+                            >
+                              <Text style={[styles.tierTxt, p.is_rookie === false && styles.tierTxtOn]}>VETERAN</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.tierBtn, p.is_rookie === true && styles.tierBtnOn]}
+                              onPress={() => setTenure(p, true)}
+                              testID={`admin-tenure-${p.agent_id}-rookie`}
+                            >
+                              <Text style={[styles.tierTxt, p.is_rookie === true && styles.tierTxtOn]}>ROOKIE</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      ) : null}
                     </>
                   )}
 
