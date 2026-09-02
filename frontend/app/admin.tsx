@@ -557,7 +557,7 @@ export default function AdminScreen() {
                             testID="admin-revoke-fa-upline-search"
                           />
                           {people
-                            .filter((c) => c.agent_id !== p.agent_id &&
+                            .filter((c) => c.agent_id !== p.agent_id && c.role !== 'finance_admin' &&
                               revokeFAQuery.trim() && c.name.toLowerCase().includes(revokeFAQuery.trim().toLowerCase()))
                             .slice(0, 5)
                             .map((c) => (

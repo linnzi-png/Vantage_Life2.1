@@ -223,6 +223,36 @@ async def test_revoking_finance_admin_to_rga_needs_no_upline(client, seeded_db):
     assert r.status_code == 200
 
 
+async def test_revoking_finance_admin_rejects_self_as_upline(client, seeded_db):
+    # Found by Codex review on #93: the upline lookup didn't reject the
+    # target itself, which would self-cycle.
+    token = await rga_session(seeded_db)
+    await client.post("/api/admin/set-role", headers=auth(token), json={
+        "agent_id": "AG_1", "role": "finance_admin",
+    })
+    r = await client.post("/api/admin/set-role", headers=auth(token), json={
+        "agent_id": "AG_1", "role": "level_1", "upline_agent_id": "AG_1",
+    })
+    assert r.status_code == 400
+
+
+async def test_revoking_finance_admin_rejects_another_finance_admin_as_upline(client, seeded_db):
+    # Found by Codex review on #93: another finance_admin has no place in
+    # the ladder either — attaching under one recreates the same orphaning.
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "FA_2", "name": "Finance Two", "email": "fa2b@test.dev",
+        "role": "finance_admin", "upline_id": None, "office": "",
+    })
+    token = await rga_session(seeded_db)
+    await client.post("/api/admin/set-role", headers=auth(token), json={
+        "agent_id": "AG_1", "role": "finance_admin",
+    })
+    r = await client.post("/api/admin/set-role", headers=auth(token), json={
+        "agent_id": "AG_1", "role": "level_1", "upline_agent_id": "FA_2",
+    })
+    assert r.status_code == 400
+
+
 async def test_rga_grant_blocked_if_target_has_active_reports(client, seeded_db):
     # GA_1 has SA_1/AG_1 reporting to it — converting would orphan the subtree.
     token = await rga_session(seeded_db)
@@ -293,6 +323,22 @@ async def test_is_admin_non_rga_reaches_purge_archived(client, seeded_db):
 async def test_plain_agent_still_rejected_from_manager_audit(client, seeded_db):
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     r = await client.get("/api/manager/audit", headers=auth(token))
+    assert r.status_code == 403
+
+
+async def test_is_admin_non_rga_can_force_reseed(client, seeded_db):
+    # Found by Codex review on #93: force-reseed's gate checked
+    # role == "level_4" directly instead of has_full_control(), leaving it
+    # the one level_4-only route the is_admin widening missed.
+    token = await make_session(seeded_db, role="pending", agent_id=None, email="linnzi@aoluxor.com")
+    r = await client.post("/api/seed", headers=auth(token), json={"force": True})
+    assert r.status_code == 200
+    assert r.json()["seeded"] is True
+
+
+async def test_plain_agent_rejected_from_force_reseed(client, seeded_db):
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    r = await client.post("/api/seed", headers=auth(token), json={"force": True})
     assert r.status_code == 403
 
 

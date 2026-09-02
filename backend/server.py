@@ -2718,8 +2718,8 @@ async def seed_data(request: Request, payload: Optional[Dict[str, Any]] = Body(d
             user = await get_current_user(request)
         except HTTPException:
             raise HTTPException(status_code=401, detail="Authenticated RGA required for force-reseed")
-        if user.get("role") != "level_4":
-            raise HTTPException(status_code=403, detail="Only RGA can force-reseed")
+        if not has_full_control(user):
+            raise HTTPException(status_code=403, detail="Only an RGA or admin can force-reseed")
     if existing > 0 and not force:
         return {"ok": True, "seeded": False, "message": f"Already seeded ({existing} agents)"}
     if force:
@@ -3058,10 +3058,22 @@ async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends
             raise HTTPException(
                 status_code=400,
                 detail="Pick an upline before moving this person out of Financial Admin")
+        if upline_agent_id == payload.agent_id:
+            raise HTTPException(status_code=400, detail="An agent cannot be their own upline")
         upline = await db.agent_profiles.find_one(
-            {"agent_id": upline_agent_id, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1})
+            {"agent_id": upline_agent_id, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1, "role": 1})
         if not upline:
             raise HTTPException(status_code=404, detail="Upline agent not found or was removed from the team")
+        if upline.get("role") == FINANCE_ADMIN_ROLE:
+            # Financial Admin has no place in the upline ladder itself — that's
+            # exactly the orphaning this transition exists to fix.
+            raise HTTPException(status_code=400, detail="A Financial Admin cannot be someone's upline")
+        # Same cycle guard as /admin/set-upline and /team/reassign: a loop
+        # hides both branches from downline_agent_ids' BFS.
+        if payload.agent_id in await _ancestor_chain(upline_agent_id):
+            raise HTTPException(
+                status_code=400,
+                detail="That would create a loop — the chosen upline already reports to this agent")
     update: Dict[str, Any] = {"role": payload.role, "updated_at": now_utc()}
     if payload.role == FINANCE_ADMIN_ROLE:
         update["upline_id"] = None  # no place in the ladder
