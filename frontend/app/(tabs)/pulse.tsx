@@ -372,12 +372,11 @@ export default function PulseScreen() {
             ) : null}
           </View>
 
-          <TourAnchor id="pulse-stepper">
+          <TourAnchor id="pulse-stepper" onLayout={(e) => { stepCardY.current = e.nativeEvent.layout.y; }}>
           {!done ? (
             <View
               style={styles.stepCard}
               testID="pulse-step-card"
-              onLayout={(e) => { stepCardY.current = e.nativeEvent.layout.y; }}
             >
               <View style={styles.progRow}>
                 {STEPS.map((_, i) => (
