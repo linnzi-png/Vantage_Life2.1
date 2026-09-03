@@ -12,6 +12,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import asyncio
 import csv
+import hmac
 import io
 import logging
 import re
@@ -349,6 +350,71 @@ def require_level(min_level: int):
     return dep
 
 
+# Financial Admin: a standalone back-office role (agent_profiles.role ==
+# "finance_admin") that sits OUTSIDE the level_1..level_4 ladder — never add it
+# to LEVELS or VALID_ROLES, and never let it satisfy require_agent/require_level
+# (it has no production identity: no Pulse entry, no Platinum Wall, no streaks).
+# It is granted read scope matching level_4 on specific production/roster views
+# and write scope over level_1..level_3 roster management, nothing more.
+FINANCE_ADMIN_ROLE = "finance_admin"
+
+
+def user_is_finance_admin(user: Dict[str, Any]) -> bool:
+    return user.get("role") == FINANCE_ADMIN_ROLE
+
+
+async def require_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    if not user_is_finance_admin(user):
+        raise HTTPException(status_code=403, detail="Financial Admin access required")
+    return user
+
+
+async def require_admin_or_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Roster-management gate (add/remove/change role, WAR import): the existing
+    is_admin flag OR the finance_admin role. Does NOT widen require_admin or
+    require_level(4) themselves — callers still enforce the RGA-untouchable and
+    level_1..level_3-only guards for a finance_admin actor specifically."""
+    if not user_is_admin(user) and not user_is_finance_admin(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+def has_full_control(user: Dict[str, Any]) -> bool:
+    """True RGA (level_4) OR the is_admin flag. Per owner (2026-09-01): the
+    is_admin account is meant to hold every capability the highest RBAC tier
+    has, and then some — never excluded from anything RGA can reach. Used
+    wherever a route was (or would otherwise be) gated to level_4 alone."""
+    return user_is_admin(user) or (
+        str(user.get("role", "")).startswith("level_") and role_level(user.get("role")) >= 4
+    )
+
+
+async def require_level4_or_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """True RGA or is_admin — see has_full_control(). Replaces a bare
+    require_level(4) wherever is_admin should have RGA's full reach."""
+    if not has_full_control(user):
+        raise HTTPException(status_code=403, detail="Requires level 4+ or admin access")
+    return user
+
+
+async def require_level4_or_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Read-only gate for Historical Vault list/download views: RGA, is_admin,
+    or finance_admin. Restore/delete routes must stay on require_level4_or_admin
+    alone — finance_admin never gets write access here."""
+    if user_is_finance_admin(user) or has_full_control(user):
+        return user
+    raise HTTPException(status_code=403, detail="Requires level 4+")
+
+
+async def require_agent_or_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Read-only gate for production-data GET routes (dashboards, WAR reconcile
+    views): a rostered agent (require_agent) or finance_admin's full-office,
+    read-only view. Never use this for a write route."""
+    if user_is_finance_admin(user):
+        return user
+    return await require_agent(user)
+
+
 def set_session_cookie(resp: Response, token: str):
     # 7 days; secure + samesite none for cross-domain preview
     resp.set_cookie(
@@ -598,14 +664,15 @@ async def demo_login(payload: DemoLoginIn, response: Response):
     App Store review. Once the app is approved and released to the App Store,
     disable or auth-gate this endpoint — it is unauthenticated and maps onto
     the first REAL agent of each role, so demo writes attribute to real people."""
-    if payload.level not in LEVELS:
+    if payload.level not in LEVELS and payload.level != FINANCE_ADMIN_ROLE:
         raise HTTPException(status_code=400, detail="Invalid level")
-    role_label = LEVELS[payload.level]
+    role_label = "Financial Administrator" if payload.level == FINANCE_ADMIN_ROLE else LEVELS[payload.level]
     email_map = {
         "level_1": ("demo.agent@vantagelife.dev", "Demo Agent"),
         "level_2": ("demo.ga@vantagelife.dev", "Demo GA"),
         "level_3": ("demo.mga@vantagelife.dev", "Demo MGA"),
         "level_4": ("demo.rga@vantagelife.dev", "Demo RGA"),
+        FINANCE_ADMIN_ROLE: ("demo.financeadmin@vantagelife.dev", "Demo Financial Admin"),
     }
     email, name = email_map[payload.level]
 
@@ -658,7 +725,8 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
     # the other and offer a button the server will refuse.
     user["can_export"] = user_may_export(user)
     user["can_switch_role"] = bool(user.get("can_switch_role"))
-    return {"user": user, "agent": agent, "role_label": LEVELS.get(user.get("role", "level_1"), "Agent")}
+    role_label = "Financial Administrator" if user_is_finance_admin(user) else LEVELS.get(user.get("role", "level_1"), "Agent")
+    return {"user": user, "agent": agent, "role_label": role_label}
 
 
 @api_router.post("/auth/logout")
@@ -733,8 +801,8 @@ async def downline_agent_ids(agent_id: str) -> List[str]:
 async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
     """Return list of agent_ids visible to this user, or None for full access (level_4)."""
     role = user.get("role", "level_1")
-    if role == "level_4":
-        return None  # full agency
+    if role == "level_4" or role == FINANCE_ADMIN_ROLE:
+        return None  # full agency — finance_admin gets level_4's read scope, never write
     agent_id = user.get("agent_id")
     if not agent_id:
         return []
@@ -867,7 +935,7 @@ def scoreboard_prev_window(period: str) -> Dict[str, Any]:
 async def dashboard_summary(
     sales_day: Optional[str] = None,
     period: Optional[str] = None,
-    user: Dict[str, Any] = Depends(require_agent),
+    user: Dict[str, Any] = Depends(require_agent_or_finance_admin),
 ):
     ids = await visible_agent_ids(user)
     today = current_sales_day_str()
@@ -1020,7 +1088,7 @@ async def dashboard_platinum_wall(
 async def dashboard_offices(
     sales_day: Optional[str] = None,
     period: Optional[str] = None,
-    user: Dict[str, Any] = Depends(require_agent),
+    user: Dict[str, Any] = Depends(require_agent_or_finance_admin),
 ):
     ids = await visible_agent_ids(user)
     # Weekly/monthly use a rolling window; daily/default keeps the single-day
@@ -1157,6 +1225,11 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
 
     # Trigger shoutouts
     await maybe_trigger_shoutouts(agent, entry)
+
+    # Confirmation check-in to the direct upline -- self entries only. Proxy
+    # entries skip it (the upline typed the numbers themselves).
+    if not is_proxy_entry:
+        await notify_upline_of_submission(agent, sd)
 
     return {"ok": True, "entry": _ser_entry(entry)}
 
@@ -1441,6 +1514,24 @@ async def _log_and_check(agent_id, sales_day, log_stage):
     return True
 
 
+async def notify_upline_of_submission(agent, sales_day: str) -> None:
+    """Confirmation check-in (owner, 2026-08-27): the agent's DIRECT upline gets
+    one push the first time the agent submits their own numbers for a sales day.
+    Proxy entries and self-corrections never fire this; resubmits for the same
+    sales day are deduped through notification_log (stage 'submitted_upline').
+    Best-effort -- a failure here must never fail the submission itself."""
+    try:
+        upline_id = agent.get("upline_id")
+        if not upline_id:
+            return
+        if not await _log_and_check(agent["agent_id"], sales_day, "submitted_upline"):
+            return
+        tokens = [t["push_token"] async for t in db.push_tokens.find({"agent_id": upline_id}, {"_id": 0, "push_token": 1})]
+        await send_expo_push(tokens, "VantageLife", f"{agent.get('name', 'An agent')} entered their daily numbers.")
+    except Exception as e:
+        logger.warning(f"Upline submission push failed: {e}")
+
+
 async def run_pulse_escalation_check():
     """Idempotent per (agent_id, sales_day, log_stage) -- safe to call more than
     once. Checks only level_1/level_2 agents against today's production_entries
@@ -1643,6 +1734,16 @@ async def team_view(
     if ids is not None:
         agent_q["agent_id"] = {"$in": ids}
     agents = {a["agent_id"]: a async for a in db.agent_profiles.find(agent_q, {"_id": 0})}
+    # Manager-visible "notifications off" flag (owner, 2026-08-27): a team
+    # member with no registered push token can't get the 9 PM escalation or
+    # upline confirmation pushes at all. Surfaced the same way as any other
+    # alerts chip -- it's a signal for the manager to follow up, never an
+    # in-app block on the agent's own access.
+    reachable_ids = {
+        t["agent_id"] async for t in db.push_tokens.find(
+            {"agent_id": {"$in": list(agents.keys())}}, {"_id": 0, "agent_id": 1}
+        )
+    }
     out = []
     for r in rows:
         a = agents.get(r["_id"])
@@ -1662,6 +1763,8 @@ async def team_view(
             alerts.append("low_close_ratio")
         if sales >= MIN_SALES_FOR_DEAL_ALERT and avg_deal < LOW_AVG_DEAL_USD:
             alerts.append("low_avg_deal")
+        if not a.get("archived") and a["agent_id"] not in reachable_ids:
+            alerts.append("notifications_off")
         out.append({
             "agent_id": a["agent_id"],
             "name": a["name"],
@@ -1688,12 +1791,15 @@ async def team_view(
     listed = {x["agent_id"] for x in out}
     for aid, a in agents.items():
         if aid not in listed and not a.get("archived"):
+            no_entry_alerts = ["no_pulse"]
+            if aid not in reachable_ids:
+                no_entry_alerts.append("notifications_off")
             out.append({
                 "agent_id": aid, "name": a["name"], "office": a["office"], "role": a["role"],
                 "io_role": a.get("io_role") or "", "phone": a.get("phone") or "", "email": a.get("email") or "",
                 "is_rookie": a.get("is_rookie", False), "upline_id": a.get("upline_id"), "archived": False,
                 "gross_alp": 0, "net_alp": 0, "sits": 0, "sales": 0,
-                "close_ratio": 0, "avg_deal": 0, "alerts": ["no_pulse"],
+                "close_ratio": 0, "avg_deal": 0, "alerts": no_entry_alerts,
             })
     return {
         "team": out,
@@ -2041,7 +2147,7 @@ async def manager_erase(payload: EraseIn, user: Dict[str, Any] = Depends(require
 
 
 @api_router.get("/manager/audit")
-async def manager_audit(user: Dict[str, Any] = Depends(require_level(4))):
+async def manager_audit(user: Dict[str, Any] = Depends(require_level4_or_admin)):
     cur = db.audit_log.find({}, {"_id": 0}).sort("ts", -1).limit(200)
     items = []
     async for a in cur:
@@ -2056,7 +2162,7 @@ async def manager_audit(user: Dict[str, Any] = Depends(require_level(4))):
 # =========================================================
 
 @api_router.get("/vault/weeks")
-async def vault_weeks(user: Dict[str, Any] = Depends(require_level(4))):
+async def vault_weeks(user: Dict[str, Any] = Depends(require_level4_or_finance_admin)):
     cur = db.historical_vault.find({}, {"_id": 0}).sort("week_start", -1).limit(8)
     items = [d async for d in cur]
     for it in items:
@@ -2180,13 +2286,15 @@ async def weekly_series(
 async def agent_history(
     agent_id: str,
     weeks: Optional[int] = None,
-    user: Dict[str, Any] = Depends(require_agent),
+    user: Dict[str, Any] = Depends(require_agent_or_finance_admin),
 ):
     """Weekly production history for one agent.
 
     Authorization mirrors every other business route: an agent may read their
     own history, and an upline may read anyone in their downline — resolved by
-    visible_agent_ids(), never by tier label. RGAs get ids=None (full agency).
+    visible_agent_ids(), never by tier label. RGAs get ids=None (full agency),
+    and so does finance_admin (read-only, same scope, enforced by the route
+    dependency rather than by visible_agent_ids letting it write anywhere).
     """
     ids = await visible_agent_ids(user)
     if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
@@ -2209,7 +2317,7 @@ async def agent_history(
 async def vault_trends(
     office: Optional[str] = None,
     weeks: Optional[int] = None,
-    user: Dict[str, Any] = Depends(require_level(4)),
+    user: Dict[str, Any] = Depends(require_level4_or_finance_admin),
 ):
     """Week-over-week production series for the health dashboard.
 
@@ -2245,7 +2353,7 @@ async def vault_trends(
 
 
 @api_router.get("/vault/offices")
-async def vault_offices(user: Dict[str, Any] = Depends(require_level(4))):
+async def vault_offices(user: Dict[str, Any] = Depends(require_level4_or_finance_admin)):
     """Offices for the dashboard tabs, from agent_profiles — the source of
     truth — matching /dashboard/offices and the Wednesday reset."""
     found = [o for o in await db.agent_profiles.distinct("office") if o]
@@ -2253,7 +2361,7 @@ async def vault_offices(user: Dict[str, Any] = Depends(require_level(4))):
 
 
 @api_router.get("/vault/compare")
-async def vault_compare(week_a: str, week_b: str, user: Dict[str, Any] = Depends(require_level(4))):
+async def vault_compare(week_a: str, week_b: str, user: Dict[str, Any] = Depends(require_level4_or_finance_admin)):
     a = await db.historical_vault.find_one({"week_start": week_a}, {"_id": 0})
     b = await db.historical_vault.find_one({"week_start": week_b}, {"_id": 0})
     if not a or not b:
@@ -2278,7 +2386,7 @@ async def vault_export(
     end: Optional[str] = None,
     format: str = "json",
     office: Optional[str] = None,
-    user: Dict[str, Any] = Depends(require_level(4)),
+    user: Dict[str, Any] = Depends(require_level4_or_finance_admin),
 ):
     """Export retained production entries as a WAR-format weekly report — the
     same shape import_war_data.py reads, so the JSON round-trips and serves as
@@ -2454,7 +2562,7 @@ async def vault_export(
 
 
 @api_router.post("/admin/wednesday-reset")
-async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
+async def wednesday_reset(user: Dict[str, Any] = Depends(require_level4_or_admin)):
     """Archive current week's data into historical_vault, then clear/mark active dataset."""
     now = now_detroit()
     # Business rule: the weekly reset may only run on Wednesday at/after
@@ -2527,7 +2635,7 @@ async def wednesday_reset(user: Dict[str, Any] = Depends(require_level(4))):
 async def purge_archived(
     older_than_days: int = 365,
     dry_run: bool = False,
-    user: Dict[str, Any] = Depends(require_level(4)),
+    user: Dict[str, Any] = Depends(require_level4_or_admin),
 ):
     """Retention purge: delete archived entries older than `older_than_days`
     (default 365) — but only for weeks already snapshotted in historical_vault,
@@ -2592,8 +2700,8 @@ async def seed_data(request: Request, payload: Optional[Dict[str, Any]] = Body(d
             user = await get_current_user(request)
         except HTTPException:
             raise HTTPException(status_code=401, detail="Authenticated RGA required for force-reseed")
-        if user.get("role") != "level_4":
-            raise HTTPException(status_code=403, detail="Only RGA can force-reseed")
+        if not has_full_control(user):
+            raise HTTPException(status_code=403, detail="Only an RGA or admin can force-reseed")
     if existing > 0 and not force:
         return {"ok": True, "seeded": False, "message": f"Already seeded ({existing} agents)"}
     if force:
@@ -2786,7 +2894,11 @@ VALID_ROLES = {"level_1", "level_2", "level_3", "level_4"}
 
 class AdminSetRoleIn(BaseModel):
     agent_id: str
-    role: str  # level_1..level_4
+    role: str  # level_1..level_4, or finance_admin
+    # Required only when reversing an existing finance_admin back to
+    # level_1..level_3 — finance_admin carries no upline_id, so without this
+    # the restored agent would be an orphan invisible to every team rollup.
+    upline_agent_id: Optional[str] = None
 
 
 class AdminAddPersonIn(BaseModel):
@@ -2846,7 +2958,7 @@ def _login_ts(value: Any) -> Optional[str]:
 
 
 @api_router.get("/admin/people")
-async def admin_people(user: Dict[str, Any] = Depends(require_admin)):
+async def admin_people(user: Dict[str, Any] = Depends(require_admin_or_finance_admin)):
     """Full roster with login-link status, login/activity timestamps, permission
     flags, and a launch-engagement summary, for the Admin screen. Removed
     (archived) people are returned separately and excluded from the summary."""
@@ -2854,7 +2966,8 @@ async def admin_people(user: Dict[str, Any] = Depends(require_admin)):
         {}, {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "phone": 1,
              "office": 1, "role": 1, "io_role": 1, "upline_id": 1, "is_rookie": 1,
              "state": 1, "archived": 1, "archived_at": 1, "archived_by_name": 1,
-             "former_upline_id": 1},
+             "former_upline_id": 1,
+             "self_registered": 1, "needs_review": 1, "requested_title": 1},
     ).sort("name", 1)]
     users_by_email: Dict[str, Dict[str, Any]] = {}
     async for u in db.users.find({}, {"_id": 0, "email": 1, "is_admin": 1, "can_switch_role": 1,
@@ -2884,8 +2997,8 @@ async def admin_people(user: Dict[str, Any] = Depends(require_admin)):
 
 
 @api_router.post("/admin/set-role")
-async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends(require_admin)):
-    if payload.role not in VALID_ROLES:
+async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends(require_admin_or_finance_admin)):
+    if payload.role not in VALID_ROLES and payload.role != FINANCE_ADMIN_ROLE:
         raise HTTPException(status_code=400, detail="Invalid role")
     agent = await db.agent_profiles.find_one({"agent_id": payload.agent_id}, {"_id": 0})
     if not agent:
@@ -2894,9 +3007,63 @@ async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends
         # The users sync below would re-activate their login role while the
         # profile stays archived — restore is the only path back.
         raise HTTPException(status_code=400, detail="This person was removed — restore them first (Admin Panel → Archived)")
+    current_role = agent.get("role")
+    # Creating, removing, or reassigning the Financial Admin role requires
+    # full control (true RGA or is_admin — see has_full_control) — never
+    # available to a finance_admin itself.
+    if (payload.role == FINANCE_ADMIN_ROLE or current_role == FINANCE_ADMIN_ROLE) \
+            and not has_full_control(user):
+        raise HTTPException(status_code=403, detail="Only an RGA or admin can create, remove, or reassign the Financial Admin role")
+    if user_is_finance_admin(user):
+        # finance_admin's own range: level_1..level_3 only, both ends. RGA and
+        # other finance_admin accounts are untouchable at every operation.
+        if current_role == "level_4" or current_role == FINANCE_ADMIN_ROLE:
+            raise HTTPException(status_code=403, detail="RGA and Financial Admin accounts cannot be changed by a Financial Admin")
+        if payload.role == "level_4" or payload.role == FINANCE_ADMIN_ROLE:
+            raise HTTPException(status_code=403, detail="A Financial Admin may only assign roles up to MGA")
+    if payload.role == FINANCE_ADMIN_ROLE:
+        # Financial Admin has no production life and no place in the upline
+        # ladder — converting an agent with active reports would orphan their
+        # subtree, so require they be detached (via /team/reassign or removal)
+        # first, and clear the now-meaningless upline_id.
+        if await db.agent_profiles.count_documents({"upline_id": agent["agent_id"], **ACTIVE_AGENT}) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Reassign or remove this person's direct reports before converting them to Financial Admin")
+    upline_agent_id: Optional[str] = None
+    if current_role == FINANCE_ADMIN_ROLE and payload.role != "level_4" and payload.role != FINANCE_ADMIN_ROLE:
+        # Reversing out of finance_admin into level_1..level_3: they have no
+        # upline_id (cleared on the way in), and team rollups walk it via BFS
+        # — without one they'd be restored invisible to every manager view.
+        upline_agent_id = (payload.upline_agent_id or "").strip() or None
+        if not upline_agent_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Pick an upline before moving this person out of Financial Admin")
+        if upline_agent_id == payload.agent_id:
+            raise HTTPException(status_code=400, detail="An agent cannot be their own upline")
+        upline = await db.agent_profiles.find_one(
+            {"agent_id": upline_agent_id, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1, "role": 1})
+        if not upline:
+            raise HTTPException(status_code=404, detail="Upline agent not found or was removed from the team")
+        if upline.get("role") == FINANCE_ADMIN_ROLE:
+            # Financial Admin has no place in the upline ladder itself — that's
+            # exactly the orphaning this transition exists to fix.
+            raise HTTPException(status_code=400, detail="A Financial Admin cannot be someone's upline")
+        # Same cycle guard as /admin/set-upline and /team/reassign: a loop
+        # hides both branches from downline_agent_ids' BFS.
+        if payload.agent_id in await _ancestor_chain(upline_agent_id):
+            raise HTTPException(
+                status_code=400,
+                detail="That would create a loop — the chosen upline already reports to this agent")
+    update: Dict[str, Any] = {"role": payload.role, "updated_at": now_utc()}
+    if payload.role == FINANCE_ADMIN_ROLE:
+        update["upline_id"] = None  # no place in the ladder
+    elif current_role == FINANCE_ADMIN_ROLE:
+        update["upline_id"] = upline_agent_id
     await db.agent_profiles.update_one(
         {"agent_id": payload.agent_id},
-        {"$set": {"role": payload.role, "updated_at": now_utc()}},
+        {"$set": update},
     )
     # Sync any linked login so the change takes effect without a re-login.
     email = str(agent.get("email", "")).lower()
@@ -2921,19 +3088,25 @@ async def _roster_add_person(
     """Shared onboarding core for /admin/add-person and /team/add-person: creates
     the agent_profile keyed by email so their very first Google/Apple sign-in
     links to the right role automatically. Callers own their permission checks;
-    all business validation lives here so the two paths cannot drift."""
-    if role not in VALID_ROLES:
+    all business validation lives here so the two paths cannot drift.
+
+    A finance_admin role bypasses the tenure/upline requirements below — it has
+    no production life and no place in the upline ladder (see FINANCE_ADMIN_ROLE)."""
+    if role not in VALID_ROLES and role != FINANCE_ADMIN_ROLE:
         raise HTTPException(status_code=400, detail="Invalid role")
-    if is_rookie is None:
+    if role != FINANCE_ADMIN_ROLE and is_rookie is None:
         raise HTTPException(status_code=400, detail="Tenure is required — choose Veteran or Rookie")
     email = email.lower().strip()
     name = name.strip()
     if not email or "@" not in email or not name:
         raise HTTPException(status_code=400, detail="Name and a valid email are required")
-    if role != "level_4" and not upline_agent_id:
+    if role not in ("level_4", FINANCE_ADMIN_ROLE) and not upline_agent_id:
         # Team rollups walk agent_profiles.upline_id (visible_agent_ids BFS) — an
         # agent created without an upline is invisible in every GA/MGA team view.
         raise HTTPException(status_code=400, detail="Upline is required for everyone below RGA tier")
+    if role == FINANCE_ADMIN_ROLE:
+        upline_agent_id = None  # no place in the ladder, regardless of what was passed
+        is_rookie = None
     if upline_agent_id:
         upline = await db.agent_profiles.find_one(
             {"agent_id": upline_agent_id, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1})
@@ -2983,8 +3156,12 @@ async def _roster_add_person(
 
 
 @api_router.post("/admin/add-person")
-async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Depends(require_admin)):
-    """Onboard a person with full control (any office, any upline) — admin only."""
+async def admin_add_person(payload: AdminAddPersonIn, user: Dict[str, Any] = Depends(require_admin_or_finance_admin)):
+    """Onboard a person with full control (any office, any upline) — admin or finance_admin."""
+    if payload.role == FINANCE_ADMIN_ROLE and not has_full_control(user):
+        raise HTTPException(status_code=403, detail="Only an RGA or admin can create a Financial Admin")
+    if user_is_finance_admin(user) and payload.role in ("level_4", FINANCE_ADMIN_ROLE):
+        raise HTTPException(status_code=403, detail="A Financial Admin may only add team members up to MGA")
     profile = await _roster_add_person(
         name=payload.name, email=payload.email, phone=payload.phone,
         office=payload.office, role=payload.role, io_role=payload.io_role,
@@ -3032,6 +3209,201 @@ async def team_add_person(payload: TeamAddPersonIn, user: Dict[str, Any] = Depen
     return {"ok": True, "agent": profile}
 
 
+# =========================================================
+#        SELF-SERVICE REGISTRATION — the /join web form
+# =========================================================
+# Public (unauthenticated) endpoints behind the frontend/public/join.html page
+# at app.aovantagelife.com/join. Launch fallback for agents who can't log in:
+# sign-in re-derives role/agent_id from agent_profiles by EMAIL, so someone
+# missing from the roster (or rostered under a different email) lands on the
+# "pending" screen. This form lets them roster themselves and sign straight in.
+#
+# Safety model (owner's choice: auto-add + admin review, not an approval queue):
+#   - The entry goes live immediately but is flagged self_registered +
+#     needs_review, which badges it in the Admin panel until an admin verifies.
+#   - Tier is DERIVED from the field title, never client-chosen, and is capped
+#     at level_3 — a self-registration can never mint a full-agency level_4;
+#     an admin promotes a real RGA after verifying (requested_title records it).
+#   - An upline pick from the active roster is required for everyone, so the
+#     new person always rolls up into team views (never an orphan).
+#   - Per-IP rate limit + honeypot field keep drive-by junk out.
+
+# Field title → RBAC tier, mirroring AddTeamMemberSheet (Agent→L1, SA→L2,
+# GA→L3) and the MGA/RGA=level_3+ convention used across permissions.
+JOIN_TITLE_TIERS = {
+    "inTraining": "level_1",
+    "Agent": "level_1",
+    "SA": "level_2",
+    "GA": "level_3",
+    "MGA": "level_3",
+    "RGA": "level_3",  # capped — see note above; requested_title preserves the ask
+}
+JOIN_TIER_CAP_TITLES = {"RGA"}  # titles whose real tier exceeds the public cap
+
+# Sliding-window per-IP throttle. In-memory is fine: one Railway instance, and
+# a restart resetting the window is harmless.
+_JOIN_RATE: Dict[str, List[float]] = {}
+_JOIN_RATE_MAX = 6          # submissions
+_JOIN_RATE_WINDOW = 3600.0  # per hour per IP
+
+
+def _join_client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _join_rate_ok(ip: str) -> bool:
+    import time as _time
+    now = _time.monotonic()
+    window = [t for t in _JOIN_RATE.get(ip, []) if now - t < _JOIN_RATE_WINDOW]
+    if len(window) >= _JOIN_RATE_MAX:
+        _JOIN_RATE[ip] = window
+        return False
+    window.append(now)
+    _JOIN_RATE[ip] = window
+    return True
+
+
+class JoinSubmitIn(BaseModel):
+    first_name: str
+    last_name: str
+    email: str
+    phone: str
+    title: str                      # field title: Agent / SA / GA / MGA / RGA / inTraining
+    is_rookie: Optional[bool] = None  # tenure — required, surfaced as a clear 400
+    state: Optional[str] = None     # two-letter resident state, optional
+    upline_agent_id: str            # required for everyone — see safety model
+    website: str = ""               # honeypot: real users never fill this
+
+
+@api_router.get("/join/options")
+async def join_options():
+    """Everything the public form needs: the upline picker roster (active
+    level_2+ only) and the title list. Name/office/title are already org-visible
+    (ticker, shoutouts, directory); no emails, phones, or production data."""
+    uplines = [a async for a in db.agent_profiles.find(
+        {**ACTIVE_AGENT, "role": {"$in": ["level_2", "level_3", "level_4"]}},
+        {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "io_role": 1},
+    ).sort("name", 1)]
+    return {"uplines": uplines, "titles": list(JOIN_TITLE_TIERS.keys())}
+
+
+@api_router.post("/join/submit")
+async def join_submit(payload: JoinSubmitIn, request: Request):
+    if payload.website.strip():
+        # Honeypot tripped — answer 200 so bots don't learn, write nothing.
+        return {"ok": True}
+    ip = _join_client_ip(request)
+    if not _join_rate_ok(ip):
+        raise HTTPException(status_code=429, detail="Too many sign-ups from this connection — try again in an hour")
+    title = payload.title.strip()
+    if title not in JOIN_TITLE_TIERS:
+        raise HTTPException(status_code=400, detail="Pick your role from the list")
+    name = f"{payload.first_name.strip()} {payload.last_name.strip()}".strip()
+    if not payload.first_name.strip() or not payload.last_name.strip():
+        raise HTTPException(status_code=400, detail="First and last name are required")
+    phone_digits = re.sub(r"\D", "", payload.phone or "")
+    if len(phone_digits) < 10:
+        raise HTTPException(status_code=400, detail="A valid cell number is required")
+    upline = await db.agent_profiles.find_one(
+        {"agent_id": payload.upline_agent_id, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1, "office": 1, "name": 1})
+    if not upline:
+        raise HTTPException(status_code=404, detail="Pick your upline from the list")
+    # Office is inherited from the upline (same rule as /team/add-person) so a
+    # self-registration can never land on a nonexistent or misspelled team.
+    profile = await _roster_add_person(
+        name=name, email=payload.email, phone=payload.phone,
+        office=str(upline.get("office") or "").strip() or UNASSIGNED_OFFICE,
+        role=JOIN_TITLE_TIERS[title], io_role=title,
+        upline_agent_id=upline["agent_id"], is_rookie=payload.is_rookie,
+        state=payload.state,
+        changed_by={"user_id": "join_form", "name": "Self-registration (/join)"},
+    )
+    flags: Dict[str, Any] = {"self_registered": True, "needs_review": True}
+    if title in JOIN_TIER_CAP_TITLES:
+        flags["requested_title"] = title
+    await db.agent_profiles.update_one({"agent_id": profile["agent_id"]}, {"$set": flags})
+    # Nudge the admins' phones; best-effort — a push failure never fails the sign-up.
+    try:
+        admin_emails = set(ADMIN_EMAILS)
+        async for u in db.users.find({"is_admin": True}, {"_id": 0, "email": 1}):
+            if u.get("email"):
+                admin_emails.add(str(u["email"]).lower())
+        admin_ids = [u["user_id"] async for u in db.users.find(
+            {"email": {"$in": list(admin_emails)}}, {"_id": 0, "user_id": 1})]
+        tokens = [t["push_token"] async for t in db.push_tokens.find(
+            {"user_id": {"$in": admin_ids}}, {"_id": 0, "push_token": 1})]
+        await send_expo_push(
+            tokens, "VantageLife",
+            f"Self-registration: {name} ({title}, {profile.get('office')}) — verify in the Admin panel.")
+    except Exception as e:
+        logger.warning(f"join_submit admin push failed: {e}")
+    return {
+        "ok": True,
+        "name": name,
+        "office": profile.get("office"),
+        "message": f"You're on the roster, {payload.first_name.strip()}! Open the app and sign in with Google or Apple using {profile['email']}.",
+    }
+
+
+class AdminClearReviewIn(BaseModel):
+    agent_id: str
+
+
+@api_router.post("/admin/clear-review")
+async def admin_clear_review(payload: AdminClearReviewIn, user: Dict[str, Any] = Depends(require_admin)):
+    """Mark a self-registered entry verified — clears the Admin-panel badge."""
+    r = await db.agent_profiles.update_one(
+        {"agent_id": payload.agent_id}, {"$set": {"needs_review": False}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {"ok": True}
+
+
+# Shared-secret feed for the Google Sheet sync (AO Premier Agent List →
+# "sourced from app" tab). A Google Apps Script on the sheet polls this on a
+# time trigger and appends/updates rows. Gated by JOIN_SYNC_KEY (Railway env);
+# unset = endpoint disabled. Contains emails/phones, so never expose keyless.
+JOIN_SYNC_KEY = os.environ.get("JOIN_SYNC_KEY", "").strip()
+
+
+@api_router.get("/join/registrants")
+async def join_registrants(key: str = ""):
+    if not JOIN_SYNC_KEY:
+        raise HTTPException(status_code=503, detail="Sync is not configured (JOIN_SYNC_KEY unset)")
+    if not key or not hmac.compare_digest(key, JOIN_SYNC_KEY):
+        raise HTTPException(status_code=403, detail="Bad key")
+    regs = [a async for a in db.agent_profiles.find(
+        {"self_registered": True},
+        {"_id": 0, "agent_id": 1, "name": 1, "email": 1, "phone": 1, "office": 1,
+         "role": 1, "io_role": 1, "is_rookie": 1, "state": 1, "upline_id": 1,
+         "needs_review": 1, "requested_title": 1, "created_at": 1, "archived": 1},
+    ).sort("created_at", 1)]
+    upline_ids = list({r.get("upline_id") for r in regs if r.get("upline_id")})
+    upline_names = {a["agent_id"]: a.get("name", "") async for a in db.agent_profiles.find(
+        {"agent_id": {"$in": upline_ids}}, {"_id": 0, "agent_id": 1, "name": 1})}
+    out = []
+    for r in regs:
+        created = r.get("created_at")
+        out.append({
+            "agent_id": r.get("agent_id"),
+            "registered_at": iso_utc(created) if isinstance(created, datetime) else (created or ""),
+            "name": r.get("name", ""),
+            "phone": r.get("phone", ""),
+            "email": r.get("email", ""),
+            "title": r.get("requested_title") or r.get("io_role") or "",
+            "tenure": "Rookie" if r.get("is_rookie") else "Vet",
+            "team": r.get("office", ""),
+            "state": r.get("state", ""),
+            "upline": upline_names.get(r.get("upline_id"), ""),
+            "verified": not r.get("needs_review", False),
+            "removed": bool(r.get("archived")),
+        })
+    return {"registrants": out}
+
+
 # ---------- Remove / reassign / restore (archive-and-detach, never delete) ----------
 
 class TeamRemovePersonIn(BaseModel):
@@ -3058,11 +3430,14 @@ async def _remove_person_context(user: Dict[str, Any], agent_id: str) -> Dict[st
     """Shared permission + target resolution for remove-person. Owner's decision
     tree: you may remove anyone in your own downline whose tier is strictly
     below yours (so GA cannot remove SA — same tier — and RGA cannot remove
-    RGA); admins may remove anyone but themselves. Built on get_current_user,
-    not require_agent, so an admin without an agent link can still act."""
+    RGA); admins may remove anyone but themselves; finance_admin may remove
+    level_1..level_3 only (RGA and other finance_admins are RGA-only to touch).
+    Built on get_current_user, not require_agent, so an admin without an agent
+    link can still act."""
     is_admin = user_is_admin(user)
+    is_finance_admin_actor = user_is_finance_admin(user)
     my_level = role_level(user.get("role"))
-    if not is_admin and (my_level < 2 or not user.get("agent_id")):
+    if not is_admin and not is_finance_admin_actor and (my_level < 2 or not user.get("agent_id")):
         raise HTTPException(status_code=403, detail="Removing team members requires SA level or above")
     target = await db.agent_profiles.find_one({"agent_id": agent_id}, {"_id": 0})
     if not target:
@@ -3071,7 +3446,17 @@ async def _remove_person_context(user: Dict[str, Any], agent_id: str) -> Dict[st
         raise HTTPException(status_code=400, detail=f"{target.get('name', 'This person')} is already removed")
     if target["agent_id"] == user.get("agent_id"):
         raise HTTPException(status_code=400, detail="You can't remove yourself from the team")
-    if not is_admin:
+    # Managing another Financial Admin requires full control (true RGA or
+    # is_admin — see has_full_control); this is new with the finance_admin
+    # role and must not touch the pre-existing is_admin-can-remove-an-RGA
+    # behavior below.
+    if target.get("role") == FINANCE_ADMIN_ROLE and not has_full_control(user):
+        raise HTTPException(status_code=403, detail="Only an RGA or admin can remove a Financial Admin")
+    if is_finance_admin_actor:
+        if target.get("role") == "level_4":
+            raise HTTPException(status_code=403, detail="Only an RGA can remove an RGA")
+        # remaining range (level_1..level_3) already enforced above/below
+    elif not is_admin:
         if role_level(target.get("role")) >= my_level:
             raise HTTPException(
                 status_code=403,
@@ -4133,7 +4518,7 @@ def _run_roster_audit(fix: bool, changed_by: str) -> Dict[str, Any]:
 
 
 @api_router.get("/admin/roster-audit")
-async def admin_roster_audit(user: Dict[str, Any] = Depends(require_admin)):
+async def admin_roster_audit(user: Dict[str, Any] = Depends(require_admin_or_finance_admin)):
     """Dry-run report only — nothing is written."""
     return await asyncio.to_thread(_run_roster_audit, False, f"admin:{user['user_id']}")
 
@@ -4289,7 +4674,7 @@ async def admin_import_war_report(
     week_start: Optional[str] = Form(None),
     dry_run: bool = Form(False),
     create_missing: bool = Form(False),
-    user: Dict[str, Any] = Depends(require_admin),
+    user: Dict[str, Any] = Depends(require_admin_or_finance_admin),
 ):
     """Import one weekly WAR spreadsheet into production_entries.
 
@@ -4458,6 +4843,11 @@ async def self_set_role(payload: SelfRoleIn, user: Dict[str, Any] = Depends(requ
 
 # Mount router & app
 app.include_router(api_router)
+
+# WAR integration (token-secured HTTPS ingest + reconciliation) — additive, see war_integration.py.
+# `db` is passed as a getter so tests that monkeypatch server.db reach this router too.
+from war_integration import make_war_router
+app.include_router(make_war_router(lambda: db))
 
 app.add_middleware(
     CORSMiddleware,

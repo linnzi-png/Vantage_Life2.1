@@ -4,9 +4,10 @@
   "framework": null,
   "redirects": [
     { "source": "/get-iphone", "destination": "https://testflight.apple.com/join/sAsefB12", "permanent": false },
-    { "source": "/get-android", "destination": "https://expo.dev/artifacts/eas/GLn8zcD_XiVWWgFNJIVw9YbvxJygLtNLGa5yBNFNCXY.apk", "permanent": false }
+    { "source": "/get-android", "destination": "https://expo.dev/artifacts/eas/SC0XZyQ-7Qc55DqeeU5K6CNYbObyNIzchcB4QnRSdO4.apk", "permanent": false }
   ],
   "rewrites": [
+    { "source": "/join", "destination": "/join.html" },
     { "source": "/tour", "destination": "/tour.html" },
     { "source": "/iphone", "destination": "/iphone.html" },
     { "source": "/android", "destination": "/android.html" },

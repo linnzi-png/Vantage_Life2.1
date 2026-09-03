@@ -200,3 +200,85 @@ async def test_admin_manual_trigger(client, seeded_db, monkeypatch):
     r = await client.post("/api/admin/run-notification-check", headers=auth(token))
     assert r.status_code == 200
     assert r.json()["stage"] == "reminder"
+
+
+# ---------------- upline submission confirmation ----------------
+
+FULL_PULSE = {
+    "sets": 4, "sits": 3, "sales": 2, "ots_sits": 1, "ots_sales": 0,
+    "n1": 1, "refs_obtained": 5, "ref_sits": 1, "ref_sales": 0,
+    "pos_sits": 1, "pos_sales": 1, "vet_sits": 0, "vet_sales": 0,
+    "gross_alp": 2500.0,
+}
+
+
+async def test_submission_pushes_confirmation_to_direct_upline(client, seeded_db, monkeypatch):
+    """AG_1 submits -> SA_1 (direct upline) gets exactly one confirmation push."""
+    await seeded_db.push_tokens.insert_one({"user_id": "u_sa1", "agent_id": "SA_1", "push_token": "tok_sa1"})
+    captured = []
+    async def fake_send(tokens, title, body):
+        captured.append((set(tokens), body))
+    monkeypatch.setattr(server, "send_expo_push", fake_send)
+
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    r = await client.post("/api/pulse", json=FULL_PULSE, headers=auth(token))
+    assert r.status_code == 200, r.text
+
+    assert captured == [({"tok_sa1"}, "Agent One entered their daily numbers.")]
+
+
+async def test_submission_confirmation_fires_once_per_sales_day(client, seeded_db, monkeypatch):
+    await seeded_db.push_tokens.insert_one({"user_id": "u_sa1", "agent_id": "SA_1", "push_token": "tok_sa1"})
+    captured = []
+    async def fake_send(tokens, title, body):
+        captured.append(body)
+    monkeypatch.setattr(server, "send_expo_push", fake_send)
+
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    r1 = await client.post("/api/pulse", json=FULL_PULSE, headers=auth(token))
+    r2 = await client.post("/api/pulse", json=FULL_PULSE, headers=auth(token))
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert len(captured) == 1  # notification_log dedupes the second entry
+
+
+async def test_proxy_entry_sends_no_confirmation(client, seeded_db, monkeypatch):
+    """SA_1 enters numbers FOR AG_1 -> nobody gets a confirmation push."""
+    await seeded_db.push_tokens.insert_many([
+        {"user_id": "u_sa1", "agent_id": "SA_1", "push_token": "tok_sa1"},
+        {"user_id": "u_ga1", "agent_id": "GA_1", "push_token": "tok_ga1"},
+    ])
+    captured = []
+    async def fake_send(tokens, title, body):
+        captured.append(body)
+    monkeypatch.setattr(server, "send_expo_push", fake_send)
+
+    token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
+    r = await client.post("/api/pulse", json={**FULL_PULSE, "target_agent_id": "AG_1"}, headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert captured == []
+
+
+async def test_agent_with_no_upline_submits_without_error(client, seeded_db, monkeypatch):
+    """RGA_1 has upline_id None -- submission still succeeds, no push attempted."""
+    captured = []
+    async def fake_send(tokens, title, body):
+        captured.append(body)
+    monkeypatch.setattr(server, "send_expo_push", fake_send)
+
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.post("/api/pulse", json=FULL_PULSE, headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert captured == []
+
+
+async def test_push_failure_never_fails_the_submission(client, seeded_db, monkeypatch):
+    await seeded_db.push_tokens.insert_one({"user_id": "u_sa1", "agent_id": "SA_1", "push_token": "tok_sa1"})
+    async def broken_send(tokens, title, body):
+        raise RuntimeError("expo down")
+    monkeypatch.setattr(server, "send_expo_push", broken_send)
+
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    r = await client.post("/api/pulse", json=FULL_PULSE, headers=auth(token))
+    assert r.status_code == 200, r.text
+    entry = await seeded_db.production_entries.find_one({"agent_id": "AG_1"})
+    assert entry is not None

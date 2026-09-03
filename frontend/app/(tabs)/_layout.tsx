@@ -1,13 +1,21 @@
-import React from 'react';
-import { Tabs } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, useAuth, levelNum } from '../../src/lib/auth';
+import { COLORS, useAuth, levelNum, isFinanceAdmin } from '../../src/lib/auth';
 
 export default function TabsLayout() {
   const { user } = useAuth();
+  const router = useRouter();
   const lvl = levelNum(user?.role);
   const insets = useSafeAreaInsets();
+
+  // Financial Admin has no production identity — Pulse, the dashboard tabs,
+  // and everything else in this bar are off-limits. Bounce out to its own
+  // admin panel rather than rendering a tab bar it can't use.
+  useEffect(() => {
+    if (isFinanceAdmin(user?.role)) router.replace('/admin');
+  }, [user?.role]);
 
   return (
     <Tabs

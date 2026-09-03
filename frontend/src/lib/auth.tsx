@@ -6,7 +6,7 @@ import { registerForPulseNotifications } from './push';
 const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const SESSION_KEY = 'vl_session_token';
 
-export type Role = 'level_1' | 'level_2' | 'level_3' | 'level_4' | 'pending';
+export type Role = 'level_1' | 'level_2' | 'level_3' | 'level_4' | 'pending' | 'finance_admin';
 
 export interface AppUser {
   user_id: string;
@@ -44,6 +44,29 @@ export class ApiError extends Error {
     this.name = 'ApiError';
     this.status = status;
   }
+}
+
+/**
+ * fetch() throws the same generic "TypeError: Network request failed" for a
+ * real connectivity problem AND for failures that have nothing to do with
+ * the network — e.g. React Native failing to read a picked file's local URI
+ * (a stale iCloud placeholder that hasn't finished downloading, a revoked
+ * cache path) before the multipart body is even built. Collapsing all of
+ * that into "Unable to reach the server" left a real bug undiagnosable: a
+ * WAR-report upload that failed for a local-file reason looked identical to
+ * a dead connection (issue #23). This surfaces whatever detail is actually
+ * available instead of guessing at connectivity.
+ */
+function describeFetchFailure(e: unknown, kind: 'request' | 'upload'): string {
+  const err = e as { name?: string; message?: string };
+  if (err.name === 'AbortError') {
+    return kind === 'upload'
+      ? 'The upload took too long. Please try again.'
+      : 'The server took too long to respond. Please try again.';
+  }
+  const generic = err.message === 'Network request failed' || !err.message;
+  const detail = generic ? '' : ` (${err.message})`;
+  return `Unable to reach the server${detail}. Please check your connection and try again.`;
 }
 
 export async function getToken(): Promise<string | null> {
@@ -88,8 +111,7 @@ export async function apiUpload<T = any>(
       signal: controller.signal,
     });
   } catch (e: unknown) {
-    const aborted = (e as { name?: string }).name === 'AbortError';
-    throw new Error(aborted ? 'The upload took too long. Please try again.' : 'Unable to reach the server. Please check your connection and try again.');
+    throw new Error(describeFetchFailure(e, 'upload'));
   } finally {
     clearTimeout(timer);
   }
@@ -119,9 +141,7 @@ export async function api<T = any>(path: string, opts: RequestInit = {}): Promis
       signal: controller.signal,
     });
   } catch (e: unknown) {
-    // Surface a human-readable message instead of "TypeError: Network request failed".
-    const aborted = (e as { name?: string }).name === 'AbortError';
-    throw new Error(aborted ? 'The server took too long to respond. Please try again.' : 'Unable to reach the server. Please check your connection and try again.');
+    throw new Error(describeFetchFailure(e, 'request'));
   } finally {
     clearTimeout(timer);
   }
@@ -148,10 +168,7 @@ export async function apiText(path: string): Promise<string> {
       headers, credentials: 'include', signal: controller.signal,
     });
   } catch (e: unknown) {
-    const aborted = (e as { name?: string }).name === 'AbortError';
-    throw new Error(aborted
-      ? 'The server took too long to respond. Please try again.'
-      : 'Unable to reach the server. Please check your connection and try again.');
+    throw new Error(describeFetchFailure(e, 'request'));
   } finally {
     clearTimeout(timer);
   }
@@ -176,10 +193,7 @@ export async function apiBlob(path: string): Promise<Blob> {
       headers, credentials: 'include', signal: controller.signal,
     });
   } catch (e: unknown) {
-    const aborted = (e as { name?: string }).name === 'AbortError';
-    throw new Error(aborted
-      ? 'The server took too long to respond. Please try again.'
-      : 'Unable to reach the server. Please check your connection and try again.');
+    throw new Error(describeFetchFailure(e, 'request'));
   } finally {
     clearTimeout(timer);
   }
@@ -339,7 +353,15 @@ export function useAuth(): AuthCtx {
 
 export function levelNum(role?: Role | null): number {
   if (!role) return 0;
+  // finance_admin sits outside the level_1..level_4 ladder entirely — it must
+  // never satisfy a level-N gate (that's what require_agent/require_level
+  // enforce server-side too; see FINANCE_ADMIN_ROLE in backend/server.py).
+  if (role === 'finance_admin') return 0;
   return parseInt(role.split('_')[1] || '1', 10);
+}
+
+export function isFinanceAdmin(role?: Role | null): boolean {
+  return role === 'finance_admin';
 }
 
 // Producer-track display titles for io_role codes. Titles are display-only:
@@ -364,6 +386,7 @@ const TIER_TITLES: Record<string, string> = {
   level_3: 'Executive Producer',
   level_4: 'Chief Executive Producer',
   pending: 'Pending Approval',
+  finance_admin: 'Financial Administrator',
 };
 
 export function roleTitle(io_role?: string | null, role?: string | null): string {

@@ -114,3 +114,61 @@ async def test_daily_uses_sales_day_boundary(client, seeded_db, detroit_now):
                     submitted_at=det_utc(2026, 7, 14, 20, 0), gross_alp=900)
     r = await client.get("/api/team?period=daily", headers=auth(token))
     assert row_for(r.json())["gross_alp"] == 400
+
+
+# ---------------- notifications_off manager flag ----------------
+
+async def test_agent_without_push_token_flagged_notifications_off(seeded_db, detroit_now):
+    detroit_now(2026, 7, 2, 10, 0)
+    await add_entry(seeded_db, sales_day=server.current_sales_day_str(), submitted_at=det_utc(2026, 7, 2, 10), gross_alp=500, agent_id="AG_1")
+    token = await rga_token(seeded_db)
+    from conftest import auth
+    r = await __import__("httpx")  # placeholder unused, real client injected below
+
+
+# ---------------- notifications_off manager flag ----------------
+
+async def test_agent_without_push_token_flagged_notifications_off(client, seeded_db, detroit_now):
+    detroit_now(2026, 7, 2, 10, 0)
+    await add_entry(seeded_db, sales_day=server.current_sales_day_str(), submitted_at=det_utc(2026, 7, 2, 10), gross_alp=500, agent_id="AG_1")
+    token = await rga_token(seeded_db)
+    r = await client.get("/api/team", headers=auth(token))
+    assert r.status_code == 200, r.text
+    row = row_for(r.json(), "AG_1")
+    assert "notifications_off" in row["alerts"]
+
+
+async def test_agent_with_push_token_not_flagged(client, seeded_db, detroit_now):
+    detroit_now(2026, 7, 2, 10, 0)
+    await add_entry(seeded_db, sales_day=server.current_sales_day_str(), submitted_at=det_utc(2026, 7, 2, 10), gross_alp=500, agent_id="AG_1")
+    await seeded_db.push_tokens.insert_one({"user_id": "u_ag1", "agent_id": "AG_1", "push_token": "tok_ag1"})
+    token = await rga_token(seeded_db)
+    r = await client.get("/api/team", headers=auth(token))
+    assert r.status_code == 200, r.text
+    row = row_for(r.json(), "AG_1")
+    assert "notifications_off" not in row["alerts"]
+
+
+async def test_no_pulse_agent_without_push_token_gets_both_alerts(client, seeded_db, detroit_now):
+    """An agent with zero entries this window (the 'no_pulse' branch) is also
+    checked for push-token presence -- both alerts can appear together."""
+    detroit_now(2026, 7, 2, 10, 0)
+    token = await rga_token(seeded_db)
+    r = await client.get("/api/team", headers=auth(token))
+    assert r.status_code == 200, r.text
+    row = row_for(r.json(), "AG_1")
+    assert "no_pulse" in row["alerts"]
+    assert "notifications_off" in row["alerts"]
+
+
+async def test_archived_agent_never_flagged_notifications_off(client, seeded_db, detroit_now):
+    """Archived (removed) members aren't actionable by the manager -- the flag
+    is withheld the same way team actions already are for them."""
+    detroit_now(2026, 7, 2, 10, 0)
+    await add_entry(seeded_db, sales_day=server.current_sales_day_str(), submitted_at=det_utc(2026, 7, 2, 10), gross_alp=500, agent_id="AG_1")
+    await seeded_db.agent_profiles.update_one({"agent_id": "AG_1"}, {"$set": {"archived": True}})
+    token = await rga_token(seeded_db)
+    r = await client.get("/api/team", headers=auth(token))
+    assert r.status_code == 200, r.text
+    row = row_for(r.json(), "AG_1")
+    assert "notifications_off" not in row["alerts"]

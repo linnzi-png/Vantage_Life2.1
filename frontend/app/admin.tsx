@@ -1,4 +1,5 @@
-// Admin Panel — is_admin users only (bootstrap ADMIN_EMAILS or granted flag).
+// Admin Panel — is_admin users, plus finance_admin (level_1..level_3 roster
+// scope + WAR import only; hierarchy-repair tools and flags stay is_admin-only).
 // In-app replacement for the terminal roster scripts: tier changes, onboarding,
 // and permission grants. Every write goes through /api/admin/* which updates
 // agent_profiles (source of truth) AND users, per the login re-derivation invariant.
@@ -9,7 +10,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, useAuth, roleTitle, COLORS, Role } from '../src/lib/auth';
+import { api, useAuth, roleTitle, isFinanceAdmin, levelNum, COLORS, Role } from '../src/lib/auth';
 import { WarReportImport } from '../src/components/WarReportImport';
 import { OfficeMerge } from '../src/components/OfficeMerge';
 import { OrphanRepair } from '../src/components/OrphanRepair';
@@ -33,6 +34,9 @@ interface Person {
   can_switch_role: boolean;
   first_login_at?: string | null; // null until they sign in for the first time
   last_seen_at?: string | null;   // refreshed by activity, not just login
+  self_registered?: boolean;      // came in through the public /join web form
+  needs_review?: boolean;         // self-registered and not yet verified by an admin
+  requested_title?: string;       // e.g. "RGA" — title claimed above the join-form tier cap
 }
 
 interface LoginSummary {
@@ -63,12 +67,26 @@ const fmtWhen = (iso?: string | null): string => {
 };
 
 const TIERS: Role[] = ['level_1', 'level_2', 'level_3', 'level_4'];
-const TIER_SHORT: Record<string, string> = { level_1: 'L1', level_2: 'L2', level_3: 'L3', level_4: 'L4' };
+// A finance_admin actor's own range: level_1..level_3 only. RGA (level_4) and
+// finance_admin itself are untouchable — mirrors the 403s on /api/admin/set-role
+// and /api/admin/add-person (server is the real enforcement; this is convenience).
+const TIERS_FOR_FINANCE_ADMIN: Role[] = ['level_1', 'level_2', 'level_3'];
+// Granting the Financial Admin role is RGA-only (true level_4, independent of
+// is_admin) — see role_level(user.role) < 4 checks on /api/admin/set-role and
+// /api/admin/add-person.
+const TIERS_FOR_RGA: Role[] = ['level_1', 'level_2', 'level_3', 'level_4', 'finance_admin'];
+const TIER_SHORT: Record<string, string> = { level_1: 'L1', level_2: 'L2', level_3: 'L3', level_4: 'L4', finance_admin: 'FA' };
 const IO_ROLES = ['Agent', 'SA', 'GA', 'MGA', 'RGA', 'Partner', 'Senior Partner', 'Builder', 'inTraining'];
 
 export default function AdminScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const isFA = isFinanceAdmin(user?.role);
+  // True RGA tier OR is_admin — see has_full_control() in server.py. Per
+  // owner (2026-09-01): is_admin holds every capability RGA has, and then
+  // some, so it may create/remove/reassign the Financial Admin role too.
+  const isRGA = !!user?.is_admin || levelNum(user?.role) >= 4;
+  const tiersForViewer: Role[] = isFA ? TIERS_FOR_FINANCE_ADMIN : isRGA ? TIERS_FOR_RGA : TIERS;
   const [people, setPeople] = useState<Person[]>([]);
   const [archivedPeople, setArchivedPeople] = useState<ArchivedPerson[]>([]);
   const [summary, setSummary] = useState<LoginSummary | null>(null);
@@ -78,6 +96,10 @@ export default function AdminScreen() {
   const [destQuery, setDestQuery] = useState('');
   const [restoreFor, setRestoreFor] = useState<ArchivedPerson | null>(null);
   const [restoreQuery, setRestoreQuery] = useState('');
+  // Moving someone OUT of Financial Admin into level_1..3 needs a fresh
+  // upline pick (finance_admin carries none) — pending person + new tier.
+  const [revokeFAFor, setRevokeFAFor] = useState<{ person: Person; role: Role } | null>(null);
+  const [revokeFAQuery, setRevokeFAQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [loginFilter, setLoginFilter] = useState<LoginFilter>('all');
@@ -112,10 +134,10 @@ export default function AdminScreen() {
   };
 
   useEffect(() => {
-    if (user && !user.is_admin) { router.replace('/(tabs)'); return; }
+    if (user && !user.is_admin && !isFA) { router.replace('/(tabs)'); return; }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.is_admin]);
+  }, [user?.is_admin, isFA]);
 
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -135,6 +157,19 @@ export default function AdminScreen() {
     return people.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 5);
   }, [people, fUplineQuery]);
 
+  const applyRoleChange = async (p: Person, role: Role, uplineAgentId?: string) => {
+    setRevokeFAFor(null); setRevokeFAQuery('');
+    try {
+      await api('/api/admin/set-role', {
+        method: 'POST',
+        body: JSON.stringify({ agent_id: p.agent_id, role, upline_agent_id: uplineAgentId || null }),
+      });
+      setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, role } : x)));
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'Role change failed');
+    }
+  };
+
   const setRole = async (p: Person, role: Role) => {
     if (p.role === role) return;
     const ok = await confirmAsync({
@@ -143,12 +178,14 @@ export default function AdminScreen() {
       confirmText: 'Change',
     });
     if (!ok) return;
-    try {
-      await api('/api/admin/set-role', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id, role }) });
-      setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, role } : x)));
-    } catch (e: unknown) {
-      notify('Error', e instanceof Error ? e.message : 'Role change failed');
+    if (p.role === 'finance_admin' && role !== 'level_4') {
+      // Financial Admin carries no upline_id — moving them into level_1..3
+      // needs one picked now, or they'd be restored invisible to every
+      // manager rollup (backend requires this too).
+      setRevokeFAFor({ person: p, role });
+      return;
     }
+    await applyRoleChange(p, role);
   };
 
   const setFlag = async (p: Person, flag: 'is_admin' | 'can_switch_role', value: boolean) => {
@@ -164,15 +201,20 @@ export default function AdminScreen() {
   const addPerson = async () => {
     setSaving(true);
     try {
+      const isFinanceAdminRole = fRole === 'finance_admin';
       await api('/api/admin/add-person', {
         method: 'POST',
         body: JSON.stringify({
           name: fName, email: fEmail, phone: fPhone, office: fOffice,
-          role: fRole, io_role: fIoRole || null, upline_agent_id: fUpline?.agent_id || null,
-          is_rookie: fRookie,
+          role: fRole,
+          // Financial Admin has no producer-track title and no upline —
+          // io_role would otherwise outrank the role in roleTitle().
+          io_role: isFinanceAdminRole ? null : (fIoRole || null),
+          upline_agent_id: isFinanceAdminRole ? null : (fUpline?.agent_id || null),
+          is_rookie: isFinanceAdminRole ? null : fRookie,
         }),
       });
-      setFName(''); setFEmail(''); setFPhone(''); setFUplineQuery(''); setFUpline(null); setFRookie(null);
+      setFName(''); setFEmail(''); setFPhone(''); setFUplineQuery(''); setFUpline(null); setFRookie(null); setFRole('level_1');
       setShowAdd(false);
       await load();
     } catch (e: unknown) {
@@ -229,6 +271,15 @@ export default function AdminScreen() {
     }
   };
 
+  const clearReview = async (p: Person) => {
+    try {
+      await api('/api/admin/clear-review', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id }) });
+      setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, needs_review: false } : x)));
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'Could not mark verified');
+    }
+  };
+
   const setTenure = async (p: Person, isRookie: boolean) => {
     if (p.is_rookie === isRookie) return;
     try {
@@ -279,17 +330,31 @@ export default function AdminScreen() {
           <Text style={styles.addBtnTxt}>{showAdd ? 'Hide Form' : 'Add Person'}</Text>
         </TouchableOpacity>
 
+        {isFA ? (
+          // finance_admin has no tab bar (see (tabs)/_layout.tsx), so the usual
+          // More-tab entry point to Company Health/Historical Vault never
+          // renders for it — surface it here instead.
+          <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/vault')} testID="admin-open-vault">
+            <Ionicons name="stats-chart" size={16} color="#000" />
+            <Text style={styles.addBtnTxt}>Company Health / Vault</Text>
+          </TouchableOpacity>
+        ) : null}
+
         <WarReportImport />
 
-        <OfficeMerge />
-
-        <OrphanRepair candidates={people} onRepaired={load} />
-
-        <DuplicateMerge onMerged={load} />
-
-        <RosterSheetSync onSynced={load} />
-
-        <RosterEmailAudit onFixed={load} />
+        {/* Hierarchy-repair tools stay is_admin-only — finance_admin's roster
+            write scope is level_1..level_3 add/remove/role-change and the WAR
+            import above, nothing that restructures the tree or touches
+            other people's flags. */}
+        {!isFA ? (
+          <>
+            <OfficeMerge />
+            <OrphanRepair candidates={people} onRepaired={load} />
+            <DuplicateMerge onMerged={load} />
+            <RosterSheetSync onSynced={load} />
+            <RosterEmailAudit onFixed={load} />
+          </>
+        ) : null}
 
         {showAdd ? (
           <View style={styles.card} testID="admin-add-form">
@@ -307,63 +372,77 @@ export default function AdminScreen() {
 
             <Text style={styles.lab}>ACCESS TIER</Text>
             <View style={styles.tierRow}>
-              {TIERS.map((t) => (
+              {tiersForViewer.map((t) => (
                 <TouchableOpacity key={t} style={[styles.tierBtn, fRole === t && styles.tierBtnOn]} onPress={() => setFRole(t)}>
                   <Text style={[styles.tierTxt, fRole === t && styles.tierTxtOn]}>{TIER_SHORT[t]}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            <Text style={styles.lab}>TENURE — DRIVES PLATINUM WALL + ROOKIE BADGE</Text>
-            <View style={styles.tierRow}>
-              <TouchableOpacity
-                style={[styles.tierBtn, fRookie === false && styles.tierBtnOn]}
-                onPress={() => setFRookie(false)}
-                testID="admin-add-tenure-vet"
-              >
-                <Text style={[styles.tierTxt, fRookie === false && styles.tierTxtOn]}>VETERAN</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tierBtn, fRookie === true && styles.tierBtnOn]}
-                onPress={() => setFRookie(true)}
-                testID="admin-add-tenure-rookie"
-              >
-                <Text style={[styles.tierTxt, fRookie === true && styles.tierTxtOn]}>ROOKIE</Text>
-              </TouchableOpacity>
-            </View>
-            {fRookie === null ? <Text style={styles.fieldNote}>Pick one — there is no default.</Text> : null}
-
-            <Text style={styles.lab}>DISPLAY TITLE (IO ROLE)</Text>
-            <View style={styles.chipWrap}>
-              {IO_ROLES.map((r) => (
-                <TouchableOpacity key={r} style={[styles.chip, fIoRole === r && styles.chipOn]} onPress={() => setFIoRole(r)}>
-                  <Text style={[styles.chipTxt, fIoRole === r && styles.chipTxtOn]}>{roleTitle(r)}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.lab}>{fRole === 'level_4' ? 'UPLINE (OPTIONAL FOR RGA)' : 'UPLINE (REQUIRED)'}</Text>
-            {fUpline ? (
-              <View style={styles.uplinePick}>
-                <Text style={styles.uplineName}>{fUpline.name} <Text style={styles.dim}>· {TIER_SHORT[fUpline.role]}</Text></Text>
-                <TouchableOpacity onPress={() => { setFUpline(null); setFUplineQuery(''); }}>
-                  <Ionicons name="close-circle" size={18} color={COLORS.textDim} />
-                </TouchableOpacity>
-              </View>
+            {fRole === 'finance_admin' ? (
+              <Text style={styles.fieldNote}>
+                Financial Admin has no production identity — no tenure, no display title, no upline. It can sign in, manage
+                Agent through MGA-level team members, upload/print WAR reports, and browse the Historical Vault. Only an RGA
+                can grant, remove, or reassign this role.
+              </Text>
             ) : (
               <>
-                <TextInput style={styles.input} value={fUplineQuery} onChangeText={setFUplineQuery} placeholder="Search upline by name" placeholderTextColor={COLORS.textMuted} />
-                {uplineMatches.map((m) => (
-                  <TouchableOpacity key={m.agent_id} style={styles.uplineRow} onPress={() => setFUpline(m)}>
-                    <Text style={styles.uplineName}>{m.name} <Text style={styles.dim}>· {TIER_SHORT[m.role]} · {m.office}</Text></Text>
+                <Text style={styles.lab}>TENURE — DRIVES PLATINUM WALL + ROOKIE BADGE</Text>
+                <View style={styles.tierRow}>
+                  <TouchableOpacity
+                    style={[styles.tierBtn, fRookie === false && styles.tierBtnOn]}
+                    onPress={() => setFRookie(false)}
+                    testID="admin-add-tenure-vet"
+                  >
+                    <Text style={[styles.tierTxt, fRookie === false && styles.tierTxtOn]}>VETERAN</Text>
                   </TouchableOpacity>
-                ))}
+                  <TouchableOpacity
+                    style={[styles.tierBtn, fRookie === true && styles.tierBtnOn]}
+                    onPress={() => setFRookie(true)}
+                    testID="admin-add-tenure-rookie"
+                  >
+                    <Text style={[styles.tierTxt, fRookie === true && styles.tierTxtOn]}>ROOKIE</Text>
+                  </TouchableOpacity>
+                </View>
+                {fRookie === null ? <Text style={styles.fieldNote}>Pick one — there is no default.</Text> : null}
+
+                <Text style={styles.lab}>DISPLAY TITLE (IO ROLE)</Text>
+                <View style={styles.chipWrap}>
+                  {IO_ROLES.map((r) => (
+                    <TouchableOpacity key={r} style={[styles.chip, fIoRole === r && styles.chipOn]} onPress={() => setFIoRole(r)}>
+                      <Text style={[styles.chipTxt, fIoRole === r && styles.chipTxtOn]}>{roleTitle(r)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={styles.lab}>{fRole === 'level_4' ? 'UPLINE (OPTIONAL FOR RGA)' : 'UPLINE (REQUIRED)'}</Text>
+                {fUpline ? (
+                  <View style={styles.uplinePick}>
+                    <Text style={styles.uplineName}>{fUpline.name} <Text style={styles.dim}>· {TIER_SHORT[fUpline.role]}</Text></Text>
+                    <TouchableOpacity onPress={() => { setFUpline(null); setFUplineQuery(''); }}>
+                      <Ionicons name="close-circle" size={18} color={COLORS.textDim} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <TextInput style={styles.input} value={fUplineQuery} onChangeText={setFUplineQuery} placeholder="Search upline by name" placeholderTextColor={COLORS.textMuted} />
+                    {uplineMatches.map((m) => (
+                      <TouchableOpacity key={m.agent_id} style={styles.uplineRow} onPress={() => setFUpline(m)}>
+                        <Text style={styles.uplineName}>{m.name} <Text style={styles.dim}>· {TIER_SHORT[m.role]} · {m.office}</Text></Text>
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
               </>
             )}
 
             <TouchableOpacity
-              style={[styles.saveBtn, (saving || !fName.trim() || !fEmail.includes('@') || fRookie === null || (fRole !== 'level_4' && !fUpline)) && { opacity: 0.5 }]}
-              disabled={saving || !fName.trim() || !fEmail.includes('@') || fRookie === null || (fRole !== 'level_4' && !fUpline)}
+              style={[styles.saveBtn, (saving || !fName.trim() || !fEmail.includes('@') ||
+                (fRole !== 'finance_admin' && fRookie === null) ||
+                (fRole !== 'level_4' && fRole !== 'finance_admin' && !fUpline)) && { opacity: 0.5 }]}
+              disabled={saving || !fName.trim() || !fEmail.includes('@') ||
+                (fRole !== 'finance_admin' && fRookie === null) ||
+                (fRole !== 'level_4' && fRole !== 'finance_admin' && !fUpline)}
               onPress={addPerson}
               testID="admin-add-save"
             >
@@ -412,6 +491,11 @@ export default function AdminScreen() {
                     {p.is_rookie === true ? ' · Rookie' : p.is_rookie === false ? ' · Veteran' : ' · Tenure unknown'}
                   </Text>
                 </View>
+                {p.needs_review ? (
+                  <View style={styles.reviewBadge}>
+                    <Text style={styles.reviewBadgeTxt}>VERIFY</Text>
+                  </View>
+                ) : null}
                 <View style={[styles.tierBadge, !p.has_login && styles.tierBadgeDim]}>
                   <Text style={styles.tierBadgeTxt}>{TIER_SHORT[p.role] || '—'}</Text>
                 </View>
@@ -428,63 +512,130 @@ export default function AdminScreen() {
                       : 'Never signed in'}
                   </Text>
 
-                  <Text style={styles.lab}>ACCESS TIER</Text>
-                  <View style={styles.tierRow}>
-                    {TIERS.map((t) => (
-                      <TouchableOpacity key={t} style={[styles.tierBtn, p.role === t && styles.tierBtnOn]} onPress={() => setRole(p, t)} testID={`admin-tier-${p.agent_id}-${t}`}>
-                        <Text style={[styles.tierTxt, p.role === t && styles.tierTxtOn]}>{TIER_SHORT[t]}</Text>
+                  {p.needs_review ? (
+                    <View style={styles.reviewCard}>
+                      <Text style={styles.reviewCardTxt}>
+                        Self-registered via the /join web form — check their tier, upline, and team.
+                        {p.requested_title ? ` They said they're ${p.requested_title === 'RGA' ? 'an' : 'a'} ${p.requested_title}; the form capped them at L3 — bump the tier if that's right.` : ''}
+                      </Text>
+                      <TouchableOpacity style={styles.reviewBtn} onPress={() => clearReview(p)} testID={`admin-verify-${p.agent_id}`}>
+                        <Ionicons name="checkmark-circle" size={14} color="#000" />
+                        <Text style={styles.reviewBtnTxt}>MARK VERIFIED</Text>
                       </TouchableOpacity>
-                    ))}
-                  </View>
-
-                  <Text style={styles.lab}>TENURE{p.is_rookie === undefined ? ' — NOT RECORDED YET' : ''}</Text>
-                  <View style={styles.tierRow}>
-                    <TouchableOpacity
-                      style={[styles.tierBtn, p.is_rookie === false && styles.tierBtnOn]}
-                      onPress={() => setTenure(p, false)}
-                      testID={`admin-tenure-${p.agent_id}-vet`}
-                    >
-                      <Text style={[styles.tierTxt, p.is_rookie === false && styles.tierTxtOn]}>VETERAN</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.tierBtn, p.is_rookie === true && styles.tierBtnOn]}
-                      onPress={() => setTenure(p, true)}
-                      testID={`admin-tenure-${p.agent_id}-rookie`}
-                    >
-                      <Text style={[styles.tierTxt, p.is_rookie === true && styles.tierTxtOn]}>ROOKIE</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.flagRow}>
-                    <Text style={styles.flagLab}>Admin panel access</Text>
-                    <Switch
-                      value={p.is_admin}
-                      disabled={!p.has_login}
-                      onValueChange={(v) => setFlag(p, 'is_admin', v)}
-                      trackColor={{ true: COLORS.primary, false: COLORS.surface2 }}
-                    />
-                  </View>
-                  <View style={styles.flagRow}>
-                    <Text style={styles.flagLab}>Role switcher (break-test)</Text>
-                    <Switch
-                      value={p.can_switch_role}
-                      disabled={!p.has_login}
-                      onValueChange={(v) => setFlag(p, 'can_switch_role', v)}
-                      trackColor={{ true: COLORS.primary, false: COLORS.surface2 }}
-                    />
-                  </View>
-                  {!p.has_login ? (
-                    <Text style={styles.hint}>Flags need a login — have them sign in once first.</Text>
+                    </View>
                   ) : null}
 
-                  <TouchableOpacity
-                    style={styles.removeBtn}
-                    onPress={() => removePerson(p)}
-                    testID={`admin-remove-${p.agent_id}`}
-                  >
-                    <Ionicons name="person-remove" size={14} color={COLORS.red} />
-                    <Text style={styles.removeBtnTxt}>REMOVE FROM ROSTER (ARCHIVE)</Text>
-                  </TouchableOpacity>
+                  {/* A finance_admin actor can't touch an RGA or another
+                      Financial Admin at all — mirrors the 403 on
+                      /api/admin/set-role and /api/team/remove-person. */}
+                  {isFA && (p.role === 'level_4' || p.role === 'finance_admin') ? (
+                    <Text style={styles.fieldNote}>
+                      {p.role === 'level_4' ? 'RGA accounts' : 'Financial Admin accounts'} can only be changed by an RGA.
+                    </Text>
+                  ) : (
+                    <>
+                      <Text style={styles.lab}>ACCESS TIER</Text>
+                      <View style={styles.tierRow}>
+                        {tiersForViewer.map((t) => (
+                          <TouchableOpacity key={t} style={[styles.tierBtn, p.role === t && styles.tierBtnOn]} onPress={() => setRole(p, t)} testID={`admin-tier-${p.agent_id}-${t}`}>
+                            <Text style={[styles.tierTxt, p.role === t && styles.tierTxtOn]}>{TIER_SHORT[t]}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      {revokeFAFor?.person.agent_id === p.agent_id ? (
+                        <View style={styles.pickerBox}>
+                          <Text style={styles.fieldNote}>
+                            Financial Admin has no upline on file — pick one for {p.name} before moving them to {TIER_SHORT[revokeFAFor.role]}.
+                          </Text>
+                          <TextInput
+                            style={styles.input}
+                            value={revokeFAQuery}
+                            onChangeText={setRevokeFAQuery}
+                            placeholder="Search upline by name"
+                            placeholderTextColor={COLORS.textMuted}
+                            testID="admin-revoke-fa-upline-search"
+                          />
+                          {people
+                            .filter((c) => c.agent_id !== p.agent_id && c.role !== 'finance_admin' &&
+                              revokeFAQuery.trim() && c.name.toLowerCase().includes(revokeFAQuery.trim().toLowerCase()))
+                            .slice(0, 5)
+                            .map((c) => (
+                              <TouchableOpacity
+                                key={c.agent_id}
+                                style={styles.uplineRow}
+                                onPress={() => applyRoleChange(revokeFAFor.person, revokeFAFor.role, c.agent_id)}
+                              >
+                                <Text style={styles.uplineName}>{c.name} <Text style={styles.dim}>· {TIER_SHORT[c.role]} · {c.office}</Text></Text>
+                              </TouchableOpacity>
+                            ))}
+                        </View>
+                      ) : null}
+
+                      {/* /api/admin/set-tenure stays is_admin-only — tenure
+                          isn't in finance_admin's granted range (roles/titles
+                          up to MGA, not tenure), so hide rather than show
+                          buttons that would 403. */}
+                      {!isFA ? (
+                        <>
+                          <Text style={styles.lab}>TENURE{p.is_rookie === undefined ? ' — NOT RECORDED YET' : ''}</Text>
+                          <View style={styles.tierRow}>
+                            <TouchableOpacity
+                              style={[styles.tierBtn, p.is_rookie === false && styles.tierBtnOn]}
+                              onPress={() => setTenure(p, false)}
+                              testID={`admin-tenure-${p.agent_id}-vet`}
+                            >
+                              <Text style={[styles.tierTxt, p.is_rookie === false && styles.tierTxtOn]}>VETERAN</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.tierBtn, p.is_rookie === true && styles.tierBtnOn]}
+                              onPress={() => setTenure(p, true)}
+                              testID={`admin-tenure-${p.agent_id}-rookie`}
+                            >
+                              <Text style={[styles.tierTxt, p.is_rookie === true && styles.tierTxtOn]}>ROOKIE</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      ) : null}
+                    </>
+                  )}
+
+                  {!isFA ? (
+                    <>
+                      <View style={styles.flagRow}>
+                        <Text style={styles.flagLab}>Admin panel access</Text>
+                        <Switch
+                          value={p.is_admin}
+                          disabled={!p.has_login}
+                          onValueChange={(v) => setFlag(p, 'is_admin', v)}
+                          trackColor={{ true: COLORS.primary, false: COLORS.surface2 }}
+                        />
+                      </View>
+                      <View style={styles.flagRow}>
+                        <Text style={styles.flagLab}>Role switcher (break-test)</Text>
+                        <Switch
+                          value={p.can_switch_role}
+                          disabled={!p.has_login}
+                          onValueChange={(v) => setFlag(p, 'can_switch_role', v)}
+                          trackColor={{ true: COLORS.primary, false: COLORS.surface2 }}
+                        />
+                      </View>
+                      {!p.has_login ? (
+                        <Text style={styles.hint}>Flags need a login — have them sign in once first.</Text>
+                      ) : null}
+                    </>
+                  ) : null}
+
+                  {isFA && (p.role === 'level_4' || p.role === 'finance_admin') ? null : (
+                    <TouchableOpacity
+                      style={styles.removeBtn}
+                      onPress={() => removePerson(p)}
+                      testID={`admin-remove-${p.agent_id}`}
+                    >
+                      <Ionicons name="person-remove" size={14} color={COLORS.red} />
+                      <Text style={styles.removeBtnTxt}>REMOVE FROM ROSTER (ARCHIVE)</Text>
+                    </TouchableOpacity>
+                  )}
                   {destFor?.agent_id === p.agent_id ? (
                     <View style={styles.pickerBox}>
                       <Text style={styles.fieldNote}>
@@ -515,7 +666,9 @@ export default function AdminScreen() {
           );
         })}
 
-        {archivedPeople.length > 0 ? (
+        {/* Restoring an archived person stays is_admin-only (RGA-territory —
+            not in finance_admin's remove/add/change-role range). */}
+        {!isFA && archivedPeople.length > 0 ? (
           <>
             <Text style={[styles.kicker, { marginTop: 24 }]}>ARCHIVED — REMOVED FROM TEAM</Text>
             <Text style={styles.intro}>
@@ -612,6 +765,12 @@ const styles = StyleSheet.create({
   personHead: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 },
   personName: { color: '#fff', fontWeight: '800', fontSize: 14 },
   personSub: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
+  reviewBadge: { backgroundColor: 'rgba(255,215,0,0.16)', borderWidth: 1, borderColor: COLORS.gold, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  reviewBadgeTxt: { color: COLORS.gold, fontWeight: '900', fontSize: 9, letterSpacing: 1 },
+  reviewCard: { backgroundColor: 'rgba(255,215,0,0.10)', borderWidth: 1, borderColor: 'rgba(255,215,0,0.45)', borderRadius: 8, padding: 10, marginTop: 10 },
+  reviewCardTxt: { color: COLORS.gold, fontSize: 12, lineHeight: 17 },
+  reviewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORS.gold, borderRadius: 6, paddingVertical: 8, marginTop: 10 },
+  reviewBtnTxt: { color: '#000', fontWeight: '900', fontSize: 11, letterSpacing: 1 },
   tierBadge: { backgroundColor: COLORS.secondary, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   tierBadgeDim: { backgroundColor: COLORS.surface2 },
   tierBadgeTxt: { color: '#fff', fontWeight: '900', fontSize: 10 },

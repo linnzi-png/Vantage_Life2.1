@@ -11,6 +11,9 @@ export default function Index() {
   useEffect(() => {
     if (loading) return;
     if (user && user.role === 'pending') router.replace('/pending');
+    // Financial Admin has no production identity — it skips Pulse entry and
+    // the rest of the tab bar entirely, landing straight on its admin panel.
+    else if (user && user.role === 'finance_admin') router.replace('/admin');
     else if (user) router.replace('/(tabs)');
     else router.replace('/login');
   }, [user, loading]);
