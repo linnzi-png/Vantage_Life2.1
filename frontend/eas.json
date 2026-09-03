@@ -21,7 +21,10 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://vantagelife21-production.up.railway.app"
+        "EXPO_PUBLIC_BACKEND_URL": "https://vantagelife21-production.up.railway.app",
+        "EXPO_PUBLIC_AUTH0_DOMAIN": "",
+        "EXPO_PUBLIC_AUTH0_WEB_CLIENT_ID": "",
+        "EXPO_PUBLIC_AUTH0_IOS_CLIENT_ID": ""
       },
       "channel": "production",
       "android": {

@@ -17,6 +17,13 @@ name: Publish production OTA update
 # is authoritative regardless of whether an EAS "production" Environment is
 # also configured in the dashboard; keep both in sync if the backend URL
 # ever changes.
+#
+# The EXPO_PUBLIC_AUTH0_* vars below are subject to the same rule. They are
+# empty placeholders until the Auth0 tenant exists — an empty AUTH0_DOMAIN or
+# client ID makes login.tsx's AUTH0_CONFIGURED false, so the published bundle
+# falls back to the (temporary) Emergent flow instead of showing a broken
+# Google button. Fill all three in before publishing the update that switches
+# the fleet to Auth0; leaving them blank is safe, leaving them out is not.
 jobs:
   publish_android_update:
     name: Publish Android update
@@ -24,6 +31,9 @@ jobs:
     environment: production
     env:
       EXPO_PUBLIC_BACKEND_URL: https://vantagelife21-production.up.railway.app
+      EXPO_PUBLIC_AUTH0_DOMAIN: ""
+      EXPO_PUBLIC_AUTH0_WEB_CLIENT_ID: ""
+      EXPO_PUBLIC_AUTH0_IOS_CLIENT_ID: ""
     params:
       branch: production
       platform: android
@@ -33,6 +43,9 @@ jobs:
     environment: production
     env:
       EXPO_PUBLIC_BACKEND_URL: https://vantagelife21-production.up.railway.app
+      EXPO_PUBLIC_AUTH0_DOMAIN: ""
+      EXPO_PUBLIC_AUTH0_WEB_CLIENT_ID: ""
+      EXPO_PUBLIC_AUTH0_IOS_CLIENT_ID: ""
     params:
       branch: production
       platform: ios
