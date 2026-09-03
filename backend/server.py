@@ -86,6 +86,17 @@ ADMIN_EMAILS = {
 APPLE_BUNDLE_ID = "com.aopremiere.vantagelife"
 APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
 
+# TEMPORARY ROLLOUT FALLBACK (remove in a follow-up cleanup PR once the OTA
+# update that switches the app to /auth/auth0 is confirmed live on the fleet):
+# Railway deploys this file the instant the Auth0 PR merges, but Expo OTA
+# updates reach installed devices gradually, not instantly. Production is
+# still on the Emergent-proxied Google flow as of this migration (Auth0
+# hasn't shipped yet), so any device that hasn't picked up the new bundle
+# yet must keep being able to complete /auth/session — deleting it in the
+# same commit that adds Auth0 would 404 every sign-in on those devices until
+# their OTA update lands. Owner sign-off, 2026-09-03.
+EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+
 # Google sign-in goes through Auth0 (replacing both the old Emergent auth
 # proxy and the brief direct-Google-JWKS flow that preceded it). Auth0 issues
 # its own ID token after federating to Google, so we verify against Auth0's
@@ -200,6 +211,11 @@ class StatusCheck(BaseModel):
 
 class DemoLoginIn(BaseModel):
     level: str  # level_1..level_4
+
+
+class SessionExchangeIn(BaseModel):
+    """TEMPORARY: see EMERGENT_AUTH_URL — remove alongside /auth/session."""
+    session_id: str
 
 
 class AppleLoginIn(BaseModel):
@@ -655,6 +671,27 @@ async def verify_auth0_token(id_token: str) -> Dict[str, Any]:
 # =========================================================
 #                       AUTH ROUTES
 # =========================================================
+
+@api_router.post("/auth/session")
+async def auth_session(payload: SessionExchangeIn, response: Response):
+    """TEMPORARY: exchange an Emergent session_id for a session_token. See
+    EMERGENT_AUTH_URL — kept only so devices still on the pre-Auth0 bundle
+    can keep signing in until the OTA update reaches them; remove this route
+    alongside that constant once rollout is confirmed."""
+    async with httpx.AsyncClient(timeout=15.0) as cli:
+        r = await cli.get(EMERGENT_AUTH_URL, headers={"X-Session-ID": payload.session_id})
+    if r.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid session_id")
+    data = r.json()
+    email = data.get("email")
+    name = data.get("name") or email
+    picture = data.get("picture")
+    session_token = data.get("session_token") or f"st_{uuid.uuid4().hex}"
+
+    user = await upsert_user_and_session(email=email, name=name, picture=picture, session_token=session_token)
+    set_session_cookie(response, session_token)
+    return {"user": user, "session_token": session_token}
+
 
 @api_router.post("/auth/demo-login")
 async def demo_login(payload: DemoLoginIn, response: Response):

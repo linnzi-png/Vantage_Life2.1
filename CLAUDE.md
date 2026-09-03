@@ -122,6 +122,7 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 - Reporting cycle starts 6AM Detroit time - all date range queries must go through `sales_day_for()`.
 - Users not on the agent roster have role `"pending"` and no `agent_id` — every business-data route must sit behind `require_agent`/`require_level`, which reject them.
 - Google OAuth flows through Auth0 (`AUTH0_DOMAIN`/`AUTH0_CLIENT_IDS`, `/api/auth/auth0`): the app runs Auth0 Universal Login routed to the Google connection, and the backend verifies the resulting Auth0-issued ID token against Auth0's own JWKS/issuer, not Google's directly. Sign in with Apple is unaffected and still verifies natively against Apple's JWKS.
+- TEMPORARY (remove once confirmed): `/api/auth/session` (Emergent) still exists alongside `/api/auth/auth0` — Railway deploys the backend instantly on merge, but Expo OTA updates reach devices gradually, so any device still on the pre-Auth0 bundle needs the old endpoint until the OTA rollout is confirmed complete. Delete it, `EMERGENT_AUTH_URL`, and `SessionExchangeIn` in a follow-up cleanup PR — not before.
 
 ## AI Agent Notes
 - Ask before modifying any business logic or calculation

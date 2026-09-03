@@ -8,7 +8,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
-import * as Crypto from 'expo-crypto';
 import { useAuth, COLORS, Role } from '../src/lib/auth';
 
 // Completes the popup-based web flow when Auth0 redirects back to the app.
@@ -37,19 +36,27 @@ export default function LoginScreen() {
 
   // Hooks must be unconditional; the placeholder domain is never prompted
   // because onGoogle only calls promptAuth0() when AUTH0_CONFIGURED is true.
+  //
+  // Authorization Code + PKCE, not Implicit Grant (ResponseType.IdToken):
+  // some Auth0 tenants disable Implicit Grant by default on new
+  // Applications, which would silently break this button. Code + PKCE works
+  // regardless of that tenant setting and needs no client secret for a
+  // public (mobile/SPA) client.
   const redirectUri = useMemo(() => AuthSession.makeRedirectUri(), []);
-  const nonce = useMemo(() => Crypto.randomUUID(), []);
   const discovery = useMemo(
-    () => ({ authorizationEndpoint: `https://${AUTH0_DOMAIN || 'unconfigured.auth0.com'}/authorize` }),
+    () => ({
+      authorizationEndpoint: `https://${AUTH0_DOMAIN || 'unconfigured.auth0.com'}/authorize`,
+      tokenEndpoint: `https://${AUTH0_DOMAIN || 'unconfigured.auth0.com'}/oauth/token`,
+    }),
     [],
   );
   const [authRequest, authResponse, promptAuth0] = AuthSession.useAuthRequest(
     {
       clientId: AUTH0_CLIENT_ID || 'unconfigured',
       redirectUri,
-      responseType: AuthSession.ResponseType.IdToken,
+      responseType: AuthSession.ResponseType.Code,
       scopes: ['openid', 'profile', 'email'],
-      extraParams: { connection: 'google-oauth2', nonce },
+      extraParams: { connection: 'google-oauth2' },
     },
     discovery,
   );
@@ -64,15 +71,28 @@ export default function LoginScreen() {
       setBusy(null);
       return;
     }
-    const idToken = authResponse.params.id_token;
-    if (!idToken) {
-      Alert.alert('Sign-In Error', 'Google did not return an identity token. Please try again.');
+    const code = authResponse.params.code;
+    const codeVerifier = authRequest?.codeVerifier;
+    if (!code || !codeVerifier) {
+      Alert.alert('Sign-In Error', 'Google sign-in did not complete. Please try again.');
       setBusy(null);
       return;
     }
     (async () => {
       try {
-        await signInAuth0(idToken);
+        const tokenResponse = await AuthSession.exchangeCodeAsync(
+          {
+            clientId: AUTH0_CLIENT_ID,
+            code,
+            redirectUri,
+            extraParams: { code_verifier: codeVerifier },
+          },
+          discovery,
+        );
+        if (!tokenResponse.idToken) {
+          throw new Error('Google did not return an identity token. Please try again.');
+        }
+        await signInAuth0(tokenResponse.idToken);
         router.replace('/');
       } catch (e: unknown) {
         Alert.alert('Sign-In Error', e instanceof Error ? e.message : String(e));
