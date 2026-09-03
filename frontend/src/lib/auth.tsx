@@ -6,6 +6,39 @@ import { registerForPulseNotifications } from './push';
 const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const SESSION_KEY = 'vl_session_token';
 
+/**
+ * A missing EXPO_PUBLIC_BACKEND_URL used to fail silently: every fetch()
+ * below just resolved to a bare relative path like "/api/auth/session",
+ * which React Native's fetch rejects with "Invalid URL: /api/auth/session" —
+ * surfaced to the tester as an opaque "Unable to reach the server" alert
+ * with no indication it was a build/config problem, not a network one
+ * (vantagelife-feedback-db issues #24, #25). EXPO_PUBLIC_ vars are inlined
+ * at bundle-build time, so this can only be caught here, at runtime, not by
+ * TypeScript. Fail loudly and specifically instead.
+ */
+if (!BACKEND) {
+  console.error(
+    '[auth] EXPO_PUBLIC_BACKEND_URL is empty — this bundle was built or ' +
+    'OTA-published without it. Every API call, including sign-in, will fail.'
+  );
+}
+
+/**
+ * Resolves `path` against BACKEND, or throws a clear, user-legible error
+ * immediately if BACKEND is empty — instead of letting fetch() reject deep
+ * inside with the opaque native "Invalid URL: <path>" message once it tries
+ * (and fails) to parse a bare relative path.
+ */
+function resolveUrl(path: string): string {
+  if (!BACKEND) {
+    throw new Error(
+      'App configuration error: server address is missing from this build. ' +
+      'Please reinstall the app, or contact support if this continues.'
+    );
+  }
+  return `${BACKEND}${path}`;
+}
+
 export type Role = 'level_1' | 'level_2' | 'level_3' | 'level_4' | 'pending' | 'finance_admin';
 
 export interface AppUser {
@@ -103,7 +136,7 @@ export async function apiUpload<T = any>(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
-    res = await fetch(`${BACKEND}${path}`, {
+    res = await fetch(resolveUrl(path), {
       method: 'POST',
       body: form,
       headers,
@@ -134,7 +167,7 @@ export async function api<T = any>(path: string, opts: RequestInit = {}): Promis
   const timer = setTimeout(() => controller.abort(), 20000);
   let res: Response;
   try {
-    res = await fetch(`${BACKEND}${path}`, {
+    res = await fetch(resolveUrl(path), {
       ...opts,
       headers,
       credentials: 'include',
@@ -164,7 +197,7 @@ export async function apiText(path: string): Promise<string> {
   const timer = setTimeout(() => controller.abort(), 20000);
   let res: Response;
   try {
-    res = await fetch(`${BACKEND}${path}`, {
+    res = await fetch(resolveUrl(path), {
       headers, credentials: 'include', signal: controller.signal,
     });
   } catch (e: unknown) {
@@ -189,7 +222,7 @@ export async function apiBlob(path: string): Promise<Blob> {
   const timer = setTimeout(() => controller.abort(), 60000);
   let res: Response;
   try {
-    res = await fetch(`${BACKEND}${path}`, {
+    res = await fetch(resolveUrl(path), {
       headers, credentials: 'include', signal: controller.signal,
     });
   } catch (e: unknown) {
