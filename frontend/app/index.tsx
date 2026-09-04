@@ -18,7 +18,9 @@ export default function Index() {
     else router.replace('/login');
   }, [user, loading]);
 
-  // Handle Emergent OAuth fragment if present (web)
+  // TEMPORARY: handle the Emergent portal's OAuth fragment on web (see
+  // EMERGENT_AUTH_URL in backend/server.py) — only reached when
+  // login.tsx's AUTH0_CONFIGURED is false. Remove alongside that fallback.
   useEffect(() => {
     if (typeof window === 'undefined' || !window.location) return;
     const hash = window.location.hash || '';

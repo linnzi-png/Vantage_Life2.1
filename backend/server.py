@@ -76,7 +76,6 @@ EXPORT_EMAILS = {
     for e in os.environ.get("EXPORT_EMAILS", "linnzi@aoluxor.com").split(",")
     if e.strip()
 }
-EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 # Bootstrap admins: always admins even without an is_admin flag on their users doc.
 # Additional admins are granted the is_admin flag from the in-app Admin screen.
 ADMIN_EMAILS = {
@@ -87,16 +86,31 @@ ADMIN_EMAILS = {
 APPLE_BUNDLE_ID = "com.aopremiere.vantagelife"
 APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
 
-# Direct Google sign-in (replacing the Emergent auth proxy). Comma-separated
-# OAuth client IDs this backend accepts as token audience — the iOS client and
-# the web client. Empty (unset) means /auth/google is not yet configured and
-# returns 503; the Emergent /auth/session path keeps working through the
-# transition.
-GOOGLE_CLIENT_IDS = {
-    c.strip() for c in os.environ.get("GOOGLE_CLIENT_IDS", "").split(",") if c.strip()
+# TEMPORARY ROLLOUT FALLBACK (remove in a follow-up cleanup PR once the OTA
+# update that switches the app to /auth/auth0 is confirmed live on the fleet):
+# Railway deploys this file the instant the Auth0 PR merges, but Expo OTA
+# updates reach installed devices gradually, not instantly. Production is
+# still on the Emergent-proxied Google flow as of this migration (Auth0
+# hasn't shipped yet), so any device that hasn't picked up the new bundle
+# yet must keep being able to complete /auth/session — deleting it in the
+# same commit that adds Auth0 would 404 every sign-in on those devices until
+# their OTA update lands. Owner sign-off, 2026-09-03.
+EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+
+# Google sign-in goes through Auth0 (replacing both the old Emergent auth
+# proxy and the brief direct-Google-JWKS flow that preceded it). Auth0 issues
+# its own ID token after federating to Google, so we verify against Auth0's
+# JWKS/issuer instead of Google's — same shape as verify_apple_token, just a
+# different provider. Empty AUTH0_DOMAIN means /auth/auth0 is not configured
+# and returns 503.
+AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "").strip().rstrip("/")
+# Comma-separated Auth0 application client IDs this backend accepts as token
+# audience (the iOS client and the web client, from the Auth0 dashboard).
+AUTH0_CLIENT_IDS = {
+    c.strip() for c in os.environ.get("AUTH0_CLIENT_IDS", "").split(",") if c.strip()
 }
-GOOGLE_KEYS_URL = "https://www.googleapis.com/oauth2/v3/certs"
-GOOGLE_ISSUERS = {"https://accounts.google.com", "accounts.google.com"}
+AUTH0_KEYS_URL = f"https://{AUTH0_DOMAIN}/.well-known/jwks.json" if AUTH0_DOMAIN else ""
+AUTH0_ISSUER = f"https://{AUTH0_DOMAIN}/" if AUTH0_DOMAIN else ""
 
 # Bucket for agents whose roster record has no office. They still produce, so
 # dropping them makes office tiles disagree with the agency total; naming the
@@ -200,6 +214,7 @@ class DemoLoginIn(BaseModel):
 
 
 class SessionExchangeIn(BaseModel):
+    """TEMPORARY: see EMERGENT_AUTH_URL — remove alongside /auth/session."""
     session_id: str
 
 
@@ -209,7 +224,7 @@ class AppleLoginIn(BaseModel):
     family_name: Optional[str] = None
 
 
-class GoogleLoginIn(BaseModel):
+class Auth0LoginIn(BaseModel):
     id_token: str
 
 
@@ -559,67 +574,68 @@ async def verify_apple_token(identity_token: str) -> Dict[str, Any]:
     return {"sub": payload["sub"], "email": payload.get("email")}
 
 
-_google_jwks_cache: Dict[str, Any] = {"keys": [], "fetched_at": None, "last_attempt_at": None}
-# Same caching/cooldown story as the Apple twin above: /auth/google is
+_auth0_jwks_cache: Dict[str, Any] = {"keys": [], "fetched_at": None, "last_attempt_at": None}
+# Same caching/cooldown story as the Apple twin above: /auth/auth0 is
 # unauthenticated, so unknown-kid forced refreshes are attacker-triggerable.
-GOOGLE_JWKS_TTL = timedelta(hours=6)
-GOOGLE_JWKS_FORCE_COOLDOWN = timedelta(minutes=5)
+AUTH0_JWKS_TTL = timedelta(hours=6)
+AUTH0_JWKS_FORCE_COOLDOWN = timedelta(minutes=5)
 
 
-async def _fetch_google_jwks(force: bool = False) -> List[Dict[str, Any]]:
-    """Fetch Google's JWKs, serving a cached copy so a transient Google outage
+async def _fetch_auth0_jwks(force: bool = False) -> List[Dict[str, Any]]:
+    """Fetch Auth0's JWKs, serving a cached copy so a transient Auth0 outage
     can't fail an otherwise-valid sign-in. Mirrors _fetch_apple_jwks."""
     fresh = (
-        _google_jwks_cache["fetched_at"] is not None
-        and now_utc() - _google_jwks_cache["fetched_at"] < GOOGLE_JWKS_TTL
+        _auth0_jwks_cache["fetched_at"] is not None
+        and now_utc() - _auth0_jwks_cache["fetched_at"] < AUTH0_JWKS_TTL
     )
     if fresh and not force:
-        return _google_jwks_cache["keys"]
+        return _auth0_jwks_cache["keys"]
     if (
         force
-        and _google_jwks_cache["last_attempt_at"] is not None
-        and now_utc() - _google_jwks_cache["last_attempt_at"] < GOOGLE_JWKS_FORCE_COOLDOWN
+        and _auth0_jwks_cache["last_attempt_at"] is not None
+        and now_utc() - _auth0_jwks_cache["last_attempt_at"] < AUTH0_JWKS_FORCE_COOLDOWN
     ):
-        return _google_jwks_cache["keys"]
-    _google_jwks_cache["last_attempt_at"] = now_utc()
+        return _auth0_jwks_cache["keys"]
+    _auth0_jwks_cache["last_attempt_at"] = now_utc()
     last_err: Optional[Exception] = None
     for _ in range(2):
         try:
             async with httpx.AsyncClient(timeout=10.0) as cli:
-                r = await cli.get(GOOGLE_KEYS_URL)
+                r = await cli.get(AUTH0_KEYS_URL)
             if r.status_code == 200:
                 keys = r.json().get("keys", [])
                 if keys:
-                    _google_jwks_cache["keys"] = keys
-                    _google_jwks_cache["fetched_at"] = now_utc()
+                    _auth0_jwks_cache["keys"] = keys
+                    _auth0_jwks_cache["fetched_at"] = now_utc()
                     return keys
         except (httpx.HTTPError, ValueError, AttributeError) as e:
             last_err = e
-    if _google_jwks_cache["keys"]:
-        return _google_jwks_cache["keys"]
-    logging.error("Google JWKS fetch failed: %s", last_err)
+    if _auth0_jwks_cache["keys"]:
+        return _auth0_jwks_cache["keys"]
+    logging.error("Auth0 JWKS fetch failed: %s", last_err)
     raise HTTPException(status_code=503, detail="Google sign-in is temporarily unavailable. Please try again.")
 
 
-async def verify_google_token(id_token: str) -> Dict[str, Any]:
-    """Verify a Google ID token against Google's published JWKs.
+async def verify_auth0_token(id_token: str) -> Dict[str, Any]:
+    """Verify an Auth0 ID token against Auth0's published JWKs.
 
-    aud and iss are checked by hand rather than via jwt.decode kwargs: the
-    token is valid for ANY of our client IDs (iOS or web) and Google issues
-    under two issuer strings, and jose's decode() takes a single value for
-    each. exp/signature are still enforced by decode()."""
-    if not GOOGLE_CLIENT_IDS:
+    Auth0 federates the actual Google login and hands us back its own token,
+    so aud/iss point at our Auth0 tenant, not Google directly. The token is
+    valid for ANY of our client IDs (iOS or web), and jose's decode() takes a
+    single audience value, so aud is checked by hand instead. exp/signature
+    are still enforced by decode()."""
+    if not AUTH0_DOMAIN or not AUTH0_CLIENT_IDS:
         raise HTTPException(status_code=503, detail="Google sign-in is not configured on this server")
     try:
         header = apple_jwt.get_unverified_header(id_token)
     except JOSEError:
         raise HTTPException(status_code=401, detail="Invalid Google ID token format")
 
-    keys = await _fetch_google_jwks()
+    keys = await _fetch_auth0_jwks()
     matching_key = next((k for k in keys if k.get("kid") == header.get("kid")), None)
     if not matching_key:
-        # Google rotates keys daily — the cached set may be stale for a new kid.
-        keys = await _fetch_google_jwks(force=True)
+        # Auth0 rotates keys — the cached set may be stale for a new kid.
+        keys = await _fetch_auth0_jwks(force=True)
         matching_key = next((k for k in keys if k.get("kid") == header.get("kid")), None)
     if not matching_key:
         raise HTTPException(status_code=401, detail="No matching Google public key found")
@@ -629,15 +645,15 @@ async def verify_google_token(id_token: str) -> Dict[str, Any]:
             id_token,
             matching_key,
             algorithms=["RS256"],
+            issuer=AUTH0_ISSUER,
             options={"verify_aud": False},
         )
     except JOSEError as e:
         raise HTTPException(status_code=401, detail=f"Invalid Google token: {e}")
 
-    if payload.get("iss") not in GOOGLE_ISSUERS:
-        raise HTTPException(status_code=401, detail="Invalid Google token issuer")
     aud = payload.get("aud")
-    if aud not in GOOGLE_CLIENT_IDS:
+    auds = aud if isinstance(aud, list) else [aud]
+    if not AUTH0_CLIENT_IDS.intersection(auds):
         raise HTTPException(status_code=401, detail="Google token audience mismatch")
     email = payload.get("email")
     if not email or not payload.get("email_verified"):
@@ -658,7 +674,10 @@ async def verify_google_token(id_token: str) -> Dict[str, Any]:
 
 @api_router.post("/auth/session")
 async def auth_session(payload: SessionExchangeIn, response: Response):
-    """Exchange Emergent session_id for a session_token and create user."""
+    """TEMPORARY: exchange an Emergent session_id for a session_token. See
+    EMERGENT_AUTH_URL — kept only so devices still on the pre-Auth0 bundle
+    can keep signing in until the OTA update reaches them; remove this route
+    alongside that constant once rollout is confirmed."""
     async with httpx.AsyncClient(timeout=15.0) as cli:
         r = await cli.get(EMERGENT_AUTH_URL, headers={"X-Session-ID": payload.session_id})
     if r.status_code != 200:
@@ -767,14 +786,14 @@ async def auth_apple(payload: AppleLoginIn, response: Response):
     return {"user": user, "session_token": session_token}
 
 
-@api_router.post("/auth/google")
-async def auth_google(payload: GoogleLoginIn, response: Response):
-    """Direct Google sign-in: the app obtains an ID token from Google itself
-    and we verify it here — no Emergent proxy in the path. Same two-step
-    authentication/authorization contract as Apple: any verified Google
-    identity signs in successfully; roster matching happens separately in
-    upsert_user_and_session."""
-    claims = await verify_google_token(payload.id_token)
+@api_router.post("/auth/auth0")
+async def auth_auth0(payload: Auth0LoginIn, response: Response):
+    """Google sign-in via Auth0: the app runs Auth0's Universal Login (routed
+    straight to the Google connection) and gets back an Auth0-issued ID
+    token, which we verify here. Same two-step authentication/authorization
+    contract as Apple: any verified identity signs in successfully; roster
+    matching happens separately in upsert_user_and_session."""
+    claims = await verify_auth0_token(payload.id_token)
     name = claims.get("name") or claims["email"]
     session_token = f"st_{uuid.uuid4().hex}"
     user = await upsert_user_and_session(

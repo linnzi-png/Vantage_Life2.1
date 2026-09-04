@@ -1,6 +1,6 @@
 // Login screen with Google sign-in + 4 demo level buttons (no Google needed)
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -8,19 +8,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import * as Google from 'expo-auth-session/providers/google';
+import * as AuthSession from 'expo-auth-session';
 import { useAuth, COLORS, Role } from '../src/lib/auth';
 
-// Completes the popup-based web flow when Google redirects back to the app.
+// Completes the popup-based web flow when Auth0 redirects back to the app.
 WebBrowser.maybeCompleteAuthSession();
 
-// Direct Google OAuth client IDs. When set, the Google button talks to Google
-// itself and the backend verifies the ID token (/api/auth/google). When unset,
-// the legacy Emergent-portal flow below keeps working — so a build without the
-// Google Cloud setup never breaks sign-in.
-const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
-const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
-const GOOGLE_DIRECT = !!GOOGLE_WEB_CLIENT_ID;
+// Google sign-in via Auth0 Universal Login, routed straight to the Google
+// connection (skips Auth0's account chooser). The app gets an Auth0-issued
+// ID token back and the backend verifies it (/api/auth/auth0).
+const AUTH0_DOMAIN = process.env.EXPO_PUBLIC_AUTH0_DOMAIN || '';
+const AUTH0_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_AUTH0_WEB_CLIENT_ID || '';
+const AUTH0_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_AUTH0_IOS_CLIENT_ID || '';
+const AUTH0_CLIENT_ID = Platform.OS === 'web' ? AUTH0_WEB_CLIENT_ID : (AUTH0_IOS_CLIENT_ID || AUTH0_WEB_CLIENT_ID);
+const AUTH0_CONFIGURED = !!(AUTH0_DOMAIN && AUTH0_CLIENT_ID);
 
 const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] = [
   { level: 'level_1', title: 'AGENT', subtitle: 'Personal stats + Pulse entry', tint: COLORS.primary },
@@ -30,36 +31,83 @@ const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] =
 ];
 
 export default function LoginScreen() {
-  const { signInDemo, signInApple, signInGoogleSession, signInGoogleIdToken } = useAuth();
+  const { signInDemo, signInApple, signInAuth0, signInGoogleSession } = useAuth();
   const router = useRouter();
   const [busy, setBusy] = useState<Role | 'google' | 'apple' | null>(null);
 
-  // Hooks must be unconditional; the placeholder ID is never prompted because
-  // onGoogle only takes this path when GOOGLE_DIRECT is set.
-  const [googleRequest, googleResponse, googlePrompt] = Google.useIdTokenAuthRequest({
-    clientId: GOOGLE_WEB_CLIENT_ID || 'unconfigured.apps.googleusercontent.com',
-    iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
-  });
+  // Hooks must be unconditional; the placeholder domain is never prompted
+  // because onGoogle only calls promptAuth0() when AUTH0_CONFIGURED is true.
+  //
+  // Authorization Code + PKCE, not Implicit Grant (ResponseType.IdToken):
+  // some Auth0 tenants disable Implicit Grant by default on new
+  // Applications, which would silently break this button. Code + PKCE works
+  // regardless of that tenant setting and needs no client secret for a
+  // public (mobile/SPA) client.
+  //
+  // The native redirect needs an explicit path. Auth0 rejects a bare
+  // custom-scheme URI ("frontend://") as an invalid callback — the Native
+  // application is registered with "frontend://callback", and the value sent
+  // in the authorize request has to match that exactly. On web
+  // makeRedirectUri() returns the page origin, which is what the SPA
+  // application is registered with; adding a path there would point Auth0 at
+  // a route Expo Router doesn't serve.
+  const redirectUri = useMemo(
+    () =>
+      Platform.OS === 'web'
+        ? AuthSession.makeRedirectUri()
+        : AuthSession.makeRedirectUri({ path: 'callback' }),
+    [],
+  );
+  const discovery = useMemo(
+    () => ({
+      authorizationEndpoint: `https://${AUTH0_DOMAIN || 'unconfigured.auth0.com'}/authorize`,
+      tokenEndpoint: `https://${AUTH0_DOMAIN || 'unconfigured.auth0.com'}/oauth/token`,
+    }),
+    [],
+  );
+  const [authRequest, authResponse, promptAuth0] = AuthSession.useAuthRequest(
+    {
+      clientId: AUTH0_CLIENT_ID || 'unconfigured',
+      redirectUri,
+      responseType: AuthSession.ResponseType.Code,
+      scopes: ['openid', 'profile', 'email'],
+      extraParams: { connection: 'google-oauth2' },
+    },
+    discovery,
+  );
 
   useEffect(() => {
-    if (!googleResponse) return;
-    if (googleResponse.type !== 'success') {
+    if (!authResponse) return;
+    if (authResponse.type !== 'success') {
       // 'dismiss'/'cancel' are the user closing the sheet — stay silent.
-      if (googleResponse.type === 'error') {
-        Alert.alert('Sign-In Error', googleResponse.error?.message || 'Please try again.');
+      if (authResponse.type === 'error') {
+        Alert.alert('Sign-In Error', authResponse.params?.error_description || 'Please try again.');
       }
       setBusy(null);
       return;
     }
-    const idToken = googleResponse.params.id_token;
-    if (!idToken) {
-      Alert.alert('Sign-In Error', 'Google did not return an identity token. Please try again.');
+    const code = authResponse.params.code;
+    const codeVerifier = authRequest?.codeVerifier;
+    if (!code || !codeVerifier) {
+      Alert.alert('Sign-In Error', 'Google sign-in did not complete. Please try again.');
       setBusy(null);
       return;
     }
     (async () => {
       try {
-        await signInGoogleIdToken(idToken);
+        const tokenResponse = await AuthSession.exchangeCodeAsync(
+          {
+            clientId: AUTH0_CLIENT_ID,
+            code,
+            redirectUri,
+            extraParams: { code_verifier: codeVerifier },
+          },
+          discovery,
+        );
+        if (!tokenResponse.idToken) {
+          throw new Error('Google did not return an identity token. Please try again.');
+        }
+        await signInAuth0(tokenResponse.idToken);
         router.replace('/');
       } catch (e: unknown) {
         Alert.alert('Sign-In Error', e instanceof Error ? e.message : String(e));
@@ -68,7 +116,7 @@ export default function LoginScreen() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [googleResponse]);
+  }, [authResponse]);
 
   const onDemo = async (level: Role) => {
     setBusy(level);
@@ -113,13 +161,16 @@ export default function LoginScreen() {
   const onGoogle = async () => {
     setBusy('google');
     try {
-      if (GOOGLE_DIRECT) {
-        // Direct flow: Google issues the ID token, our backend verifies it.
-        // The response lands in the googleResponse effect above.
-        await googlePrompt();
+      if (AUTH0_CONFIGURED) {
+        // Auth0 Universal Login opens, federates to Google, and the ID token
+        // lands in the authResponse effect above.
+        await promptAuth0();
         return;
       }
-      // Legacy Emergent-portal flow — removed once the Google client IDs ship.
+      // TEMPORARY: no Auth0 tenant configured on this build yet (see
+      // EMERGENT_AUTH_URL in backend/server.py) — fall back to the Emergent
+      // portal rather than dead-ending on a Google button that can't work.
+      // Remove this branch alongside that backend fallback.
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
         const redirectUrl = window.location.origin + '/';
@@ -164,7 +215,7 @@ export default function LoginScreen() {
           <Text style={styles.heroSub}>The 174-person sales force lives here. Pulse, Platinum Wall, and the Eraser tool — all in one.</Text>
         </View>
 
-        <TouchableOpacity testID="google-signin-btn" style={styles.googleBtn} onPress={onGoogle} disabled={!!busy || (GOOGLE_DIRECT && !googleRequest)}>
+        <TouchableOpacity testID="google-signin-btn" style={styles.googleBtn} onPress={onGoogle} disabled={!!busy || (AUTH0_CONFIGURED && !authRequest)}>
           {busy === 'google' ? (
             <ActivityIndicator color="#000" />
           ) : (
