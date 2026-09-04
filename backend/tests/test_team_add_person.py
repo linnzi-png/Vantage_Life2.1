@@ -114,3 +114,35 @@ async def test_trainee_title_does_not_grant_tier(client, seeded_db):
     r = await client.post("/api/team/add-person", headers=auth(token),
                           json=person(role="level_2", io_role="inTraining"))
     assert r.status_code == 403
+
+
+async def test_mga_adds_ga_at_level_2(client, seeded_db):
+    # GA is a level_2 title (CLAUDE.md; import_roster.py seeds all three
+    # production GAs at level_2). The Team tab sent level_3 for the GA chip
+    # until 2026-09, which gave every GA added there MGA-tier visibility.
+    token = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
+    r = await client.post("/api/team/add-person", headers=auth(token),
+                          json=person(role="level_2", io_role="GA"))
+    assert r.status_code == 200
+    agent = r.json()["agent"]
+    assert agent["role"] == "level_2"
+    assert agent["io_role"] == "GA"
+    assert agent["upline_id"] == "MGA_1"
+
+
+async def test_ga_cannot_be_added_at_mga_tier(client, seeded_db):
+    # An MGA may not mint another level_3 from this sheet — level_3 is not
+    # strictly below level_3. Guards the tier the GA chip must never send again.
+    token = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
+    r = await client.post("/api/team/add-person", headers=auth(token),
+                          json=person(role="level_3", io_role="GA"))
+    assert r.status_code == 403
+
+
+async def test_ga_added_by_ga_is_rejected(client, seeded_db):
+    # GA and SA are the same tier, so a level_2 upline cannot add either —
+    # only level_1 recruits. This is what stops a GA cloning their own tier.
+    token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    r = await client.post("/api/team/add-person", headers=auth(token),
+                          json=person(role="level_2", io_role="GA"))
+    assert r.status_code == 403
