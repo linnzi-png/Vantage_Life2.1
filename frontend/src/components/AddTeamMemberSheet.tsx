@@ -27,11 +27,16 @@ interface Props {
 // MJ roster, the Admin panel's io_role list, and IO_ROLE_TITLES all use it, so
 // reusing it keeps every trainee under one title instead of splitting them
 // across two names that mean the same thing.
+//
+// GA and SA are both level_2 — the tier the roster and CLAUDE.md give them
+// (level_3 is MGA). GA sat at level_3 here until 2026-09, which handed every
+// GA added from this sheet MGA-tier visibility over their whole branch. The
+// title never granted the tier; the wrong tier was being sent outright.
 const ROLE_OPTIONS: { role: Role; io_role: string; label: string }[] = [
   { role: 'level_1', io_role: 'Agent',      label: 'AGENT' },
   { role: 'level_1', io_role: 'inTraining', label: 'TRAINEE' },
   { role: 'level_2', io_role: 'SA',         label: 'SA' },
-  { role: 'level_3', io_role: 'GA',         label: 'GA' },
+  { role: 'level_2', io_role: 'GA',         label: 'GA' },
 ];
 
 export function AddTeamMemberSheet({ visible, onClose, myRole, onAdded }: Props) {
