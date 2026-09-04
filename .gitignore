@@ -102,3 +102,14 @@ ds-bundle/
 # switches EAS to bare workflow, which is how the rejected widget shipped)
 frontend/ios/
 frontend/android/
+
+# Signing keys and other credentials must never be committed. The Apple
+# AuthKey_*.p8 (App Store Connect / Sign in with Apple) sat untracked in the
+# repo root for two months and was one `git add -A` away from being in
+# history permanently. Keys live outside the working tree.
+*.p8
+*.p8.txt
+*.mobileprovision
+*.p12
+*.keystore
+.secrets/
