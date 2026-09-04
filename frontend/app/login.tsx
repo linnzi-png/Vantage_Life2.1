@@ -43,7 +43,21 @@ export default function LoginScreen() {
   // Applications, which would silently break this button. Code + PKCE works
   // regardless of that tenant setting and needs no client secret for a
   // public (mobile/SPA) client.
-  const redirectUri = useMemo(() => AuthSession.makeRedirectUri(), []);
+  //
+  // The native redirect needs an explicit path. Auth0 rejects a bare
+  // custom-scheme URI ("frontend://") as an invalid callback — the Native
+  // application is registered with "frontend://callback", and the value sent
+  // in the authorize request has to match that exactly. On web
+  // makeRedirectUri() returns the page origin, which is what the SPA
+  // application is registered with; adding a path there would point Auth0 at
+  // a route Expo Router doesn't serve.
+  const redirectUri = useMemo(
+    () =>
+      Platform.OS === 'web'
+        ? AuthSession.makeRedirectUri()
+        : AuthSession.makeRedirectUri({ path: 'callback' }),
+    [],
+  );
   const discovery = useMemo(
     () => ({
       authorizationEndpoint: `https://${AUTH0_DOMAIN || 'unconfigured.auth0.com'}/authorize`,

@@ -18,12 +18,16 @@ name: Publish production OTA update
 # also configured in the dashboard; keep both in sync if the backend URL
 # ever changes.
 #
-# The EXPO_PUBLIC_AUTH0_* vars below are subject to the same rule. They are
-# empty placeholders until the Auth0 tenant exists — an empty AUTH0_DOMAIN or
-# client ID makes login.tsx's AUTH0_CONFIGURED false, so the published bundle
-# falls back to the (temporary) Emergent flow instead of showing a broken
-# Google button. Fill all three in before publishing the update that switches
-# the fleet to Auth0; leaving them blank is safe, leaving them out is not.
+# The EXPO_PUBLIC_AUTH0_* vars below are subject to the same rule, and are now
+# populated from the "hypervividstudios" Auth0 tenant. These are public client
+# identifiers (they ship inside the JS bundle by design — that is what the
+# EXPO_PUBLIC_ prefix means); the Auth0 client *secrets* and the Google client
+# secret live only in the Auth0 dashboard and Railway, never here.
+# Clearing any one of them back to "" makes login.tsx's AUTH0_CONFIGURED false,
+# which falls the published bundle back to the temporary Emergent flow rather
+# than showing a broken Google button — a usable kill switch, but note the
+# backend must still have AUTH0_DOMAIN/AUTH0_CLIENT_IDS set on Railway for the
+# Auth0 path to work at all.
 jobs:
   publish_android_update:
     name: Publish Android update
@@ -31,9 +35,9 @@ jobs:
     environment: production
     env:
       EXPO_PUBLIC_BACKEND_URL: https://vantagelife21-production.up.railway.app
-      EXPO_PUBLIC_AUTH0_DOMAIN: ""
-      EXPO_PUBLIC_AUTH0_WEB_CLIENT_ID: ""
-      EXPO_PUBLIC_AUTH0_IOS_CLIENT_ID: ""
+      EXPO_PUBLIC_AUTH0_DOMAIN: hypervividstudios.us.auth0.com
+      EXPO_PUBLIC_AUTH0_WEB_CLIENT_ID: 40g1Jto97SOGLIWSfpkWweW9pqDD5GnM
+      EXPO_PUBLIC_AUTH0_IOS_CLIENT_ID: frqVIMNvuCi0GSzJEktdKNETAwGf4z8p
     params:
       branch: production
       platform: android
@@ -43,9 +47,9 @@ jobs:
     environment: production
     env:
       EXPO_PUBLIC_BACKEND_URL: https://vantagelife21-production.up.railway.app
-      EXPO_PUBLIC_AUTH0_DOMAIN: ""
-      EXPO_PUBLIC_AUTH0_WEB_CLIENT_ID: ""
-      EXPO_PUBLIC_AUTH0_IOS_CLIENT_ID: ""
+      EXPO_PUBLIC_AUTH0_DOMAIN: hypervividstudios.us.auth0.com
+      EXPO_PUBLIC_AUTH0_WEB_CLIENT_ID: 40g1Jto97SOGLIWSfpkWweW9pqDD5GnM
+      EXPO_PUBLIC_AUTH0_IOS_CLIENT_ID: frqVIMNvuCi0GSzJEktdKNETAwGf4z8p
     params:
       branch: production
       platform: ios
