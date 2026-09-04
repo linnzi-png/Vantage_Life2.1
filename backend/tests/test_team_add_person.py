@@ -90,3 +90,27 @@ async def test_recruit_first_signin_links_by_email(client, seeded_db):
     u = await seeded_db.users.find_one({"email": "recruit@test.dev"})
     assert u["role"] == "level_1"
     assert u["agent_id"] == r.json()["agent"]["agent_id"]
+
+
+async def test_sa_adds_trainee_as_level_1(client, seeded_db):
+    # The Team tab's TRAINEE chip sends the existing `inTraining` title at
+    # level_1 — a title, not an access tier. An SA onboarding their own trainee
+    # is the whole point of the option, so it must land under them like any
+    # other recruit and must not confer tier above level_1.
+    token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
+    r = await client.post("/api/team/add-person", headers=auth(token),
+                          json=person(role="level_1", io_role="inTraining"))
+    assert r.status_code == 200
+    agent = r.json()["agent"]
+    assert agent["role"] == "level_1"
+    assert agent["io_role"] == "inTraining"
+    assert agent["upline_id"] == "SA_1"
+
+
+async def test_trainee_title_does_not_grant_tier(client, seeded_db):
+    # Guard the title/tier split: `inTraining` paired with a higher role is
+    # still rejected on the role, so the title can never be a back door.
+    token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
+    r = await client.post("/api/team/add-person", headers=auth(token),
+                          json=person(role="level_2", io_role="inTraining"))
+    assert r.status_code == 403
