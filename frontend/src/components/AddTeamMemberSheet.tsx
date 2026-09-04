@@ -21,10 +21,17 @@ interface Props {
 
 // Roles an upline may hand out: strictly below their own level. The io_role
 // is the field-facing title stored alongside the RBAC role.
+//
+// A trainee is an Agent (level_1) carrying the existing `inTraining` title —
+// not a new access tier. That code is already the roster's own: the imported
+// MJ roster, the Admin panel's io_role list, and IO_ROLE_TITLES all use it, so
+// reusing it keeps every trainee under one title instead of splitting them
+// across two names that mean the same thing.
 const ROLE_OPTIONS: { role: Role; io_role: string; label: string }[] = [
-  { role: 'level_1', io_role: 'Agent', label: 'AGENT' },
-  { role: 'level_2', io_role: 'SA',    label: 'SA' },
-  { role: 'level_3', io_role: 'GA',    label: 'GA' },
+  { role: 'level_1', io_role: 'Agent',      label: 'AGENT' },
+  { role: 'level_1', io_role: 'inTraining', label: 'TRAINEE' },
+  { role: 'level_2', io_role: 'SA',         label: 'SA' },
+  { role: 'level_3', io_role: 'GA',         label: 'GA' },
 ];
 
 export function AddTeamMemberSheet({ visible, onClose, myRole, onAdded }: Props) {
@@ -104,7 +111,8 @@ export function AddTeamMemberSheet({ visible, onClose, myRole, onAdded }: Props)
                 <Text style={styles.label}>ROLE</Text>
                 <View style={styles.chipRow}>
                   {allowed.map((o, i) => (
-                    <TouchableOpacity key={o.role}
+                    // Keyed by io_role, not role — Agent and Trainee share level_1.
+                    <TouchableOpacity key={o.io_role}
                       style={[styles.chip, roleIdx === i && styles.chipOn]}
                       onPress={() => setRoleIdx(i)} testID={`add-member-role-${o.io_role}`}>
                       <Text style={[styles.chipTxt, roleIdx === i && styles.chipTxtOn]}>{o.label}</Text>
@@ -155,7 +163,8 @@ const styles = StyleSheet.create({
   scroll:    { padding: 16, paddingBottom: 40 },
   label:     { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginTop: 12, marginBottom: 6 },
   input:     { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, color: '#fff', paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
-  chipRow:   { flexDirection: 'row', gap: 8 },
+  // wrap: an RGA sees four role chips, which can overrun a narrow phone.
+  chipRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip:      { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
   chipOn:    { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   chipTxt:   { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 0.6 },
