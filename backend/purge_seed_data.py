@@ -21,7 +21,12 @@ What it keeps:
 
 Run from repo root:
     pip install pymongo dnspython
-    MONGO_URL="mongodb+srv://..." python backend/purge_seed_data.py
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/purge_seed_data.py
+
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/purge_seed_data.py
 """
 import os
 from pymongo import MongoClient

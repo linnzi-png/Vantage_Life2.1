@@ -8,11 +8,12 @@ Run this once to backfill all historical weeks from imported WAR data.
 Safe to run multiple times — skips weeks already in the vault.
 
 Run from repo root:
-    MONGO_URL="mongodb+srv://..." python backend/backfill_vault.py
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/backfill_vault.py
 
-Windows PowerShell:
-    $env:MONGO_URL = "mongodb+srv://..."
-    python backend\backfill_vault.py
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/backfill_vault.py
 """
 import os
 import uuid

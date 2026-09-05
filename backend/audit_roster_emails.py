@@ -39,8 +39,14 @@ What it reports (and what --fix changes):
 Dry-run by default; nothing is written without --fix.
 
 Run from repo root:
-    MONGO_URL="mongodb+srv://..." python backend/audit_roster_emails.py
-    MONGO_URL="mongodb+srv://..." python backend/audit_roster_emails.py --fix
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/audit_roster_emails.py
+        python backend/audit_roster_emails.py --fix
+
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/audit_roster_emails.py
+        MONGO_URL="mongodb+srv://..." python backend/audit_roster_emails.py --fix
     python backend/audit_roster_emails.py path/to/other_roster.csv
 
 Resolving a CONFLICT: strip the email off the profile that should not hold it
