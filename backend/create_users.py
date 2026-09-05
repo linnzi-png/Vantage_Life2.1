@@ -6,7 +6,12 @@ Also creates and links an agent_profile for each user so they can enter Pulse nu
 Roles:  level_1 = Agent   level_2 = GA   level_3 = MGA   level_4 = RGA
 
 Add the users you want to USERS below, then run:
-    MONGO_URL="mongodb+srv://..." python backend/create_users.py
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/create_users.py
+
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/create_users.py
 
 Windows PowerShell:
     $env:MONGO_URL = "mongodb+srv://..."

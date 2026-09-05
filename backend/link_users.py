@@ -5,7 +5,12 @@ Matches existing users records to agent_profiles by email and writes agent_id ba
 Safe to run multiple times — already-linked users are skipped unless --force is passed.
 
 Run from repo root:
-    MONGO_URL="mongodb+srv://..." python backend/link_users.py
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/link_users.py
+
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/link_users.py
 
 Windows PowerShell:
     $env:MONGO_URL = "mongodb+srv://..."

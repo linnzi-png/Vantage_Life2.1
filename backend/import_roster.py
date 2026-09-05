@@ -16,7 +16,12 @@ position-based (upline_id BFS), so a SA only sees their own downline.
 
 Run from repo root:
     pip install pymongo dnspython
-    MONGO_URL="mongodb+srv://..." python backend/import_roster.py
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/import_roster.py
+
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/import_roster.py
 """
 import os
 import re

@@ -14,8 +14,14 @@ Dry-run by default — prints exactly what would be created and how each
 upline resolved. Pass --apply to write.
 
 Run from repo root:
-    MONGO_URL="mongodb+srv://..." python backend/import_missing_roster.py
-    MONGO_URL="mongodb+srv://..." python backend/import_missing_roster.py --apply
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/import_missing_roster.py
+        python backend/import_missing_roster.py --apply
+
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/import_missing_roster.py
+        MONGO_URL="mongodb+srv://..." python backend/import_missing_roster.py --apply
 
 Notes transcribed from the sheet:
 - Adam Youssef's own row shows no SA self-reference, but three downlines

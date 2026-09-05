@@ -16,8 +16,14 @@ Idempotent: re-running skips agents whose tenure is already recorded.
 Every change writes an audit_log entry.
 
 Run from repo root (dry run by default; add --apply to write):
-    MONGO_URL="mongodb+srv://..." python backend/mark_veterans.py
-    MONGO_URL="mongodb+srv://..." python backend/mark_veterans.py --apply
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/mark_veterans.py
+        python backend/mark_veterans.py --apply
+
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/mark_veterans.py
+        MONGO_URL="mongodb+srv://..." python backend/mark_veterans.py --apply
 """
 import os
 import sys

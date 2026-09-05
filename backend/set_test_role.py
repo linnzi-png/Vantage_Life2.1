@@ -12,11 +12,22 @@ The person must already exist in the roster (run create_users.py first).
 Roles:  level_1 = Agent   level_2 = GA   level_3 = MGA   level_4 = RGA
 
 Usage:
-    MONGO_URL="mongodb+srv://..." python backend/set_test_role.py <email> <level>
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/set_test_role.py <email> <level>
+
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/set_test_role.py <email> <level>
 
 Example — make Timothy an RGA for a pass, then drop him to Agent:
-    MONGO_URL="mongodb+srv://..." python backend/set_test_role.py noetimothy1114@gmail.com level_4
-    MONGO_URL="mongodb+srv://..." python backend/set_test_role.py noetimothy1114@gmail.com level_1
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/set_test_role.py noetimothy1114@gmail.com level_4
+        python backend/set_test_role.py noetimothy1114@gmail.com level_1
+
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/set_test_role.py noetimothy1114@gmail.com level_4
+        MONGO_URL="mongodb+srv://..." python backend/set_test_role.py noetimothy1114@gmail.com level_1
 
 Windows PowerShell:
     $env:MONGO_URL = "mongodb+srv://..."

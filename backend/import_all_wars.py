@@ -4,7 +4,12 @@ Downloads all WAR xlsx files from Google Drive and imports them into MongoDB.
 
 Edit WEEKS and DRIVE_FILE_IDS below, then run:
     pip install openpyxl pymongo dnspython requests
-    MONGO_URL="mongodb+srv://..." python backend/import_all_wars.py
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/import_all_wars.py
+
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/import_all_wars.py
 
 Or on Windows PowerShell:
     $env:MONGO_URL = "mongodb+srv://..."

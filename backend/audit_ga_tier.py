@@ -51,10 +51,16 @@ Idempotent: an agent already at level_2 is not matched, so re-running is a
 no-op. Archived agents are skipped (they cannot sign in).
 
 Run from repo root (dry run by default; add --apply to write):
-    MONGO_URL="mongodb+srv://..." python backend/audit_ga_tier.py
-    MONGO_URL="mongodb+srv://..." python backend/audit_ga_tier.py --apply
-    MONGO_URL="mongodb+srv://..." python backend/audit_ga_tier.py --apply \
-        --include agent_abc123 agent_def456
+    PowerShell:
+        $env:MONGO_URL = "mongodb+srv://..."
+        python backend/audit_ga_tier.py
+        python backend/audit_ga_tier.py --apply
+        python backend/audit_ga_tier.py --apply --include agent_abc123 agent_def456
+
+    bash / zsh:
+        MONGO_URL="mongodb+srv://..." python backend/audit_ga_tier.py
+        MONGO_URL="mongodb+srv://..." python backend/audit_ga_tier.py --apply
+        MONGO_URL="mongodb+srv://..." python backend/audit_ga_tier.py --apply --include agent_abc123 agent_def456
 """
 import os
 import sys
