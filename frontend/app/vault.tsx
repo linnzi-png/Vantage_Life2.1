@@ -143,7 +143,11 @@ export default function VaultScreen() {
   useEffect(() => {
     if (a && b && a !== b) {
       api<Compare>(`/api/vault/compare?week_a=${a}&week_b=${b}`).then(setCmp).catch(() => setCmp(null));
-    } else { setCmp(null); }
+    } else {
+      // Clearing stale comparison data when the selection no longer supports one.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCmp(null);
+    }
   }, [a, b]);
 
   const shown = useMemo(

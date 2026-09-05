@@ -66,6 +66,8 @@ export default function TeamScreen() {
   };
   // Re-fetch whenever the period changes; keep the 30s live refresh going.
   useEffect(() => {
+    // Fetching + polling an external API, not deriving local state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAll();
     // A pinned past week is static — no point polling it every 30s.
     if (weekStart) return;

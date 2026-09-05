@@ -44,6 +44,8 @@ export default function NominationsScreen() {
   }, []);
 
   useEffect(() => {
+    // Fetching + polling an external API on mount, not deriving local state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAll();
     const i = setInterval(fetchAll, 30000);
     return () => clearInterval(i);
@@ -148,7 +150,7 @@ export default function NominationsScreen() {
                   )}
                 </View>
               </View>
-              <Text style={styles.reason}>"{n.reason}"</Text>
+              <Text style={styles.reason}>&quot;{n.reason}&quot;</Text>
               <Text style={styles.meta}>
                 Nominated by {n.nominator_name}
                 {count > 0 ? ` · endorsed by ${n.endorsements.map((e) => e.name).join(', ')}` : ''}

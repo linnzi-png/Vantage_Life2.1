@@ -311,7 +311,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    // Restoring the session from stored token on mount, not deriving local state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    reload();
+  }, []);
 
   // Register for the 9 PM escalation notifications once there's a real,
   // linked agent — no point asking for permission on a "pending" account
