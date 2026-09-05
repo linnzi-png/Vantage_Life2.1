@@ -12,12 +12,8 @@ Run from repo root:
     bash / zsh:
         MONGO_URL="mongodb+srv://..." python backend/link_users.py
 
-Windows PowerShell:
-    $env:MONGO_URL = "mongodb+srv://..."
-    python backend\link_users.py
-
 Pass --force to overwrite existing agent_id links (use if an agent changed email):
-    python backend\link_users.py --force
+    python backend/link_users.py --force
 """
 import os
 import sys
