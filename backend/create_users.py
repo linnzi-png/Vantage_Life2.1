@@ -12,10 +12,6 @@ Add the users you want to USERS below, then run:
 
     bash / zsh:
         MONGO_URL="mongodb+srv://..." python backend/create_users.py
-
-Windows PowerShell:
-    $env:MONGO_URL = "mongodb+srv://..."
-    python backend\create_users.py
 """
 import os
 import uuid

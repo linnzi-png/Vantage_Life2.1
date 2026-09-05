@@ -29,10 +29,6 @@ Example — make Timothy an RGA for a pass, then drop him to Agent:
         MONGO_URL="mongodb+srv://..." python backend/set_test_role.py noetimothy1114@gmail.com level_4
         MONGO_URL="mongodb+srv://..." python backend/set_test_role.py noetimothy1114@gmail.com level_1
 
-Windows PowerShell:
-    $env:MONGO_URL = "mongodb+srv://..."
-    python backend\set_test_role.py noetimothy1114@gmail.com level_4
-
 After running, the tester signs out and back in (or reloads the app) so the
 client picks up the new level.
 """

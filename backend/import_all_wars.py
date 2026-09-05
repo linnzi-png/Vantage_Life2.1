@@ -10,10 +10,6 @@ Edit WEEKS and DRIVE_FILE_IDS below, then run:
 
     bash / zsh:
         MONGO_URL="mongodb+srv://..." python backend/import_all_wars.py
-
-Or on Windows PowerShell:
-    $env:MONGO_URL = "mongodb+srv://..."
-    python backend\import_all_wars.py
 """
 import os
 import sys
