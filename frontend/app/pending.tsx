@@ -16,8 +16,8 @@ export default function PendingScreen() {
         <Ionicons name="time-outline" size={48} color={COLORS.gold} />
         <Text style={styles.title}>Account Pending</Text>
         <Text style={styles.body}>
-          {user?.email} isn't linked to an AO Premier agent profile yet. Reach out to your
-          office to get added — once you're on the roster, signing in again will take you
+          {user?.email} isn&apos;t linked to an AO Premier agent profile yet. Reach out to your
+          office to get added — once you&apos;re on the roster, signing in again will take you
           straight to your dashboard.
         </Text>
         <Text style={styles.hint}>

@@ -53,15 +53,21 @@ export default function ShoutoutsScreen() {
     try { const r = await api<{ shoutouts: Shoutout[] }>('/api/shoutouts'); setItems(r.shoutouts); }
     catch {}
   };
-  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, []);
+  useEffect(() => {
+    // Fetching + polling an external API on mount, not deriving local state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchAll();
+    const i = setInterval(fetchAll, 30000);
+    return () => clearInterval(i);
+  }, []);
 
   if (!user?.agent_id) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.center}>
           <Ionicons name="alert-circle" size={36} color={COLORS.orange} />
-          <Text style={styles.notLinked}>This account isn't linked to an agent profile yet.</Text>
-          <Text style={styles.notLinkedSub}>Try the Demo Login screen and pick "AGENT" to test the Pulse flow.</Text>
+          <Text style={styles.notLinked}>This account isn&apos;t linked to an agent profile yet.</Text>
+          <Text style={styles.notLinkedSub}>Try the Demo Login screen and pick &quot;AGENT&quot; to test the Pulse flow.</Text>
         </View>
       </SafeAreaView>
     );
@@ -118,7 +124,7 @@ export default function ShoutoutsScreen() {
                 ) : null}
                 {s.type === 'platinum_rule' && s.reason ? (
                   <Text style={[styles.detail, { fontStyle: 'italic' }]}>
-                    "{s.reason}"{s.nominator_name ? ` — nominated by ${s.nominator_name}` : ''}
+                    &quot;{s.reason}&quot;{s.nominator_name ? ` — nominated by ${s.nominator_name}` : ''}
                   </Text>
                 ) : null}
                 <Text style={styles.ts}>{new Date(s.ts).toLocaleString()}</Text>

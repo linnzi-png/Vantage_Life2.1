@@ -12,6 +12,10 @@ export interface TickerItem {
 }
 
 export default function Ticker({ items }: { items: TickerItem[] }) {
+  // Standard RN Animated idiom: a ref holds the mutable Animated.Value across
+  // renders, and .current is read once here to get a stable reference — not a
+  // per-render read of a changing ref value.
+  // eslint-disable-next-line react-hooks/refs
   const translateX = useRef(new Animated.Value(0)).current;
   const { width: screenW } = useWindowDimensions();
 

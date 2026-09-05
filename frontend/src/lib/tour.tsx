@@ -120,6 +120,8 @@ export function TourProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (identity !== prevIdentity.current) {
       prevIdentity.current = identity;
+      // Reacting to the signed-in identity changing mid-tour, not deriving local state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (active) cancel();
     }
   }, [identity, active, cancel]);

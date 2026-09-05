@@ -135,6 +135,8 @@ export default function AdminScreen() {
 
   useEffect(() => {
     if (user && !user.is_admin && !isFA) { router.replace('/(tabs)'); return; }
+    // Fetching the roster from the API, not deriving local state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.is_admin, isFA]);

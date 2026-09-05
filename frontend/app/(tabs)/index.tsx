@@ -89,6 +89,8 @@ export default function DashboardScreen() {
     `${d} · ${new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}`;
 
   useEffect(() => {
+    // Fetching + polling an external API on mount, not deriving local state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAll();
     const interval = setInterval(fetchAll, 30000); // 30s polling for live ticker
     return () => clearInterval(interval);
@@ -103,8 +105,8 @@ export default function DashboardScreen() {
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.center}>
           <Ionicons name="alert-circle" size={36} color={COLORS.orange} />
-          <Text style={styles.notLinked}>This account isn't linked to an agent profile yet.</Text>
-          <Text style={styles.notLinkedSub}>Try the Demo Login screen and pick "AGENT" to test the Pulse flow.</Text>
+          <Text style={styles.notLinked}>This account isn&apos;t linked to an agent profile yet.</Text>
+          <Text style={styles.notLinkedSub}>Try the Demo Login screen and pick &quot;AGENT&quot; to test the Pulse flow.</Text>
         </View>
       </SafeAreaView>
     );

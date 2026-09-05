@@ -27,6 +27,8 @@ export function NominateSheet({ visible, onClose, onSubmitted, preselected }: Pr
 
   useEffect(() => {
     if (!visible) return;
+    // Resetting the sheet's form state each time it opens.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNominee(preselected ?? null);
     setQuery('');
     setReason('');

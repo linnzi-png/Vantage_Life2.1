@@ -83,6 +83,8 @@ export default function LoginScreen() {
       if (authResponse.type === 'error') {
         Alert.alert('Sign-In Error', authResponse.params?.error_description || 'Please try again.');
       }
+      // Reacting to the OAuth flow's outcome, not deriving local state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBusy(null);
       return;
     }

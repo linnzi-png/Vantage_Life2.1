@@ -68,6 +68,8 @@ export function TourOverlay() {
 
   // Measure the current step's anchor once its screen is up.
   useEffect(() => {
+    // Resetting measurement state before re-measuring for the new step.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRect(null);
     setSettled(false);
     if (!step || pathname !== step.screen) return;

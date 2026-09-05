@@ -29,6 +29,8 @@ export default function NotificationNagOverlay() {
   };
 
   useEffect(() => {
+    // Reading the OS permission state, not deriving local state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (user?.agent_id) check();
   }, [user?.agent_id]);
 
@@ -54,8 +56,8 @@ export default function NotificationNagOverlay() {
           <Text style={styles.title}>Notifications Are Off</Text>
           <Text style={styles.body}>
             VantageLife uses push notifications to remind you to log your Nightly Numbers
-            and to confirm submissions with your upline. With notifications off, you won't
-            get the 9 PM reminders and your upline won't be notified when you submit.
+            and to confirm submissions with your upline. With notifications off, you won&apos;t
+            get the 9 PM reminders and your upline won&apos;t be notified when you submit.
           </Text>
           <TouchableOpacity
             style={styles.enableBtn}

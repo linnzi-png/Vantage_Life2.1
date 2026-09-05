@@ -157,6 +157,7 @@ export default function PulseScreen() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLateNight(isLateNightWindow());
     flushEligibleEntries().then(async (count) => {
       await refresh();
@@ -457,7 +458,7 @@ export default function PulseScreen() {
               <Text style={styles.kicker}>{correctionMode ? 'REVIEW CORRECTION' : 'REVIEW & SUBMIT'}</Text>
               {correctionMode ? (
                 /* TODO copy */
-                <Text style={styles.wallNote}>These replace the day's totals. Gross ALP updates the Platinum Wall.</Text>
+                <Text style={styles.wallNote}>These replace the day&apos;s totals. Gross ALP updates the Platinum Wall.</Text>
               ) : null}
               {STEPS.map((s) => (
                 <View key={s.key} style={styles.reviewRow}>

@@ -60,7 +60,7 @@ export default function PlatinumWall(
             <View key={p.shoutout_id} style={styles.item}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name} numberOfLines={1}>{p.agent_name} <Text style={styles.meta}>· {p.office}</Text></Text>
-                <Text style={[styles.meta, { fontStyle: 'italic' }]} numberOfLines={2}>"{p.reason}"</Text>
+                <Text style={[styles.meta, { fontStyle: 'italic' }]} numberOfLines={2}>&quot;{p.reason}&quot;</Text>
               </View>
             </View>
           ))}
