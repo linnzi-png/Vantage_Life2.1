@@ -13,7 +13,7 @@ level_2 alongside the SAs.
 
 WHY "level_3 + GA title" IS NOT ENOUGH ON ITS OWN
 -------------------------------------------------
-Tier and title are edited independently (/admin/set-role, /admin/update-person),
+Tier and title are edited independently (/admin/set-role and the Admin panel),
 and titles are display-only — CLAUDE.md already has Partner and Senior Partner
 riding on level_3/level_4 holders. So an admin may have deliberately promoted a
 GA to MGA tier and left the GA title in place. Demoting that person would strip
@@ -41,7 +41,7 @@ What --apply changes, per eligible agent:
   * agent_profiles.role -> "level_2"   (the source of truth)
   * users.role          -> "level_2"   (matched by email, so the change takes
                                         effect without waiting for a re-login —
-                                        the same sync /admin/update-person does)
+                                        the same sync /admin/set-role does)
   * one audit_log entry
 
 Titles (io_role) are left alone: the title was never wrong, the tier was.
@@ -228,7 +228,7 @@ def main() -> None:
             {"$set": {"role": CORRECT_ROLE, "updated_at": now}},
         )
         # Sync any linked login so the tier drops immediately rather than at
-        # their next sign-in — mirrors /admin/update-person in server.py.
+        # their next sign-in — mirrors /admin/set-role in server.py.
         email = str(a.get("email") or "").lower().strip()
         if email:
             db.users.update_many({"email": email}, {"$set": {"role": CORRECT_ROLE}})
