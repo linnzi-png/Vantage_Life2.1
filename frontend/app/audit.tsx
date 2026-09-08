@@ -6,11 +6,33 @@ import { Stack } from 'expo-router';
 import { api, COLORS } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
 
+// /api/manager/audit returns the whole audit_log, not just ALP adjustments:
+// adding, removing, reassigning and merging people are all in here, as are
+// tenure, state and role changes. Only the ALP actions carry money in
+// original_value/new_value — the rest carry a role name, a tenure flag, a
+// state code, or nothing at all — so every field below is optional and the
+// value type is whatever that action recorded.
 interface Audit {
   audit_id: string; ts: string; action: string;
-  agent_name: string; changed_by_name?: string;
-  original_value: number; new_value: number; delta: number;
-  sales_day: string; reason: string;
+  agent_name?: string; changed_by_name?: string;
+  original_value?: number | string | boolean | null;
+  new_value?: number | string | boolean | null;
+  delta?: number;
+  sales_day?: string; reason?: string;
+}
+
+// The two actions whose values are Net ALP. Everything else is rendered as
+// plain text: running a role like "level_3" through Math.round printed "$NaN".
+const MONEY_ACTIONS = new Set(['adjust_alp', 'self_correct_pulse']);
+
+function formatValue(v: Audit['original_value'], money: boolean): string {
+  if (v === null || v === undefined || v === '') return '—';
+  if (money) {
+    const n = typeof v === 'number' ? v : Number(v);
+    return Number.isFinite(n) ? `$${Math.round(n).toLocaleString()}` : '—';
+  }
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  return String(v);
 }
 
 export default function AuditScreen() {
@@ -23,28 +45,47 @@ export default function AuditScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
         <TourAnchor id="audit-intro">
           <Text style={styles.kicker}>IMMUTABLE LEDGER</Text>
-          <Text style={styles.intro}>Every Net ALP adjustment is recorded with a timestamp and a 10+ character reason.</Text>
+          <Text style={styles.intro}>Every Net ALP adjustment, roster change and role change is recorded with a timestamp and who made it.</Text>
         </TourAnchor>
         {items.length === 0 ? (
-          <Text style={styles.empty}>No adjustments yet.</Text>
-        ) : items.map((a) => (
-          <View key={a.audit_id} style={styles.row} testID={`audit-${a.audit_id}`}>
-            <View style={styles.rowHead}>
-              <Ionicons name={a.delta < 0 ? 'remove-circle' : 'add-circle'} size={16} color={a.delta < 0 ? COLORS.red : COLORS.primary} />
-              <Text style={styles.action}>{a.action.replace('_', ' ').toUpperCase()}</Text>
-              <Text style={styles.ts}>{new Date(a.ts).toLocaleString()}</Text>
+          <Text style={styles.empty}>Nothing recorded yet.</Text>
+        ) : items.map((a) => {
+          const money = MONEY_ACTIONS.has(a.action);
+          const dropped = money && typeof a.delta === 'number' && a.delta < 0;
+          // Only the ALP actions have a direction to show; a role or tenure
+          // change is neither a gain nor a loss.
+          const icon = money ? (dropped ? 'remove-circle' : 'add-circle') : 'swap-horizontal';
+          const iconColor = money ? (dropped ? COLORS.red : COLORS.primary) : COLORS.textDim;
+          const hasValues = a.original_value !== undefined || a.new_value !== undefined;
+          return (
+            <View key={a.audit_id} style={styles.row} testID={`audit-${a.audit_id}`}>
+              <View style={styles.rowHead}>
+                <Ionicons name={icon} size={16} color={iconColor} />
+                {/* replace(/_/g) — the old single replace left "self set_role" */}
+                <Text style={styles.action}>{a.action.replace(/_/g, ' ').toUpperCase()}</Text>
+                <Text style={styles.ts}>{new Date(a.ts).toLocaleString()}</Text>
+              </View>
+              <Text style={styles.agent}>
+                {a.agent_name || '—'}
+                {a.sales_day ? <Text style={styles.dim}> · {a.sales_day}</Text> : null}
+              </Text>
+              {hasValues ? (
+                <View style={styles.values}>
+                  <View style={{ flex: 1 }}><Text style={styles.lab}>ORIGINAL</Text><Text style={styles.val}>{formatValue(a.original_value, money)}</Text></View>
+                  <Ionicons name="arrow-forward" size={14} color={COLORS.textDim} />
+                  <View style={{ flex: 1, alignItems: 'flex-end' }}><Text style={styles.lab}>NEW</Text><Text style={styles.val}>{formatValue(a.new_value, money)}</Text></View>
+                </View>
+              ) : null}
+              {a.reason ? (
+                <>
+                  <Text style={styles.lab}>REASON</Text>
+                  <Text style={styles.reason}>{`"${a.reason}"`}</Text>
+                </>
+              ) : null}
+              <Text style={styles.by}>By {a.changed_by_name || 'system'}</Text>
             </View>
-            <Text style={styles.agent}>{a.agent_name} <Text style={styles.dim}>· {a.sales_day}</Text></Text>
-            <View style={styles.values}>
-              <View style={{ flex: 1 }}><Text style={styles.lab}>ORIGINAL</Text><Text style={styles.val}>${Math.round(a.original_value).toLocaleString()}</Text></View>
-              <Ionicons name="arrow-forward" size={14} color={COLORS.textDim} />
-              <View style={{ flex: 1, alignItems: 'flex-end' }}><Text style={styles.lab}>NEW</Text><Text style={styles.val}>${Math.round(a.new_value).toLocaleString()}</Text></View>
-            </View>
-            <Text style={styles.lab}>REASON</Text>
-            <Text style={styles.reason}>{`"${a.reason}"`}</Text>
-            <Text style={styles.by}>By {a.changed_by_name || a.action}</Text>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
     </View>
   );

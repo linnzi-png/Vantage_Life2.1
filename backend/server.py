@@ -3106,6 +3106,27 @@ async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends
     email = str(agent.get("email", "")).lower()
     if email:
         await db.users.update_many({"email": email}, {"$set": {"role": payload.role, "agent_id": payload.agent_id}})
+    # A tier change decides whose production someone can see, so it belongs in
+    # the log next to add/remove/reassign, which have always been recorded.
+    # Without it a wrong tier leaves no trace of who set it or what it was
+    # before, and unwinding one is guesswork.
+    entry: Dict[str, Any] = {
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now_utc(),
+        "action": "set_role",
+        "agent_id": payload.agent_id,
+        "agent_name": agent.get("name"),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "original_value": current_role,
+        "new_value": payload.role,
+    }
+    if "upline_id" in update:
+        # Only the finance_admin transitions move the upline here. Record it so
+        # the entry describes the whole edit rather than half of it.
+        entry["old_upline_id"] = agent.get("upline_id")
+        entry["new_upline_id"] = update["upline_id"]
+    await db.audit_log.insert_one(entry)
     return {"ok": True, "agent_id": payload.agent_id, "role": payload.role}
 
 
@@ -4869,11 +4890,31 @@ async def self_set_role(payload: SelfRoleIn, user: Dict[str, Any] = Depends(requ
         raise HTTPException(status_code=403, detail="Role switching is not enabled for this account")
     if payload.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
+    # Read the profile before the write: it is the source of truth for the tier
+    # they are leaving, and the audit entry is worth less if it records the
+    # session's copy instead.
+    me = await db.agent_profiles.find_one(
+        {"agent_id": user["agent_id"]}, {"_id": 0, "name": 1, "role": 1})
     await db.agent_profiles.update_one(
         {"agent_id": user["agent_id"]},
         {"$set": {"role": payload.role, "updated_at": now_utc()}},
     )
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"role": payload.role}})
+    # This is the one route where someone raises their own tier. It is gated on
+    # can_switch_role and meant for testers, which is exactly why each flip
+    # should be recorded: a self-elevation with no trail is the one nobody can
+    # reconstruct later.
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now_utc(),
+        "action": "self_set_role",
+        "agent_id": user["agent_id"],
+        "agent_name": (me or {}).get("name") or user.get("name"),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "original_value": (me or {}).get("role") or user.get("role"),
+        "new_value": payload.role,
+    })
     fresh = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return {"ok": True, "user": fresh, "role_label": LEVELS.get(payload.role, payload.role)}
 
