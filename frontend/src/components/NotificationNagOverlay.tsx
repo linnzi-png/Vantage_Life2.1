@@ -13,7 +13,7 @@ import * as Notifications from 'expo-notifications';
 import { COLORS, useAuth } from '../lib/auth';
 
 export default function NotificationNagOverlay() {
-  const { user } = useAuth();
+  const { user, agent } = useAuth();
   const [status, setStatus] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const appState = useRef<AppStateStatus>(AppState.currentState);
@@ -31,8 +31,8 @@ export default function NotificationNagOverlay() {
   useEffect(() => {
     // Reading the OS permission state, not deriving local state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (user?.agent_id) check();
-  }, [user?.agent_id]);
+    if (user?.agent_id && !agent?.non_producing) check();
+  }, [user?.agent_id, agent?.non_producing]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
@@ -45,7 +45,9 @@ export default function NotificationNagOverlay() {
     return () => sub.remove();
   }, []);
 
-  const visible = !!user?.agent_id && status !== null && status !== 'granted' && !dismissed;
+  // The nag exists to protect the Nightly Numbers reminders; someone who
+  // never logs numbers should not be chased about notifications for them.
+  const visible = !!user?.agent_id && !agent?.non_producing && status !== null && status !== 'granted' && !dismissed;
   if (!visible) return null;
 
   return (

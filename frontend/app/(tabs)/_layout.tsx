@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, useAuth, levelNum, isFinanceAdmin } from '../../src/lib/auth';
 
 export default function TabsLayout() {
-  const { user } = useAuth();
+  const { user, agent } = useAuth();
   const router = useRouter();
   const lvl = levelNum(user?.role);
   const insets = useSafeAreaInsets();
@@ -37,7 +37,13 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="pulse"
-        options={{ title: 'PULSE', tabBarIcon: ({ color, size }) => <Ionicons name="pulse" size={size} color={color} /> }}
+        options={{
+          title: 'PULSE',
+          tabBarIcon: ({ color, size }) => <Ionicons name="pulse" size={size} color={color} />,
+          // A non-producing member has no numbers to enter — hide the entry
+          // tab rather than showing a form that will never apply to them.
+          href: agent?.non_producing ? null : undefined,
+        }}
       />
       <Tabs.Screen
         name="shoutouts"
