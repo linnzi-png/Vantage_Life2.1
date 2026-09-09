@@ -62,6 +62,10 @@ export interface AppAgent {
   io_role?: string;
   is_rookie?: boolean;
   ga_id?: string | null;
+  // Set on team members who are not producing agents (app developer, office
+  // support). They keep their RBAC tier and every read path, but the app must
+  // not ask them for Nightly Numbers or file them into the production tiers.
+  non_producing?: boolean;
 }
 
 /**

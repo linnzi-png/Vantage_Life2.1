@@ -762,7 +762,15 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
     # the other and offer a button the server will refuse.
     user["can_export"] = user_may_export(user)
     user["can_switch_role"] = bool(user.get("can_switch_role"))
-    role_label = "Financial Administrator" if user_is_finance_admin(user) else LEVELS.get(user.get("role", "level_1"), "Agent")
+    # A non-producing team member (app developer, office support) keeps their
+    # real RBAC tier for access, but must not be LABELLED as a producer tier
+    # anywhere others can see: their own io_role title is the label.
+    staff_title = ""
+    if agent and agent.get("non_producing"):
+        staff_title = str(agent.get("io_role") or "").strip()
+    role_label = staff_title or (
+        "Financial Administrator" if user_is_finance_admin(user)
+        else LEVELS.get(user.get("role", "level_1"), "Agent"))
     return {"user": user, "agent": agent, "role_label": role_label}
 
 
@@ -1877,7 +1885,8 @@ async def hierarchy_directory(user: Dict[str, Any] = Depends(require_agent)):
     agents = [a async for a in db.agent_profiles.find(
         ACTIVE_AGENT,
         {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1,
-         "phone": 1, "email": 1, "upline_id": 1, "is_rookie": 1},
+         "phone": 1, "email": 1, "upline_id": 1, "is_rookie": 1,
+         "non_producing": 1},
     ).sort("name", 1)]
     return {"agents": agents}
 

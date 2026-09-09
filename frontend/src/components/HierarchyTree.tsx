@@ -16,7 +16,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, Role, levelNum, roleTitle } from '../lib/auth';
+import { COLORS, Role, levelNum, roleTitle, isFinanceAdmin } from '../lib/auth';
 
 export interface HierarchyAgent {
   agent_id: string;
@@ -28,6 +28,7 @@ export interface HierarchyAgent {
   email?: string;
   upline_id?: string | null;
   is_rookie?: boolean;
+  non_producing?: boolean;
 }
 
 interface TreeNode {
@@ -211,7 +212,24 @@ export function HierarchyTree({
   onSelect: (agent: HierarchyAgent) => void;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
-  const forest = useMemo(() => buildForest(agents), [agents]);
+  // Non-producing members (app developer, office support) are part of the
+  // team but not part of the reporting ladder, so they are lifted out of the
+  // tree entirely and shown in their own band beneath it — present, clearly
+  // set apart, and never drawn as a stray root of the pyramid.
+  const { producing, staff } = useMemo(() => {
+    const producing: HierarchyAgent[] = [];
+    const staff: HierarchyAgent[] = [];
+    // A Financial Admin is non-producing by definition (see FINANCE_ADMIN_ROLE
+    // in backend/server.py) and carries no upline, so they belong in the band
+    // too rather than floating as a root of the pyramid.
+    for (const a of agents) {
+      const outside = !!a.non_producing || isFinanceAdmin(a.role);
+      (outside ? staff : producing).push(a);
+    }
+    staff.sort((x, y) => x.name.localeCompare(y.name));
+    return { producing, staff };
+  }, [agents]);
+  const forest = useMemo(() => buildForest(producing), [producing]);
   const openNode = useMemo(
     () => (openId ? collectOpen(forest, openId) : null),
     [forest, openId],
@@ -276,6 +294,38 @@ export function HierarchyTree({
                   <Text style={styles.rosterName} numberOfLines={1}>{a.name}</Text>
                   <Text style={styles.rosterRole} numberOfLines={1}>
                     {roleTitle(a.io_role, a.role) || 'Agent'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      {staff.length > 0 ? (
+        <View style={styles.staff}>
+          <View style={styles.staffHead}>
+            <Text style={styles.staffTitle}>TEAM SUPPORT</Text>
+            <View style={styles.staffRule} />
+          </View>
+          <Text style={styles.staffSub}>Part of the team, outside the production hierarchy</Text>
+          <View style={styles.staffRow}>
+            {staff.map((a) => (
+              <TouchableOpacity
+                key={a.agent_id}
+                style={styles.staffCard}
+                onPress={() => onSelect(a)}
+                activeOpacity={0.75}
+                testID={`hierarchy-staff-${a.agent_id}`}
+              >
+                <View style={styles.staffAvatar}>
+                  <Text style={styles.staffAvatarTxt}>{a.name.slice(0, 1)}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.staffName} numberOfLines={1}>{a.name}</Text>
+                  <Text style={styles.staffRole} numberOfLines={1}>
+                    {roleTitle(a.io_role, a.role) || 'Team Support'}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={14} color={COLORS.textMuted} />
@@ -371,4 +421,34 @@ const styles = StyleSheet.create({
   rosterAvatar: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   rosterName: { color: '#fff', fontWeight: '800', fontSize: 11 },
   rosterRole: { color: COLORS.orange, fontSize: 9, fontWeight: '700', marginTop: 1 },
+
+  // Deliberately drawn in neutral grey, not a tier colour: these people sit
+  // outside the RGA/MGA/GA/Agent ladder the legend describes.
+  staff: { marginTop: 26, marginHorizontal: 16 },
+  staffHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  staffTitle: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 1.6 },
+  staffRule: { flex: 1, height: 1, backgroundColor: COLORS.border },
+  staffSub: { color: COLORS.textMuted, fontSize: 10, fontWeight: '700', marginTop: 4, marginBottom: 10 },
+  staffRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  staffCard: {
+    flexGrow: 1,
+    flexBasis: '46%',
+    minHeight: 58,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1.5,
+    borderColor: COLORS.textMuted,
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  staffAvatar: {
+    width: 26, height: 26, borderRadius: 13, backgroundColor: COLORS.textDim,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  staffAvatarTxt: { color: '#000', fontWeight: '900', fontSize: 12 },
+  staffName: { color: '#fff', fontWeight: '800', fontSize: 11 },
+  staffRole: { color: COLORS.textDim, fontSize: 9, fontWeight: '700', marginTop: 1 },
 });
