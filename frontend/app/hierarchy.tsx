@@ -98,6 +98,7 @@ export default function HierarchyScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.officeBarWrap}
         contentContainerStyle={styles.officeBar}
       >
         {offices.map(([name, count]) => (
@@ -164,9 +165,15 @@ const styles = StyleSheet.create({
   head: { paddingHorizontal: 16, paddingTop: 12 },
   kicker: { color: COLORS.primary, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
   title: { color: '#fff', fontSize: 20, fontWeight: '900', marginTop: 2 },
-  officeBar: { gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
+  // A horizontal ScrollView stretches its children to the cross-axis by
+  // default, which is what turned these chips into full-height pills with the
+  // label stranded at the top. flexGrow:0 on the ScrollView plus alignItems
+  // 'center' on the content container keeps them at their own height.
+  officeBarWrap: { flexGrow: 0, flexShrink: 0 },
+  officeBar: { gap: 8, paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center' },
   officeChip: {
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+    height: 34, justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: 14, borderRadius: 999,
     borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface,
   },
   officeChipOn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
