@@ -1863,6 +1863,25 @@ async def team_weeks(user: Dict[str, Any] = Depends(require_level(2))):
     return {"weeks": sorted(weeks, reverse=True)}
 
 
+@api_router.get("/hierarchy")
+async def hierarchy_directory(user: Dict[str, Any] = Depends(require_agent)):
+    """Company-wide org-chart directory for the Hierarchy Map (More tab).
+
+    Deliberately open to every linked agent (level_1+), not scoped by
+    visible_agent_ids like /team — this is a company directory (who reports
+    to whom, and how to reach them), not production data, so it carries no
+    financial/sales fields at all. Editing the structure (moving someone to a
+    new upline) still goes through the existing /api/team/reassign, which
+    keeps its own RBAC scope (own downline for GA+, anyone for admins) —
+    this endpoint only lists people, it grants no write access of its own."""
+    agents = [a async for a in db.agent_profiles.find(
+        ACTIVE_AGENT,
+        {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1,
+         "phone": 1, "email": 1, "upline_id": 1, "is_rookie": 1},
+    ).sort("name", 1)]
+    return {"agents": agents}
+
+
 # =========================================================
 #                       SHOUTOUTS
 # =========================================================

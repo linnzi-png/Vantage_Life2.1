@@ -73,9 +73,26 @@ export default function MoreScreen() {
           </View>
         </View>
 
+        {agent ? (
+          <>
+            <Text style={styles.kicker}>TEAM</Text>
+            <View style={styles.list}>
+              <TouchableOpacity
+                style={styles.item}
+                onPress={() => router.push('/hierarchy')}
+                testID="more-hierarchy"
+              >
+                <Ionicons name="git-network" size={18} color={COLORS.primary} />
+                <Text style={styles.itemTxt}>Hierarchy Map</Text>
+                <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
+
         {items.filter((i) => i.show).length > 0 ? (
           <>
-            <Text style={styles.kicker}>EXECUTIVE TOOLS</Text>
+            <Text style={[styles.kicker, { marginTop: 16 }]}>EXECUTIVE TOOLS</Text>
             <TourAnchor id="more-tools" style={styles.list}>
               {items.filter((i) => i.show).map((it) => (
                 <TouchableOpacity key={it.id} style={styles.item} onPress={it.onPress} testID={`more-${it.id}`}>
