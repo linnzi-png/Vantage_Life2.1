@@ -144,6 +144,15 @@ async def test_admin_gets_one_csv_row_per_agent_per_day(client, seeded_db):
 
 # ---------------- WAR workbook (.xlsx) ----------------
 
+def _data_start(ws) -> int:
+    """First data row of a tab, found the way the importer finds it — by the
+    header, not by a row number. The summary block grows with the number of
+    leaders, so nothing here may assume a fixed offset."""
+    for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
+        if row and row[0] == "MGA" and row[5] == "Agent":
+            return i + 1
+    raise AssertionError("no data header on this tab")
+
 async def test_xlsx_rebuilds_a_war_workbook_that_reimports(client, seeded_db):
     """The point of the format: a generated file must be readable by the same
     parser that reads the office's real reports, or it is not the same report."""
@@ -176,17 +185,20 @@ async def test_xlsx_lists_the_whole_roster_even_on_a_quiet_day(client, seeded_db
     day is what makes two workbooks impossible to compare side by side."""
     import io
     import openpyxl
+    import war_export
 
     await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=1, gross_alp=100.0)
     token = await _rga_admin(seeded_db)
     r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
                          headers=auth(token))
     wb = openpyxl.load_workbook(io.BytesIO(r.content), data_only=True)
+    ws = wb["Fri"]
+    first = _data_start(ws)
 
     # Friday: nobody produced, but the roster is still listed.
-    names = [row[5] for row in wb["Fri"].iter_rows(min_row=5, values_only=True) if row[5]]
-    assert "Agent One" in names
-    assert all(v is None for v in list(wb["Fri"].iter_rows(min_row=5, values_only=True))[0][6:20])
+    rows = list(ws.iter_rows(min_row=first, values_only=True))
+    assert "Agent One" in [row[5] for row in rows if row[5]]
+    assert all(v is None for v in rows[0][6:20])
 
 
 async def test_xlsx_spans_nine_days_like_a_real_report(client, seeded_db):
@@ -223,3 +235,134 @@ async def test_unknown_format_is_rejected(client, seeded_db):
     r = await client.get("/api/vault/export?week_start=2026-07-01&format=pdf",
                          headers=auth(token))
     assert r.status_code == 400
+
+
+# ---------------- the workbook matches the office's own template ----------------
+#
+# "Exactly as the WAR report, in the same template" (owner, 2026-09-11). These
+# pin the three things that made the old export unrecognisable next to a real
+# one: the leadership summary block, the data header sitting below it rather
+# than on row 4, and the rates being live formulas instead of frozen numbers.
+
+async def _workbook(client, db, week_start="2026-07-01"):
+    import io
+    import openpyxl
+    token = await _rga_admin(db)
+    r = await client.get(f"/api/vault/export?week_start={week_start}&format=xlsx",
+                         headers=auth(token))
+    assert r.status_code == 200, r.text
+    # data_only=False: the formulas are the point, and openpyxl never computes
+    # a cached value for a file it wrote itself.
+    return openpyxl.load_workbook(io.BytesIO(r.content))
+
+
+async def test_summary_block_sits_above_the_data_section(client, seeded_db):
+    import war_export
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sets=10, sits=6, sales=3,
+               n1=2, gross_alp=1000.0)
+    ws = (await _workbook(client, seeded_db))["Wed"]
+
+    assert ws["C1"].value == "ALP" and ws["F1"].value == "Appts"
+    assert ws["B2"].value == "MCM", "the office name stays where the importer reads it"
+    assert ws["C3"].value == "# of Agents" and ws["F3"].value == "SHOW RATE"
+    head = _data_start(ws) - 1
+    assert head == war_export.header_row_index(len(war_export.leaders_of(
+        [{"mga": ws.cell(r, 1).value, "ga": ws.cell(r, 2).value}
+         for r in range(head + 1, ws.max_row + 1)])))
+    assert head > 4, "the old layout put the header on row 4 with nothing above it"
+    assert ws.cell(head, 1).value == "MGA" and ws.cell(head, 22).value == "Show Rate"
+
+
+async def test_rates_are_live_formulas_not_frozen_numbers(client, seeded_db):
+    """The owner asked for formulas: change a SITS cell in Excel and the close
+    ratio, the show rate and the leader rollups all have to move with it."""
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sets=10, sits=6, sales=3,
+               n1=2, gross_alp=1000.0)
+    ws = (await _workbook(client, seeded_db))["Wed"]
+    first = _data_start(ws)
+    row = next(r for r in range(first, ws.max_row + 1)
+               if ws.cell(r, 6).value == "Agent One")
+
+    # Close Rate = SALES/SITS — N1 is NOT subtracted (it is already out of SITS).
+    assert ws.cell(row, 21).value == f"=IFERROR(I{row}/H{row},0)"
+    # Show Rate = (SITS+N1)/SETS — N1 added back, because they did show up.
+    assert ws.cell(row, 22).value == f"=IFERROR(SUM(H{row}+L{row})/G{row},0)"
+    assert ws.cell(row, 21).number_format == "0%"
+
+    assert ws["F4"].value == "=IFERROR((G2+R2)/F2,0)", "office SHOW RATE"
+    assert ws["G4"].value == "=IFERROR(H2/G2,0)", "office CLOSE RATIO"
+    assert ws["C2"].value.startswith("=SUM(T"), "office ALP sums the data range"
+
+
+async def test_one_summary_block_per_leader(client, seeded_db):
+    """MGAs first, then GAs — and each rolls up off the column its own name
+    appears in, A for an MGA and B for a GA."""
+    import war_export
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=1, gross_alp=100.0)
+    ws = (await _workbook(client, seeded_db))["Wed"]
+    head = _data_start(ws) - 1
+    roster = [{"mga": ws.cell(r, 1).value, "ga": ws.cell(r, 2).value}
+              for r in range(head + 1, ws.max_row + 1)]
+    leaders = war_export.leaders_of(roster)
+    assert leaders, "the seeded office has an upline; it must produce blocks"
+
+    for i, (name, col) in enumerate(leaders):
+        row = 5 + 3 * i
+        assert ws[f"B{row}"].value == name
+        assert ws[f"C{row}"].value.startswith(f"=SUMIF({col}")
+        assert ws[f"C{row + 2}"].value.startswith(f"=COUNTIFS({col}")
+        assert ws[f"F{row + 1}"].value == "SHOW RATE"
+    # MGA blocks are listed before GA blocks, as in the real report.
+    cols = [c for _n, c in leaders]
+    assert cols == sorted(cols), "A (MGA) blocks come before B (GA) blocks"
+
+
+async def test_weekly_totals_adds_the_same_cell_across_all_nine_tabs(client, seeded_db):
+    """The office's own template totals all nine tabs, overlap days included —
+    that is what makes the file reconcile against their copy."""
+    import war_import
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=1, gross_alp=100.0)
+    wb = await _workbook(client, seeded_db)
+    ws = wb[war_import.TOTALS_TAB]
+    first = _data_start(ws)
+    formula = ws.cell(first, 7).value          # SETS, first agent
+    assert formula.startswith("=(")
+    for tab in war_import.TAB_DAY_OFFSET:
+        ref = f"'{tab}'" if any(ch in tab for ch in " ()") else tab
+        assert f"{ref}!G{first}" in formula, f"{tab} missing from the weekly total"
+
+
+async def test_every_tab_has_identical_geometry(client, seeded_db):
+    """Weekly Totals adds Wed!G14 to Thurs!G14 and so on, so a row that means
+    one agent on one tab must mean the same agent on all of them."""
+    import war_import
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=1, gross_alp=100.0)
+    wb = await _workbook(client, seeded_db)
+    tabs = [war_import.TOTALS_TAB] + [t for t in war_import.TAB_DAY_OFFSET]
+    layouts = {t: (_data_start(wb[t]),
+                   [wb[t].cell(r, 6).value for r in range(_data_start(wb[t]),
+                                                          wb[t].max_row + 1)])
+               for t in tabs}
+    assert len(set(str(v) for v in layouts.values())) == 1, layouts
+
+
+async def test_generated_workbook_still_reimports(client, seeded_db):
+    """All the styling and formulas in the world are worthless if the office's
+    own parser can no longer read the file back."""
+    import io
+    from datetime import date
+    import war_import
+
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sets=9, sits=5, sales=4,
+               n1=1, gross_alp=1450.0)
+    token = await _rga_admin(seeded_db)
+    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
+                         headers=auth(token))
+    parsed = war_import.parse_workbook(io.BytesIO(r.content), date(2026, 7, 1))
+    # extract_office_name title-cases ALL-CAPS names ("RUST RGA" -> "Rust RGA"),
+    # so a three-letter office code comes back title-cased too. Long-standing
+    # importer behaviour, unrelated to the layout.
+    assert parsed["office"] == "Mcm"
+    row = parsed["days"]["2026-07-01"][0]
+    assert (row["sets"], row["sits"], row["sales"], row["n1"]) == (9, 5, 4, 1)
+    assert row["alp"] == 1450
