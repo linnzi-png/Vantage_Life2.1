@@ -42,6 +42,13 @@ export default function DashboardScreen() {
   // Dashboard defaults to Daily (the specific-day picker only applies here);
   // Weekly/Monthly show a rolling window and hide the day picker.
   const [period, changePeriod] = usePersistedPeriod('vl_dashboard_period', 'daily');
+  // Guards against out-of-order responses: switching tabs quickly (daily ->
+  // weekly -> monthly) fires overlapping fetchAll() calls, and a slower
+  // earlier request can resolve after a faster later one and clobber the
+  // screen with stale data for whatever tab is no longer selected. Bumped at
+  // the start of every fetchAll(); a response is applied only if it's still
+  // the most recently issued one by the time it resolves.
+  const fetchIdRef = React.useRef(0);
 
   const onChangePeriod = (p: Period) => {
     changePeriod(p);
@@ -56,6 +63,7 @@ export default function DashboardScreen() {
     : viewDay ?? 'TODAY';
 
   const fetchAll = useCallback(async () => {
+    const requestId = ++fetchIdRef.current;
     try {
       // Daily uses the (optionally historical) day; weekly/monthly use a rolling
       // window. Every section takes the same window so nothing on screen can
@@ -69,11 +77,16 @@ export default function DashboardScreen() {
           `/api/dashboard/platinum-wall${q}`),
         api<{ offices: OfficeRow[] }>(`/api/dashboard/offices${q}`),
       ]);
+      // A newer fetchAll() started while this one was in flight — its
+      // response (for whatever tab is now selected) already landed or will
+      // land instead. Applying this older response now would overwrite
+      // correct data with stale data for a tab that's no longer active.
+      if (fetchIdRef.current !== requestId) return;
       setSummary(s); setTicker(t.items); setVets(p.vets); setRookies(p.rookies);
       setUnranked(p.unranked || []); setPlatinum(p.platinum_rule || []); setOffices(o.offices);
       if (!viewDay && period === 'daily') setTodayDay(s.sales_day);
     } catch (e) {
-      console.warn('Dashboard fetch error:', e);
+      if (fetchIdRef.current === requestId) console.warn('Dashboard fetch error:', e);
     }
   }, [viewDay, period]);
 
