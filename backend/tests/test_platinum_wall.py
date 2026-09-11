@@ -125,3 +125,33 @@ async def test_wall_is_scoped_to_the_viewers_team(client, seeded_db):
 
     body = (await client.get("/api/dashboard/platinum-wall", headers=auth(token))).json()
     assert all(v["agent_id"] != "AG_2" for v in body["vets"] + body["unranked"])
+
+
+async def test_level_1_sees_their_office_not_just_themselves(client, seeded_db):
+    """Regression: a level_1 agent has no downline, so scoping the wall by
+    visible_agent_ids (built for personal Nightly Numbers privacy) reduced
+    their candidate pool to just their own agent_id — a "team of one." An
+    Agent should see the same real office leaderboard their upline does,
+    not just their own row."""
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    day = server.current_sales_day_str()
+    # AG_3: same office (MCM) as AG_1, but not AG_1's upline or downline.
+    await seeded_db.agent_profiles.insert_one(
+        {"agent_id": "AG_3", "name": "Agent Three", "office": "MCM",
+         "role": "level_1", "upline_id": "GA_1", "is_rookie": False})
+    await entry(seeded_db, day=day, agent_id="AG_3", gross_alp=7500)
+
+    body = (await client.get("/api/dashboard/platinum-wall", headers=auth(token))).json()
+    assert "AG_3" in [v["agent_id"] for v in body["vets"]]
+
+
+async def test_level_1_still_excluded_from_a_different_office(client, seeded_db):
+    """The office scope for level_1 must still keep rival offices apart —
+    it broadens a level_1 agent's pool to their own office, not the company."""
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    day = server.current_sales_day_str()
+    await seeded_db.agent_profiles.update_one({"agent_id": "AG_2"}, {"$set": {"is_rookie": False}})
+    await entry(seeded_db, day=day, agent_id="AG_2", gross_alp=9999)  # office AMP, not AG_1's MCM
+
+    body = (await client.get("/api/dashboard/platinum-wall", headers=auth(token))).json()
+    assert all(v["agent_id"] != "AG_2" for v in body["vets"] + body["unranked"])
