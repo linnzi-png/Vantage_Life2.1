@@ -18,11 +18,15 @@ Structural constants come from war_import. Defining the layout twice is how a
 column shift silently corrupts one path but not the other, so this module owns
 only the summary block, which the importer never reads.
 
-Two deliberate differences from the sample report, both noted at the site:
+Deliberate differences from the sample report, each noted at the site:
   * the office headline sums the data range directly instead of chaining
     through the MGA blocks (see _office_block)
   * the leader blocks bound their SUMIF ranges to the data section instead of
     using whole columns (see _leader_block)
+  * there is no LEADERSHIP ALP rollup — nothing in the app feeds the LDR
+    column it reads (see LDR, below)
+  * Weekly Totals covers the seven days Wed-Tues, not all nine tabs
+    (see build_workbook)
 """
 from __future__ import annotations
 
@@ -45,7 +49,6 @@ import war_import
 # column G down there. Each entry is (summary column, row-1 title, metric key).
 # Written top-down from the real report — do not re-sort into metric order.
 SUMMARY_ALP_COL = "C"
-SUMMARY_LEADERSHIP_ALP_COL = "E"
 SUMMARY_METRICS: List[Tuple[str, str, str]] = [
     ("F", "Appts", "sets"),
     ("G", "Pres", "sits"),
@@ -144,10 +147,18 @@ MGA_COL = _col(war_import.CONTEXT_COLUMNS["mga"])
 GA_COL = _col(war_import.CONTEXT_COLUMNS["ga"])
 CLOSE_COL = _col(war_import.CLOSE_RATE_COLUMN)
 SHOW_COL = _col(war_import.SHOW_RATE_COLUMN)
-# LDR ("is this person a leader?") is column D. It has no field in PulseIn and
-# the app does not track it, so the export leaves it blank and the
-# LEADERSHIP ALP rollup that reads it comes out at 0 rather than invented.
-LDR_COL = "D"
+
+# LDR ("is this person a leader?") is column D of the data section, and the
+# sample report's LEADERSHIP ALP rollup is a SUMIFS over it. The app has no such
+# field, so nothing would ever set it and that rollup could only ever read 0 —
+# a number on the page that means "we don't know", which is worse than no
+# number at all. Dropped per owner (2026-09-11: "ldr can be removed").
+#
+# The data section's column D still carries the "LDR" heading from
+# war_import.HEADER_ROW and stays empty beneath it. That is deliberate: the
+# heading is the real reports' own, and deleting the column would shift Agent,
+# every metric and both rates one to the left, so neither a real report nor a
+# generated one would parse against the other.
 
 
 def _style_span(ws, row: int, first: str, last: str, fill: PatternFill,
@@ -166,7 +177,6 @@ def _style_span(ws, row: int, first: str, last: str, fill: PatternFill,
 def _title_row(ws) -> None:
     """Row 1: the summary block's own column headings."""
     ws["C1"] = "ALP"
-    ws["E1"] = "LEADERSHIP\nALP"
     for col, title, _key in SUMMARY_METRICS:
         ws[f"{col}1"] = title
     _style_span(ws, 1, SUMMARY_FIRST_COL, SUMMARY_LAST_COL, PLUM, HEAD_FONT)
@@ -207,16 +217,13 @@ def _office_block(ws, office: str, first: int, last: int) -> None:
     _title_row(ws)
     ws["B2"] = office
     ws[f"{SUMMARY_ALP_COL}2"] = f"=SUM({DATA_COL['alp']}{first}:{DATA_COL['alp']}{last})"
-    ws[f"{SUMMARY_LEADERSHIP_ALP_COL}2"] = (
-        f'=SUMIFS({DATA_COL["alp"]}{first}:{DATA_COL["alp"]}{last},'
-        f'{LDR_COL}{first}:{LDR_COL}{last},"Y")')
     for col, _title, key in SUMMARY_METRICS:
         ws[f"{col}2"] = f"=SUM({DATA_COL[key]}{first}:{DATA_COL[key]}{last})"
 
     _style_span(ws, 2, SUMMARY_FIRST_COL, SUMMARY_LAST_COL, LEADER, HEAD_FONT)
     ws["B2"].font = Font(name="Calibri", size=11, bold=True, color="FFFFFFFF")
     ws["B2"].alignment = LEFT_WRAP
-    for col in [SUMMARY_ALP_COL, SUMMARY_LEADERSHIP_ALP_COL] + [c for c, _, _ in SUMMARY_METRICS]:
+    for col in [SUMMARY_ALP_COL] + [c for c, _, _ in SUMMARY_METRICS]:
         ws[f"{col}2"].number_format = "0"
         ws[f"{col}2"].alignment = RIGHT
     ws.row_dimensions[2].height = ROW_HEIGHT
@@ -242,10 +249,6 @@ def _leader_block(ws, row: int, name: str, match_col: str,
     ws[f"{SUMMARY_ALP_COL}{row}"] = (
         f"=SUMIF({match_col}{first}:{match_col}{last},B{row},"
         f"{DATA_COL['alp']}{first}:{DATA_COL['alp']}{last})")
-    ws[f"{SUMMARY_LEADERSHIP_ALP_COL}{row}"] = (
-        f'=SUMIFS({DATA_COL["alp"]}{first}:{DATA_COL["alp"]}{last},'
-        f'{match_col}{first}:{match_col}{last},B{row},'
-        f'{LDR_COL}{first}:{LDR_COL}{last},"Y")')
     for col, _title, key in SUMMARY_METRICS:
         ws[f"{col}{row}"] = (
             f"=SUMIF({match_col}{first}:{match_col}{last},B{row},"
@@ -254,7 +257,7 @@ def _leader_block(ws, row: int, name: str, match_col: str,
     _style_span(ws, row, SUMMARY_FIRST_COL, SUMMARY_LAST_COL, LEADER, HEAD_FONT)
     ws[f"B{row}"].font = Font(name="Calibri", size=11, bold=True, color="FFFFFFFF")
     ws[f"B{row}"].alignment = LEFT_WRAP
-    for col in [SUMMARY_ALP_COL, SUMMARY_LEADERSHIP_ALP_COL] + [c for c, _, _ in SUMMARY_METRICS]:
+    for col in [SUMMARY_ALP_COL] + [c for c, _, _ in SUMMARY_METRICS]:
         ws[f"{col}{row}"].number_format = "0"
         ws[f"{col}{row}"].alignment = RIGHT
     ws.row_dimensions[row].height = ROW_HEIGHT
@@ -415,18 +418,17 @@ def build_workbook(office: str, week_start: date, roster: List[Dict[str, Any]],
     Tabs follow war_import.TAB_DAY_OFFSET, so the file spans the same nine days
     as a real report and "Wed (2)"/"Thurs (2)" line up with the next week.
 
-    Weekly Totals adds the same cell across all NINE daily tabs, transcribed
-    from the real report, which does the same. That is the office's definition
-    of the week and it deliberately includes the two overlap days — the point
-    of the overlap is that those days belong to both books (CLAUDE.md, WAR
-    overlap), and a total that dropped them would not reconcile against the
-    office's own copy.
+    Weekly Totals adds the same cell across the SEVEN days of this week,
+    Wednesday through Tuesday (owner, 2026-09-11). "Wed (2)" and "Thurs (2)"
+    are present because a real report carries them, but they are the NEXT
+    week's first two days — counting them here would put the same production in
+    two weeks' totals.
     """
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
-    tabs = list(war_import.TAB_DAY_OFFSET)
-    _write_tab(wb, war_import.TOTALS_TAB, office, roster, None, source_tabs=tabs)
+    week_tabs = [t for t, offset in war_import.TAB_DAY_OFFSET.items() if offset < 7]
+    _write_tab(wb, war_import.TOTALS_TAB, office, roster, None, source_tabs=week_tabs)
     for tab, offset in war_import.TAB_DAY_OFFSET.items():
         day = (week_start + timedelta(days=offset)).strftime("%Y-%m-%d")
         _write_tab(wb, tab, office, roster, by_day.get(day, {}))

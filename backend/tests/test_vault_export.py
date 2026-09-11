@@ -317,9 +317,11 @@ async def test_one_summary_block_per_leader(client, seeded_db):
     assert cols == sorted(cols), "A (MGA) blocks come before B (GA) blocks"
 
 
-async def test_weekly_totals_adds_the_same_cell_across_all_nine_tabs(client, seeded_db):
-    """The office's own template totals all nine tabs, overlap days included —
-    that is what makes the file reconcile against their copy."""
+async def test_weekly_totals_covers_wed_through_tues_only(client, seeded_db):
+    """Seven days, Wed-Tues (owner, 2026-09-11). "Wed (2)" and "Thurs (2)" are
+    on the tab list because a real report carries them, but they are the NEXT
+    week's first two days — counting them here would put the same production in
+    two weeks' totals."""
     import war_import
     await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=1, gross_alp=100.0)
     wb = await _workbook(client, seeded_db)
@@ -327,9 +329,17 @@ async def test_weekly_totals_adds_the_same_cell_across_all_nine_tabs(client, see
     first = _data_start(ws)
     formula = ws.cell(first, 7).value          # SETS, first agent
     assert formula.startswith("=(")
-    for tab in war_import.TAB_DAY_OFFSET:
-        ref = f"'{tab}'" if any(ch in tab for ch in " ()") else tab
-        assert f"{ref}!G{first}" in formula, f"{tab} missing from the weekly total"
+
+    def ref(tab):
+        return f"'{tab}'" if any(ch in tab for ch in " ()") else tab
+
+    for tab, offset in war_import.TAB_DAY_OFFSET.items():
+        present = f"{ref(tab)}!G{first}" in formula
+        if offset < 7:
+            assert present, f"{tab} missing from the weekly total"
+        else:
+            assert not present, f"{tab} is next week and must not be totalled here"
+    assert formula.count("+") == 6, "seven days, six plus signs"
 
 
 async def test_every_tab_has_identical_geometry(client, seeded_db):
@@ -454,3 +464,32 @@ async def test_an_unknown_office_is_refused_rather_than_silently_empty(client, s
                          headers=auth(token))
     assert r.status_code == 404
     assert "AMP" in r.json()["detail"] and "MCM" in r.json()["detail"]
+
+
+async def test_no_leadership_alp_rollup(client, seeded_db):
+    """The sample report's LEADERSHIP ALP is a SUMIFS over the LDR column. The
+    app has no leader flag, so nothing would ever set LDR and that rollup could
+    only read 0 — a number meaning "we don't know", which is worse on a report
+    than no number. Dropped per owner (2026-09-11)."""
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=2, gross_alp=1000.0)
+    ws = (await _workbook(client, seeded_db))["Wed"]
+    assert ws["E1"].value is None and ws["E2"].value is None
+    for row in range(1, _data_start(ws)):
+        for col in "BCDEFGHIJKLMNOPQR":
+            v = ws[f"{col}{row}"].value
+            assert not (isinstance(v, str) and "SUMIFS" in v), f"{col}{row}"
+
+
+async def test_the_ldr_column_keeps_its_place_in_the_data_header(client, seeded_db):
+    """LDR stays as a heading over an empty column. Deleting it would shift
+    Agent, all 14 metrics and both rates one column left, and then neither a
+    real report nor a generated one parses against the other."""
+    import war_import
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=2, gross_alp=1000.0)
+    ws = (await _workbook(client, seeded_db))["Wed"]
+    head = _data_start(ws) - 1
+    assert [ws.cell(head, i + 1).value for i in range(len(war_import.HEADER_ROW))] \
+        == list(war_import.HEADER_ROW)
+    assert ws.cell(head, 4).value == "LDR"
+    assert all(ws.cell(r, 4).value is None
+               for r in range(head + 1, ws.max_row + 1)), "and stays empty"
