@@ -211,12 +211,19 @@ export default function VaultScreen() {
     }
   };
 
-  /** The WAR workbook itself, rebuilt from the app's data — same tabs, same
-   *  columns — so it can sit beside an old report. Web only: the native Share
-   *  sheet takes text, not a binary file. */
+  /** The WAR workbooks themselves, rebuilt from the app's data — same tabs,
+   *  same columns — so they can sit beside an old report.
+   *
+   *  One workbook per office, zipped: a WAR workbook covers a single office by
+   *  construction (its tabs are the days of the week, not the offices), so the
+   *  whole organisation cannot be one file. The office tabs above filter the
+   *  charts, not this — the export is deliberately every office, so nobody is
+   *  left out of the week's reporting.
+   *
+   *  Web only: the native Share sheet takes text, not a binary file. */
   const exportWeekXlsx = async (weekStart: string) => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
-      notify('Open on the web', 'The WAR workbook downloads from the web app — the phone can only share text.');
+      notify('Open on the web', 'The WAR workbooks download from the web app — the phone can only share text.');
       return;
     }
     setExportingXlsx(weekStart);
@@ -224,10 +231,10 @@ export default function VaultScreen() {
       const blob = await apiBlob(`/api/vault/export?week_start=${weekStart}&format=xlsx`);
       const href = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = href; link.download = `${weekStart}_War_Report.xlsx`; link.click();
+      link.href = href; link.download = `${weekStart}_War_Reports.zip`; link.click();
       URL.revokeObjectURL(href);
     } catch (e: unknown) {
-      notify('Export failed', e instanceof Error ? e.message : 'Could not build the workbook.');
+      notify('Export failed', e instanceof Error ? e.message : 'Could not build the workbooks.');
     } finally {
       setExportingXlsx(null);
     }
@@ -405,7 +412,7 @@ export default function VaultScreen() {
                     >
                       <Ionicons name="document-text-outline" size={12} color={COLORS.gold} />
                       <Text style={[styles.exportTxt, { color: COLORS.gold }]}>
-                        {exportingXlsx === w.week_start ? 'BUILDING…' : 'WAR WORKBOOK (.XLSX)'}
+                        {exportingXlsx === w.week_start ? 'BUILDING…' : 'WAR WORKBOOKS — ALL OFFICES'}
                       </Text>
                     </TouchableOpacity>
                   ) : null}

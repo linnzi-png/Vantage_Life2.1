@@ -106,7 +106,7 @@ async def test_admin_gets_the_workbook_but_not_the_flat_csv(client, seeded_db):
     assert csv_r.status_code == 403, "the flat CSV dump stays narrow"
 
     # The workbook is the report the office has always read — admin is enough.
-    xlsx_r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
+    xlsx_r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx&office=MCM",
                               headers=auth(token))
     assert xlsx_r.status_code == 200
 
@@ -164,7 +164,7 @@ async def test_xlsx_rebuilds_a_war_workbook_that_reimports(client, seeded_db):
                n1=1, gross_alp=802.0)
     token = await _rga_admin(seeded_db)
 
-    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
+    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx&office=MCM",
                          headers=auth(token))
     assert r.status_code == 200
     assert "spreadsheetml" in r.headers["content-type"]
@@ -189,7 +189,7 @@ async def test_xlsx_lists_the_whole_roster_even_on_a_quiet_day(client, seeded_db
 
     await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=1, gross_alp=100.0)
     token = await _rga_admin(seeded_db)
-    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
+    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx&office=MCM",
                          headers=auth(token))
     wb = openpyxl.load_workbook(io.BytesIO(r.content), data_only=True)
     ws = wb["Fri"]
@@ -210,7 +210,7 @@ async def test_xlsx_spans_nine_days_like_a_real_report(client, seeded_db):
 
     await _add(seeded_db, "AG_1", "MCM", "2026-07-09", sales=2, gross_alp=900.0)  # Wed (2)
     token = await _rga_admin(seeded_db)
-    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
+    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx&office=MCM",
                          headers=auth(token))
     parsed = war_import.parse_workbook(io.BytesIO(r.content), date(2026, 7, 1))
     assert "2026-07-09" in parsed["days"], "the 8th day must land on the Wed (2) tab"
@@ -218,14 +218,14 @@ async def test_xlsx_spans_nine_days_like_a_real_report(client, seeded_db):
 
 async def test_workbook_still_refused_to_a_non_admin_rga(client, seeded_db):
     token = await _rga(seeded_db)          # level_4, not an admin
-    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
+    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx&office=MCM",
                          headers=auth(token))
     assert r.status_code == 403
 
 
 async def test_xlsx_requires_a_week_start(client, seeded_db):
     token = await _rga_admin(seeded_db)
-    r = await client.get("/api/vault/export?start=2026-07-01&end=2026-07-02&format=xlsx",
+    r = await client.get("/api/vault/export?start=2026-07-01&end=2026-07-02&format=xlsx&office=MCM",
                          headers=auth(token))
     assert r.status_code == 400
 
@@ -248,7 +248,7 @@ async def _workbook(client, db, week_start="2026-07-01"):
     import io
     import openpyxl
     token = await _rga_admin(db)
-    r = await client.get(f"/api/vault/export?week_start={week_start}&format=xlsx",
+    r = await client.get(f"/api/vault/export?week_start={week_start}&format=xlsx&office=MCM",
                          headers=auth(token))
     assert r.status_code == 200, r.text
     # data_only=False: the formulas are the point, and openpyxl never computes
@@ -356,7 +356,7 @@ async def test_generated_workbook_still_reimports(client, seeded_db):
     await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sets=9, sits=5, sales=4,
                n1=1, gross_alp=1450.0)
     token = await _rga_admin(seeded_db)
-    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
+    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx&office=MCM",
                          headers=auth(token))
     parsed = war_import.parse_workbook(io.BytesIO(r.content), date(2026, 7, 1))
     # extract_office_name title-cases ALL-CAPS names ("RUST RGA" -> "Rust RGA"),
@@ -366,3 +366,91 @@ async def test_generated_workbook_still_reimports(client, seeded_db):
     row = parsed["days"]["2026-07-01"][0]
     assert (row["sets"], row["sits"], row["sales"], row["n1"]) == (9, 5, 4, 1)
     assert row["alp"] == 1450
+
+
+# ---------------- every office, not just the biggest one ----------------
+#
+# The workbook used to be built for whichever office carried the most rows that
+# week, so the other offices simply were not in the export (owner, 2026-09-11:
+# "it also needs to cover all four offices"). A WAR workbook covers one office
+# by construction — the tabs are named "Wed", "Thurs" and so on — so the whole
+# organisation comes back as a zip of one workbook per office.
+
+async def _zip(client, db, week_start="2026-07-01"):
+    import io
+    import zipfile
+    token = await _rga_admin(db)
+    r = await client.get(f"/api/vault/export?week_start={week_start}&format=xlsx",
+                         headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/zip"
+    return zipfile.ZipFile(io.BytesIO(r.content))
+
+
+async def test_xlsx_without_an_office_returns_every_office(client, seeded_db):
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=2, gross_alp=1000.0)
+    zf = await _zip(client, seeded_db)
+    assert sorted(zf.namelist()) == [
+        "2026-07-01_AMP_War_Report.xlsx",
+        "2026-07-01_MCM_War_Report.xlsx",
+    ]
+
+
+async def test_a_quiet_office_still_gets_its_workbook(client, seeded_db):
+    """Offices come off the roster, not off the week's production. An office
+    that sold nothing is a fact worth exporting, not a reason to omit it."""
+    import io
+    import openpyxl
+    # Only MCM produced this week; AMP did nothing at all.
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=2, gross_alp=1000.0)
+    zf = await _zip(client, seeded_db)
+
+    amp = openpyxl.load_workbook(io.BytesIO(zf.read("2026-07-01_AMP_War_Report.xlsx")))
+    ws = amp["Wed"]
+    assert ws["B2"].value == "AMP"
+    names = [ws.cell(r, 6).value for r in range(_data_start(ws), ws.max_row + 1)]
+    assert "Agent Two" in names, "AMP's roster is still listed"
+
+
+async def test_each_workbook_carries_only_its_own_office(client, seeded_db):
+    """The whole point of one file per office: MCM's numbers must not land in
+    AMP's book, or neither one reconciles."""
+    import io
+    import openpyxl
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=2, gross_alp=1000.0)
+    await _add(seeded_db, "AG_2", "AMP", "2026-07-01", sales=5, gross_alp=4000.0)
+    zf = await _zip(client, seeded_db)
+
+    for office, agent, alp in (("MCM", "Agent One", 1000), ("AMP", "Agent Two", 4000)):
+        ws = openpyxl.load_workbook(
+            io.BytesIO(zf.read(f"2026-07-01_{office}_War_Report.xlsx")))["Wed"]
+        rows = {ws.cell(r, 6).value: ws.cell(r, 20).value
+                for r in range(_data_start(ws), ws.max_row + 1)}
+        assert rows.get(agent) == alp
+        other = "Agent Two" if agent == "Agent One" else "Agent One"
+        assert other not in rows, f"{other} does not belong in {office}'s book"
+
+
+async def test_the_response_shape_follows_the_request_not_the_data(client, seeded_db):
+    """Naming an office always gives a bare workbook and omitting it always
+    gives a zip — a caller must never have to sniff the content type."""
+    token = await _rga_admin(seeded_db)
+    one = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx&office=AMP",
+                           headers=auth(token))
+    assert "spreadsheetml" in one.headers["content-type"]
+    assert "AMP_War_Report.xlsx" in one.headers["content-disposition"]
+
+    every = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx",
+                             headers=auth(token))
+    assert every.headers["content-type"] == "application/zip"
+    assert "2026-07-01_War_Reports.zip" in every.headers["content-disposition"]
+
+
+async def test_an_unknown_office_is_refused_rather_than_silently_empty(client, seeded_db):
+    """Asking for an office that does not exist used to hand back a workbook
+    with a header and no agents, which reads like a week with no production."""
+    token = await _rga_admin(seeded_db)
+    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx&office=Nowhere",
+                         headers=auth(token))
+    assert r.status_code == 404
+    assert "AMP" in r.json()["detail"] and "MCM" in r.json()["detail"]
