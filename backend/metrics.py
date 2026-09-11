@@ -22,3 +22,23 @@ def close_rate(sales: int, sits: int) -> float:
     Returns 0 when there are no sits.
     """
     return (sales / sits * 100) if sits > 0 else 0
+
+
+def show_rate(sits: int, n1: int, sets: int) -> float:
+    """Show Rate percentage: (Sits + N1) / Sets.
+
+    How many booked appointments actually turned into a face-to-face. It is the
+    mirror image of close_rate on the N1 question, and for the opposite reason:
+    an N1 person DID show up — they sat down and went through the presentation —
+    they simply could not be insured afterwards. So they belong in the numerator
+    here, while close_rate leaves them out because they were never sellable.
+
+    Since the SITS column already excludes N1 visits (see close_rate), N1 has to
+    be added back to recover the true number of appointments kept. Read off the
+    WAR reports themselves, which compute this column as
+    `=IFERROR(SUM(H+L)/G,0)` per agent — H=SITS, L=N1, G=SETS — and the same
+    shape again in the leadership summary block, `=IFERROR((G2+R2)/F2,0)`.
+
+    Returns 0 when no appointments were set.
+    """
+    return ((sits + n1) / sets * 100) if sets > 0 else 0

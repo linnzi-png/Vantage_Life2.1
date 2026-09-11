@@ -18,6 +18,7 @@ import logging
 import re
 import uuid
 import random
+import zipfile
 import httpx
 import pytz
 
@@ -2462,6 +2463,11 @@ async def vault_export(
     report or re-imported unchanged. This is the report the office has always
     worked from, so any admin may pull it.
 
+    A WAR workbook covers one office. `office=NAME` returns that office's
+    workbook; leaving it off returns a zip holding one workbook per office on
+    the caller's visible roster, which is how you get the whole organisation in
+    one download. The response shape follows the parameter, not the data.
+
     `format=csv` is a flat per-agent-per-day dump, a different thing from the
     report, and is restricted to EXPORT_EMAILS."""
     if format not in ("json", "csv", "xlsx"):
@@ -2546,62 +2552,105 @@ async def vault_export(
         if not week_start:
             raise HTTPException(status_code=400,
                                 detail="xlsx export needs week_start=YYYY-MM-DD")
-        # A WAR report covers one office. Without a filter the workbook would
-        # mix offices under a single header, which is not a report anyone can
-        # reconcile — so default to the office carrying the most rows.
-        counts: Dict[str, int] = {}
-        for p in flat:
-            counts[p.get("office") or UNASSIGNED_OFFICE] = \
-                counts.get(p.get("office") or UNASSIGNED_OFFICE, 0) + 1
-        sheet_office = office or (max(counts, key=lambda k: counts[k]) if counts else "Unknown")
-
-        # Every agent in that office, listed on every tab whether or not they
-        # produced — real reports carry the whole roster, and a name vanishing
-        # on a quiet day is exactly what makes two files hard to compare.
+        # A WAR report covers ONE office: the tabs are named "Wed", "Thurs" and
+        # so on, so two offices cannot share a workbook without either mixing
+        # their agents under one header or renaming the tabs — and renaming them
+        # is what stops the file re-importing. So every office gets its own
+        # workbook, and asking for all of them returns a zip of them.
+        #
+        # Offices come off the roster, not off the week's production, so an
+        # office that had a quiet week still gets its file instead of silently
+        # dropping out of the export.
+        roster_q: Dict[str, Any] = {} if ids is None else {"agent_id": {"$in": ids}}
         roster_docs = [
             a async for a in db.agent_profiles.find(
-                {"office": sheet_office},
-                {"_id": 0, "agent_id": 1, "name": 1, "state": 1, "office": 1},
+                roster_q, {"_id": 0, "agent_id": 1, "name": 1, "state": 1, "office": 1},
             )
         ]
-        if ids is not None:
-            allowed = set(ids)
-            roster_docs = [a for a in roster_docs if a["agent_id"] in allowed]
+        by_office: Dict[str, List[Dict[str, Any]]] = {}
+        for a in roster_docs:
+            by_office.setdefault(a.get("office") or UNASSIGNED_OFFICE, []).append(a)
+
+        if office:
+            if office not in by_office:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"no agents in office {office!r}; "
+                           f"known: {', '.join(sorted(by_office)) or 'none'}")
+            wanted = [office]
+        else:
+            wanted = sorted(by_office)
+        # Nothing on the roster at all: still hand back a workbook rather than
+        # an empty zip, so the shape of the response never depends on the data.
+        if not wanted:
+            wanted = [UNASSIGNED_OFFICE]
+            by_office[UNASSIGNED_OFFICE] = []
 
         names = {a["agent_id"]: a.get("name", a["agent_id"]) async for a in
                  db.agent_profiles.find({}, {"_id": 0, "agent_id": 1, "name": 1})}
         roles = {a["agent_id"]: (a.get("role"), a.get("io_role")) async for a in
                  db.agent_profiles.find({}, {"_id": 0, "agent_id": 1, "role": 1, "io_role": 1})}
 
-        roster = []
-        for a in sorted(roster_docs, key=lambda x: x.get("name") or ""):
-            chain = await _ancestor_chain(a["agent_id"])
-            person = {"name": a.get("name", a["agent_id"]), "state": a.get("state"),
-                      "mga": None, "ga": None, "sa": None}
-            for up in chain:
-                role, io_role = roles.get(up, (None, None))
-                if person["sa"] is None and io_role == "SA":
-                    person["sa"] = names.get(up)
-                elif person["ga"] is None and role == "level_2":
-                    person["ga"] = names.get(up)
-                elif person["mga"] is None and role == "level_3":
-                    person["mga"] = names.get(up)
-            roster.append(person)
+        # Every agent in the office, listed on every tab whether or not they
+        # produced — real reports carry the whole roster, and a name vanishing
+        # on a quiet day is exactly what makes two files hard to compare.
+        rosters: Dict[str, List[Dict[str, Any]]] = {}
+        for office_name in wanted:
+            roster = []
+            for a in sorted(by_office[office_name], key=lambda x: x.get("name") or ""):
+                chain = await _ancestor_chain(a["agent_id"])
+                person = {"name": a.get("name", a["agent_id"]), "state": a.get("state"),
+                          "mga": None, "ga": None, "sa": None}
+                for up in chain:
+                    role, io_role = roles.get(up, (None, None))
+                    if person["sa"] is None and io_role == "SA":
+                        person["sa"] = names.get(up)
+                    elif person["ga"] is None and role == "level_2":
+                        person["ga"] = names.get(up)
+                    elif person["mga"] is None and role == "level_3":
+                        person["mga"] = names.get(up)
+                roster.append(person)
+            rosters[office_name] = roster
 
-        rows_by_day: Dict[str, Dict[str, Any]] = {}
+        rows_by_office: Dict[str, Dict[str, Dict[str, Any]]] = {}
         for p in flat:
-            if (p.get("office") or UNASSIGNED_OFFICE) != sheet_office:
-                continue
-            rows_by_day.setdefault(p["date"], {})[p["agent"]] = p
+            office_name = p.get("office") or UNASSIGNED_OFFICE
+            rows_by_office.setdefault(office_name, {}).setdefault(
+                p["date"], {})[p["agent"]] = p
 
-        buf = await asyncio.to_thread(
-            war_export.build_workbook, sheet_office, frm, roster, rows_by_day)
-        safe = re.sub(r"[^A-Za-z0-9]+", "_", sheet_office).strip("_") or "office"
+        def _safe(name: str) -> str:
+            return re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_") or "office"
+
+        def _build_all() -> List[Tuple[str, bytes]]:
+            return [
+                (f"{from_iso}_{_safe(o)}_War_Report.xlsx",
+                 war_export.build_workbook(
+                     o, frm, rosters[o], rows_by_office.get(o, {})).getvalue())
+                for o in wanted
+            ]
+
+        books = await asyncio.to_thread(_build_all)
+
+        # The response shape follows the REQUEST, never the data: name an office
+        # and you get that workbook, ask for all of them and you get a zip, even
+        # if the org happens to have exactly one office today.
+        if office:
+            filename, content = books[0]
+            return Response(
+                content=content,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
+        bundle = io.BytesIO()
+        with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as zf:
+            for filename, content in books:
+                zf.writestr(filename, content)
         return Response(
-            content=buf.getvalue(),
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content=bundle.getvalue(),
+            media_type="application/zip",
             headers={"Content-Disposition":
-                     f'attachment; filename="{from_iso}_{safe}_War_Report.xlsx"'},
+                     f'attachment; filename="{from_iso}_War_Reports.zip"'},
         )
 
     weekly_tabs = []
