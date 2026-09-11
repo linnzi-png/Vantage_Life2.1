@@ -1073,12 +1073,35 @@ async def dashboard_platinum_wall(
     pinned to the current sales day with no way to ask for anything else, so
     every historical day and every rolling window came back empty — the wall was
     the one dashboard section the period selector could not reach.
+
+    Scoping intentionally mirrors visible_agent_ids for level_4/finance_admin
+    (full agency) and level_2/level_3 (their own downline — test_wall_is_
+    scoped_to_the_viewers_team locks this in so one office's numbers never
+    leak into a rival office's wall). level_1 is the one case handled
+    differently on purpose: visible_agent_ids gives a level_1 agent read
+    access to themselves alone (there's no downline below an Agent), so
+    reusing it here collapsed their candidate pool to a "team of one" —
+    every rank-and-file agent saw either nothing or only their own row,
+    never the real leaderboard. Only level_4/finance_admin ever saw a
+    working wall, which is how this went unnoticed. level_1 is scoped to
+    their own office instead — the same team boundary already used
+    elsewhere (office_branding, historical_vault) — so they see the same
+    real top performers their upline does.
     """
-    ids = await visible_agent_ids(user)
     # scoreboard_window resolves daily (optionally historical) and the rolling
     # weekly/monthly ranges identically to the summary above it.
     q, _ = scoreboard_window(period or "daily", sales_day)
-    if ids is not None:
+    role = user.get("role", "level_1")
+    if role == "level_4" or role == FINANCE_ADMIN_ROLE:
+        pass  # full agency — no scoping, same as before
+    elif role == "level_1":
+        me = await db.agent_profiles.find_one({"agent_id": user.get("agent_id")}, {"_id": 0, "office": 1})
+        office = (me or {}).get("office")
+        office_ids = [a["agent_id"] async for a in db.agent_profiles.find(
+            {"office": office}, {"_id": 0, "agent_id": 1})] if office else []
+        q["agent_id"] = {"$in": office_ids}
+    else:
+        ids = await downline_agent_ids(user.get("agent_id"))
         q["agent_id"] = {"$in": ids}
     pipeline = [
         {"$match": q},
