@@ -157,18 +157,24 @@ export function TourOverlay() {
     back();
   }, [back]);
 
+  // finance_admin has no MORE tab (see (tabs)/_layout.tsx) — its every step
+  // lives on /admin, where the replay entry point is the WALKTHROUGH button.
+  const isFinanceAdminTour = steps.length > 0 && steps.every((s) => s.screen === '/admin');
+
   // Android hardware back / web ESC. confirmAsync handles the platform split —
   // Alert is a no-op on web, so this used to skip without asking there.
   const confirmSkip = useCallback(async () => {
     const ok = await confirmAsync({
       title: 'Skip walkthrough?',
-      message: 'You can replay it anytime from MORE → App Walkthrough.',
+      message: isFinanceAdminTour
+        ? 'You can replay it anytime from the WALKTHROUGH button up top.'
+        : 'You can replay it anytime from MORE → App Walkthrough.',
       confirmText: 'Skip',
       cancelText: 'Keep going',
       destructive: true,
     });
     if (ok) skip();
-  }, [skip]);
+  }, [skip, isFinanceAdminTour]);
 
   if (!step) return null;
 

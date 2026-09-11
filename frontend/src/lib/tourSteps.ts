@@ -14,7 +14,9 @@ import { Role } from './auth';
 // Team week picker, Production History charts.
 // v3: Self-Correction Window (3-day picker + correction mode on the Pulse
 // tab, all tiers).
-export const TOUR_VERSION = 3;
+// v4: Hierarchy Map mention in the outro (all tiers); brand-new Financial
+// Admin walkthrough (finance_admin previously had none at all).
+export const TOUR_VERSION = 4;
 
 export type TourAnchorId =
   | 'dash-header'
@@ -37,7 +39,12 @@ export type TourAnchorId =
   | 'vault-health'
   | 'vault-weeks'
   | 'more-tools'
-  | 'more-walkthrough';
+  | 'more-walkthrough'
+  | 'admin-scoreboard'
+  | 'admin-add'
+  | 'admin-war-import'
+  | 'admin-roster'
+  | 'admin-vault-link';
 
 // usePathname() values for the screens the tour can visit.
 export type TourScreen =
@@ -49,7 +56,8 @@ export type TourScreen =
   | '/nominations'
   | '/manager'
   | '/audit'
-  | '/vault';
+  | '/vault'
+  | '/admin';
 
 export interface TourStep {
   id: string;
@@ -225,7 +233,7 @@ const TEAM_STEPS: TourStep[] = [
     screen: '/team',
     anchor: 'team-roster',
     title: 'YOUR TEAM, LIVE',
-    body: "Your full downline rolls up in the TEAM tab — Gross and Net ALP, sales, close rate, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row for a contact card with that agent's 13-week production history.",
+    body: "Your full downline rolls up in the TEAM tab — Gross and Net ALP, sales, close rate, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row for a contact card with that agent's 13-week production history. Bringing someone new onto your team directly? Tap ADD, top right.",
   },
   {
     id: 'team-weeks',
@@ -338,8 +346,67 @@ const OUTRO: TourStep = {
   screen: '/',
   anchor: null,
   title: "YOU'RE READY",
-  body: 'Log your Pulse tonight, watch the wall, and get on the ticker. Replay this walkthrough anytime from MORE → HELP → App Walkthrough.',
+  body: "Log your Pulse tonight, watch the wall, and get on the ticker. Curious how your office fits together? MORE → Hierarchy Map draws the whole company org chart. Replay this walkthrough anytime from MORE → HELP → App Walkthrough.",
 };
+
+// Financial Admin (finance_admin) has no production identity and no tab
+// bar — it lands straight on /admin (see (tabs)/_layout.tsx and
+// app/index.tsx) — so this tour never leaves that one screen. Scope
+// mirrors what admin.tsx actually renders for isFA: roster CRUD limited to
+// level_1..level_3, WAR import, and a Company Health/Vault shortcut.
+// Hierarchy-repair tools, tenure, and admin flags stay is_admin-only and
+// are out of scope here on purpose.
+const FINANCE_ADMIN_STEPS: TourStep[] = [
+  {
+    id: 'fa-welcome',
+    screen: '/admin',
+    anchor: null,
+    title: 'WELCOME, FINANCIAL ADMIN',
+    body: "This account has no production identity — no Pulse, no dashboard, no Platinum Wall. Its whole job lives right here on the Admin Panel: keep the roster current for Agent through MGA, post each week's WAR report, and check company health. About a minute.",
+  },
+  {
+    id: 'fa-scoreboard',
+    screen: '/admin',
+    anchor: 'admin-scoreboard',
+    title: 'LOGIN SCOREBOARD',
+    body: "How much of the roster has actually signed in, at a glance. Tap NOT SIGNED IN further down to filter the list to exactly who still needs to be chased.",
+  },
+  {
+    id: 'fa-add-person',
+    screen: '/admin',
+    anchor: 'admin-add',
+    title: 'ADD TO THE ROSTER',
+    body: "ADD PERSON onboards someone new — name, email, office, and an access tier from Agent up through MGA. Their email must exactly match what they'll sign in with, or they land on the read-only Pending screen instead.",
+  },
+  {
+    id: 'fa-war-import',
+    screen: '/admin',
+    anchor: 'admin-war-import',
+    title: 'POST THE WAR REPORT',
+    body: "Upload the week's WAR spreadsheet here to post production for the whole office in one pass. The importer reconciles the Wednesday/Thursday overlap between consecutive reports automatically — you don't need to hand-edit those days.",
+  },
+  {
+    id: 'fa-roster',
+    screen: '/admin',
+    anchor: 'admin-roster',
+    title: 'SEARCH & MANAGE',
+    body: "Search by name, email, or office, or filter to who's signed in. Tap anyone to change their tier (Agent through MGA) or remove them — removal archives them, it never deletes their sales history, and it can be undone from the archived list below.",
+  },
+  {
+    id: 'fa-vault',
+    screen: '/admin',
+    anchor: 'admin-vault-link',
+    title: 'COMPANY HEALTH',
+    body: "There's no MORE tab here, so this is the door to it: Company Health shows per-office KPIs and trends, plus the archived week snapshots — read access, same as an RGA.",
+  },
+  {
+    id: 'fa-outro',
+    screen: '/admin',
+    anchor: null,
+    title: "THAT'S THE WHOLE PANEL",
+    body: "RGA accounts and other Financial Admin accounts are locked from this seat — only an RGA can touch those. Everything else here — roster, WAR import, Company Health — is yours to run. Replay this walkthrough anytime from the WALKTHROUGH button up top.",
+  },
+];
 
 export function stepsForRole(role: Role): TourStep[] {
   switch (role) {
@@ -378,8 +445,6 @@ export function stepsForRole(role: Role): TourStep[] {
     case 'pending':
       return [];
     case 'finance_admin':
-      // No production identity, no tab bar (see (tabs)/_layout.tsx) — nothing
-      // in this walkthrough applies.
-      return [];
+      return FINANCE_ADMIN_STEPS;
   }
 }

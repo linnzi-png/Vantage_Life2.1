@@ -56,6 +56,9 @@ interface TourCtx {
 const TourContext = createContext<TourCtx | undefined>(undefined);
 
 const TAB_PATHS = ['/', '/pulse', '/shoutouts', '/team', '/more'];
+// finance_admin has no tab bar and no agent_id (see (tabs)/_layout.tsx) — it
+// lands on /admin instead of '/', so its tour auto-launches there.
+const FINANCE_ADMIN_HOME = '/admin';
 
 export function TourProvider({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -108,7 +111,9 @@ export function TourProvider({ children }: { children: ReactNode }) {
   const finish = useCallback(() => {
     persistDone();
     setActive(false);
-    router.navigate('/');
+    // finance_admin has no dashboard to return to — (tabs)/_layout.tsx
+    // bounces it straight back to /admin, so land there directly.
+    router.navigate(tourOwner.current?.role === 'finance_admin' ? '/admin' : '/');
   }, [persistDone]);
 
   const cancel = useCallback(() => setActive(false), []);
@@ -128,10 +133,15 @@ export function TourProvider({ children }: { children: ReactNode }) {
 
   // First-session auto-launch. Guards: a linked, non-pending agent (never
   // levelNum alone — levelNum('pending') is 1) sitting on a tab route.
+  // finance_admin is the one exception: it carries no agent_id (no
+  // production identity) and its "home" is /admin, not a tab route.
   useEffect(() => {
     if (loading || active) return;
-    if (!user || user.role === 'pending' || !user.agent_id) return;
-    if (!TAB_PATHS.includes(pathname)) return;
+    if (!user || user.role === 'pending') return;
+    const isFinanceAdmin = user.role === 'finance_admin';
+    if (!isFinanceAdmin && !user.agent_id) return;
+    const onHome = isFinanceAdmin ? pathname === FINANCE_ADMIN_HOME : TAB_PATHS.includes(pathname);
+    if (!onHome) return;
     const { user_id, role } = user;
     if (doneCache.current.has(tourKey(user_id, role))) return;
     let stale = false;

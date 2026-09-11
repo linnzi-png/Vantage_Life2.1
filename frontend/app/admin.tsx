@@ -11,6 +11,8 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, useAuth, roleTitle, isFinanceAdmin, levelNum, COLORS, Role } from '../src/lib/auth';
+import { useTour } from '../src/lib/tour';
+import { TourAnchor } from '../src/components/TourAnchor';
 import { WarReportImport } from '../src/components/WarReportImport';
 import { OfficeMerge } from '../src/components/OfficeMerge';
 import { OrphanRepair } from '../src/components/OrphanRepair';
@@ -81,6 +83,7 @@ const IO_ROLES = ['Agent', 'SA', 'GA', 'MGA', 'RGA', 'Partner', 'Senior Partner'
 export default function AdminScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { start: startTour } = useTour();
   const isFA = isFinanceAdmin(user?.role);
   // True RGA tier OR is_admin — see has_full_control() in server.py. Per
   // owner (2026-09-01): is_admin holds every capability RGA has, and then
@@ -296,53 +299,77 @@ export default function AdminScreen() {
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <Stack.Screen options={{ title: 'ADMIN PANEL', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-        <Text style={styles.kicker}>ROSTER MANAGEMENT</Text>
-        <Text style={styles.intro}>
-          Tier changes take effect immediately and update both the roster and any linked login.
-        </Text>
-
-        {summary ? (
-          <View style={styles.scoreCard} testID="admin-login-scoreboard">
-            <Text style={styles.scoreKicker}>LOGIN SCOREBOARD</Text>
-            <View style={styles.scoreRow}>
-              <Text style={styles.scoreBig}>
-                {summary.signed_in}
-                <Text style={styles.scoreOf}> / {summary.roster}</Text>
-              </Text>
-              <Text style={styles.scorePct}>
-                {summary.roster > 0 ? Math.round((summary.signed_in / summary.roster) * 100) : 0}%
-              </Text>
-            </View>
-            <View style={styles.scoreTrack}>
-              <View
-                style={[styles.scoreFill,
-                  { width: `${summary.roster > 0 ? Math.round((summary.signed_in / summary.roster) * 100) : 0}%` }]}
-              />
-            </View>
-            <Text style={styles.scoreSub}>
-              {summary.roster - summary.signed_in === 0
-                ? 'Everyone on the roster has signed in.'
-                : `${summary.roster - summary.signed_in} still haven't signed in — tap NOT SIGNED IN below to see who to chase.`}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.kicker}>ROSTER MANAGEMENT</Text>
+            <Text style={styles.intro}>
+              Tier changes take effect immediately and update both the roster and any linked login.
             </Text>
           </View>
+          {isFA ? (
+            // finance_admin has no MORE tab (see (tabs)/_layout.tsx), so there's
+            // no HELP → App Walkthrough entry point either — replay from here.
+            <TouchableOpacity
+              style={styles.walkthroughBtn}
+              onPress={() => startTour('finance_admin')}
+              testID="admin-walkthrough"
+            >
+              <Ionicons name="help-buoy" size={14} color={COLORS.primary} />
+              <Text style={styles.walkthroughBtnTxt}>WALKTHROUGH</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {summary ? (
+          <TourAnchor id="admin-scoreboard">
+            <View style={styles.scoreCard} testID="admin-login-scoreboard">
+              <Text style={styles.scoreKicker}>LOGIN SCOREBOARD</Text>
+              <View style={styles.scoreRow}>
+                <Text style={styles.scoreBig}>
+                  {summary.signed_in}
+                  <Text style={styles.scoreOf}> / {summary.roster}</Text>
+                </Text>
+                <Text style={styles.scorePct}>
+                  {summary.roster > 0 ? Math.round((summary.signed_in / summary.roster) * 100) : 0}%
+                </Text>
+              </View>
+              <View style={styles.scoreTrack}>
+                <View
+                  style={[styles.scoreFill,
+                    { width: `${summary.roster > 0 ? Math.round((summary.signed_in / summary.roster) * 100) : 0}%` }]}
+                />
+              </View>
+              <Text style={styles.scoreSub}>
+                {summary.roster - summary.signed_in === 0
+                  ? 'Everyone on the roster has signed in.'
+                  : `${summary.roster - summary.signed_in} still haven't signed in — tap NOT SIGNED IN below to see who to chase.`}
+              </Text>
+            </View>
+          </TourAnchor>
         ) : null}
 
-        <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd((v) => !v)} testID="admin-toggle-add">
-          <Ionicons name={showAdd ? 'chevron-up' : 'person-add'} size={16} color="#000" />
-          <Text style={styles.addBtnTxt}>{showAdd ? 'Hide Form' : 'Add Person'}</Text>
-        </TouchableOpacity>
+        <TourAnchor id="admin-add">
+          <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd((v) => !v)} testID="admin-toggle-add">
+            <Ionicons name={showAdd ? 'chevron-up' : 'person-add'} size={16} color="#000" />
+            <Text style={styles.addBtnTxt}>{showAdd ? 'Hide Form' : 'Add Person'}</Text>
+          </TouchableOpacity>
+        </TourAnchor>
 
         {isFA ? (
           // finance_admin has no tab bar (see (tabs)/_layout.tsx), so the usual
           // More-tab entry point to Company Health/Historical Vault never
           // renders for it — surface it here instead.
-          <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/vault')} testID="admin-open-vault">
-            <Ionicons name="stats-chart" size={16} color="#000" />
-            <Text style={styles.addBtnTxt}>Company Health / Vault</Text>
-          </TouchableOpacity>
+          <TourAnchor id="admin-vault-link">
+            <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/vault')} testID="admin-open-vault">
+              <Ionicons name="stats-chart" size={16} color="#000" />
+              <Text style={styles.addBtnTxt}>Company Health / Vault</Text>
+            </TouchableOpacity>
+          </TourAnchor>
         ) : null}
 
-        <WarReportImport />
+        <TourAnchor id="admin-war-import">
+          <WarReportImport />
+        </TourAnchor>
 
         {/* Hierarchy-repair tools stay is_admin-only — finance_admin's roster
             write scope is level_1..level_3 add/remove/role-change and the WAR
@@ -453,18 +480,20 @@ export default function AdminScreen() {
           </View>
         ) : null}
 
-        <View style={styles.searchBox}>
-          <Ionicons name="search" size={16} color={COLORS.textDim} />
-          <TextInput
-            style={styles.searchInput}
-            value={filter}
-            onChangeText={setFilter}
-            placeholder="Search name, email, or office"
-            placeholderTextColor={COLORS.textMuted}
-            autoCapitalize="none"
-            testID="admin-search"
-          />
-        </View>
+        <TourAnchor id="admin-roster">
+          <View style={styles.searchBox}>
+            <Ionicons name="search" size={16} color={COLORS.textDim} />
+            <TextInput
+              style={styles.searchInput}
+              value={filter}
+              onChangeText={setFilter}
+              placeholder="Search name, email, or office"
+              placeholderTextColor={COLORS.textMuted}
+              autoCapitalize="none"
+              testID="admin-search"
+            />
+          </View>
+        </TourAnchor>
         <View style={styles.tierRow}>
           {([['all', 'ALL'], ['in', 'SIGNED IN'], ['out', 'NOT SIGNED IN']] as [LoginFilter, string][]).map(([key, label]) => (
             <TouchableOpacity
@@ -728,6 +757,12 @@ export default function AdminScreen() {
 const styles = StyleSheet.create({
   kicker: { color: COLORS.gold, fontWeight: '900', fontSize: 11, letterSpacing: 2 },
   intro: { color: COLORS.textDim, fontSize: 12, marginVertical: 8 },
+  walkthroughBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderColor: COLORS.primary, borderRadius: 6,
+    paddingHorizontal: 10, paddingVertical: 6, marginLeft: 10,
+  },
+  walkthroughBtnTxt: { color: COLORS.primary, fontWeight: '900', fontSize: 10, letterSpacing: 1 },
   scoreCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.gold, borderRadius: 6, padding: 14, marginBottom: 10 },
   scoreKicker: { color: COLORS.gold, fontWeight: '900', fontSize: 9, letterSpacing: 1.2 },
   scoreRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 6 },
