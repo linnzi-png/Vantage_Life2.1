@@ -8,7 +8,9 @@ import { COLORS, roleTitle } from '../lib/auth';
 
 export interface AgentContact {
   name: string;
-  role: string;
+  // Optional on purpose: /api/team and /api/my-upline can omit it for an
+  // unlinked or pending profile, and roleTitle() handles that case.
+  role?: string;
   io_role?: string;
   phone?: string;
   email?: string;
@@ -41,7 +43,7 @@ function openLink(url: string, errorMessage: string) {
 export function AgentContactSheet({ agent, onClose, onEnterNumbers }: Props) {
   if (!agent) return null;
 
-  const label = roleTitle(agent.io_role, agent.role) || agent.role.replace('level_', 'L');
+  const label = roleTitle(agent.io_role, agent.role);
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>

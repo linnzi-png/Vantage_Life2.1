@@ -96,7 +96,7 @@ export default function ShoutoutsScreen() {
                 <Text style={[styles.cardTitle, { color: c.color }]}>{c.title}</Text>
                 <TouchableOpacity
                   onPress={() => setContactAgent({
-                    name: s.agent_name, role: s.role || 'level_1', io_role: s.io_role,
+                    name: s.agent_name, role: s.role, io_role: s.io_role,
                     phone: s.phone, email: s.email, office: s.office,
                   })}
                   activeOpacity={0.7}

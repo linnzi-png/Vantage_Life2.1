@@ -81,15 +81,19 @@ const AuthContext = createContext<AuthCtx | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [agent, setAgent] = useState<AppAgent | null>(null);
-  const [roleLabel, setRoleLabel] = useState<string>('');
   const [loading, setLoading] = useState(true);
+
+  // Derived, never stored. The server's `role_label` is tier-only and never
+  // sees io_role, so a Partner used to read "Partner" on the dashboard and
+  // "Executive Producer" on their own profile card. One expression, one title.
+  const roleLabel = roleTitle(agent?.io_role, user?.role);
 
   const reload = async () => {
     try {
       const tok = await getToken();
       if (!tok) { setUser(null); setAgent(null); setLoading(false); return; }
-      const r = await api<{ user: AppUser; agent: AppAgent | null; role_label: string }>('/api/auth/me');
-      setUser(r.user); setAgent(r.agent); setRoleLabel(r.role_label);
+      const r = await api<{ user: AppUser; agent: AppAgent | null }>('/api/auth/me');
+      setUser(r.user); setAgent(r.agent);
     } catch {
       setUser(null); setAgent(null);
       await setToken(null);
@@ -109,11 +113,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInDemo = async (level: Role) => {
     setLoading(true);
-    const r = await api<{ user: AppUser; session_token: string; role_label: string }>('/api/auth/demo-login', {
+    const r = await api<{ user: AppUser; session_token: string }>('/api/auth/demo-login', {
       method: 'POST', body: JSON.stringify({ level }),
     });
     await setToken(r.session_token);
-    setUser(r.user); setRoleLabel(r.role_label);
+    setUser(r.user);
     await reload();
   };
 
@@ -145,13 +149,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { await api('/api/push/unregister', { method: 'POST' }); } catch {}
     try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
     await setToken(null);
-    setUser(null); setAgent(null); setRoleLabel('');
+    setUser(null); setAgent(null);
   };
 
   const deleteAccount = async () => {
     await api('/api/auth/account', { method: 'DELETE' });
     await setToken(null);
-    setUser(null); setAgent(null); setRoleLabel('');
+    setUser(null); setAgent(null);
   };
 
   const switchRole = async (role: Role) => {
@@ -195,7 +199,7 @@ const IO_ROLE_TITLES: Record<string, string> = {
   inTraining: 'In Training',
 };
 
-const TIER_TITLES: Record<string, string> = {
+export const TIER_TITLES: Record<string, string> = {
   level_1: 'Agent',
   level_2: 'CoExecutive Producer',
   level_3: 'Executive Producer',
@@ -203,11 +207,14 @@ const TIER_TITLES: Record<string, string> = {
   pending: 'Pending Approval',
 };
 
+// Total by construction: every call returns something renderable, so no caller
+// needs a `|| role.replace(...)` fallback (which crashed on a null role).
 export function roleTitle(io_role?: string | null, role?: string | null): string {
   if (io_role && IO_ROLE_TITLES[io_role]) return IO_ROLE_TITLES[io_role];
   if (io_role) return io_role;
   if (role && TIER_TITLES[role]) return TIER_TITLES[role];
-  return '';
+  if (role) return role.replace('level_', 'L');
+  return '—';
 }
 
 export const COLORS = {

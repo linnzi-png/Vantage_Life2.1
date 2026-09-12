@@ -8,13 +8,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import { useAuth, COLORS, Role } from '../src/lib/auth';
+import { useAuth, COLORS, Role, TIER_TITLES } from '../src/lib/auth';
 
-const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] = [
-  { level: 'level_1', title: 'AGENT', subtitle: 'Personal stats + Pulse entry', tint: COLORS.primary },
-  { level: 'level_2', title: 'GA', subtitle: 'Co-Executive Producer · Team view', tint: COLORS.secondary },
-  { level: 'level_3', title: 'MGA', subtitle: 'Executive Producer · Full agency hierarchy', tint: COLORS.gold },
-  { level: 'level_4', title: 'RGA', subtitle: 'Executive · Global view + Eraser + Vault', tint: COLORS.orange },
+// Producer titles come from TIER_TITLES, never from a second copy here — this
+// list used to say "Executive" for level_4 and "Co-Executive Producer" for
+// level_2, both of which disagreed with the rest of the app.
+const LEVELS: { level: Role; title: string; scope: string; tint: string }[] = [
+  { level: 'level_1', title: 'AGENT', scope: 'Personal stats + Pulse entry', tint: COLORS.primary },
+  { level: 'level_2', title: 'GA', scope: 'Team view', tint: COLORS.secondary },
+  { level: 'level_3', title: 'MGA', scope: 'Full agency hierarchy', tint: COLORS.gold },
+  { level: 'level_4', title: 'RGA', scope: 'Global view + Eraser + Vault', tint: COLORS.orange },
 ];
 
 export default function LoginScreen() {
@@ -147,7 +150,7 @@ export default function LoginScreen() {
                 </View>
                 <View style={{ marginLeft: 12, flex: 1 }}>
                   <Text style={styles.lvlTitle}>{l.title}</Text>
-                  <Text style={styles.lvlSub}>{l.subtitle}</Text>
+                  <Text style={styles.lvlSub}>{TIER_TITLES[l.level]} · {l.scope}</Text>
                 </View>
               </View>
               {busy === l.level ? <ActivityIndicator color={l.tint} /> : <Ionicons name="chevron-forward" size={18} color={COLORS.textDim} />}

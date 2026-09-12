@@ -3,7 +3,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS, useAuth, roleTitle } from '../../src/lib/auth';
+import { api, COLORS, useAuth } from '../../src/lib/auth';
 import StatCard from '../../src/components/StatCard';
 import PlatinumWall, { WallItem } from '../../src/components/PlatinumWall';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
@@ -20,7 +20,7 @@ interface Summary {
 const HISTORY_DAYS = 30;
 
 export default function DashboardScreen() {
-  const { user, agent, roleLabel } = useAuth();
+  const { user, roleLabel } = useAuth();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [ticker, setTicker] = useState<TickerItem[]>([]);
   const [vets, setVets] = useState<any[]>([]);
@@ -89,7 +89,7 @@ export default function DashboardScreen() {
       <View style={styles.header} testID="dashboard-header">
         <View>
           <Text style={styles.brand}>VANTAGE<Text style={{ color: COLORS.primary }}>LIFE</Text></Text>
-          <Text style={styles.sub}>{user?.name} · <Text style={{ color: COLORS.primary }}>{roleTitle(agent?.io_role, user?.role) || roleLabel}</Text></Text>
+          <Text style={styles.sub}>{user?.name} · <Text style={{ color: COLORS.primary }}>{roleLabel}</Text></Text>
         </View>
         <TouchableOpacity
           style={[styles.dayPill, viewDay ? styles.dayPillHistory : null]}
@@ -155,7 +155,7 @@ export default function DashboardScreen() {
               rookies={rookies}
               platinum={platinum}
               onPress={(it: WallItem) => setContactAgent({
-                name: it.name, role: it.role || 'level_1', io_role: it.io_role,
+                name: it.name, role: it.role, io_role: it.io_role,
                 phone: it.phone, email: it.email, office: it.office,
               })}
             />
