@@ -7,7 +7,6 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
 import * as AuthSession from 'expo-auth-session';
 import { useAuth, COLORS, Role } from '../src/lib/auth';
 
@@ -31,7 +30,7 @@ const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] =
 ];
 
 export default function LoginScreen() {
-  const { signInDemo, signInApple, signInAuth0, signInGoogleSession } = useAuth();
+  const { signInDemo, signInApple, signInAuth0 } = useAuth();
   const router = useRouter();
   const [busy, setBusy] = useState<Role | 'google' | 'apple' | null>(null);
 
@@ -161,38 +160,17 @@ export default function LoginScreen() {
   };
 
   const onGoogle = async () => {
+    if (!AUTH0_CONFIGURED) {
+      // Missing env vars on this build (e.g. local dev without an Auth0
+      // tenant set up) — not a user-facing sign-in failure to retry.
+      Alert.alert('Google Sign-In Unavailable', 'This build has no Auth0 tenant configured.');
+      return;
+    }
     setBusy('google');
     try {
-      if (AUTH0_CONFIGURED) {
-        // Auth0 Universal Login opens, federates to Google, and the ID token
-        // lands in the authResponse effect above.
-        await promptAuth0();
-        return;
-      }
-      // TEMPORARY: no Auth0 tenant configured on this build yet (see
-      // EMERGENT_AUTH_URL in backend/server.py) — fall back to the Emergent
-      // portal rather than dead-ending on a Google button that can't work.
-      // Remove this branch alongside that backend fallback.
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-        const redirectUrl = window.location.origin + '/';
-        window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-        return;
-      }
-      // Native (iOS/Android): open the same Emergent portal in the system
-      // browser and catch the deep-link redirect back into the app.
-      const redirectUrl = Linking.createURL('');
-      const result = await WebBrowser.openAuthSessionAsync(
-        `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`,
-        redirectUrl,
-      );
-      if (result.type === 'success') {
-        const hash = result.url.split('#')[1] ?? '';
-        const sid = hash.split('session_id=')[1]?.split('&')[0];
-        if (!sid) throw new Error('No session_id returned from sign-in');
-        await signInGoogleSession(sid);
-        router.replace('/');
-      }
+      // Auth0 Universal Login opens, federates to Google, and the ID token
+      // lands in the authResponse effect above.
+      await promptAuth0();
     } catch (e: any) {
       Alert.alert('Sign-In Error', e.message || String(e));
     } finally {
