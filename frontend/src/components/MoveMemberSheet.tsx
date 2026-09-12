@@ -93,7 +93,7 @@ export function MoveMemberSheet({ target, candidates, onClose, onMoved }: Props)
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowName}>{c.name}</Text>
                   <Text style={styles.rowMeta}>
-                    {roleTitle(c.io_role, c.role) || c.role}{c.office ? ` · ${c.office}` : ''}
+                    {roleTitle(c.io_role, c.role)}{c.office ? ` · ${c.office}` : ''}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
