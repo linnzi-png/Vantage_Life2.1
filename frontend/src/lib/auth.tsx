@@ -1,7 +1,9 @@
 // Shared API helper + auth context for VantageLife 2.0
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 import { registerForPulseNotifications } from './push';
+import { notify } from './dialog';
 
 const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const SESSION_KEY = 'vl_session_token';
@@ -84,6 +86,45 @@ export class ApiError extends Error {
 }
 
 /**
+ * The exact 401 messages get_current_user() raises for a dead session
+ * (backend/server.py) — as opposed to a 401 from a sign-in attempt itself
+ * (a bad Apple/Google token), which must NOT bounce the user to /login while
+ * they're already sitting on the login screen trying to sign in.
+ */
+const SESSION_EXPIRED_MESSAGES = new Set([
+  'Not authenticated', 'Invalid session', 'Session expired', 'User not found',
+]);
+
+export function isSessionExpiredError(e: unknown): boolean {
+  return e instanceof ApiError && SESSION_EXPIRED_MESSAGES.has(e.message);
+}
+
+// Set by AuthProvider on mount so a session-expiry discovered by any api()
+// call — not just reload() — can clear the in-memory user/agent state, not
+// only the stored token.
+let clearAuthState: (() => void) | null = null;
+
+// A screen far from /login (e.g. Admin Panel) used to show a bare "Not
+// authenticated" alert and go nowhere — the token was dead but nothing told
+// the user or sent them back to sign in. Any api()/apiUpload()/apiText()/
+// apiBlob() call that hits one of the messages above now clears state, tells
+// the user once, and returns them to /login — instead of leaving them stuck
+// on a screen that can only fail the same way again.
+let sessionExpiredShown = false;
+
+function maybeHandleSessionExpired(message: string): void {
+  if (!SESSION_EXPIRED_MESSAGES.has(message) || sessionExpiredShown) return;
+  sessionExpiredShown = true;
+  clearAuthState?.();
+  setToken(null);
+  notify('Session Expired', 'Please sign in again.');
+  router.replace('/login');
+  // A fresh sign-in gets a fresh token, so this is one-shot per expiry, not
+  // a standing lockout — reset shortly after so a later real expiry can fire.
+  setTimeout(() => { sessionExpiredShown = false; }, 3000);
+}
+
+/**
  * fetch() throws the same generic "TypeError: Network request failed" for a
  * real connectivity problem AND for failures that have nothing to do with
  * the network — e.g. React Native failing to read a picked file's local URI
@@ -155,6 +196,7 @@ export async function apiUpload<T = any>(
   if (!res.ok) {
     let msg = `${res.status}`;
     try { const j = await res.json(); msg = j.detail || msg; } catch {}
+    maybeHandleSessionExpired(msg);
     throw new ApiError(res.status, msg);
   }
   return res.json();
@@ -185,6 +227,7 @@ export async function api<T = any>(path: string, opts: RequestInit = {}): Promis
   if (!res.ok) {
     let msg = `${res.status}`;
     try { const j = await res.json(); msg = j.detail || msg; } catch {}
+    maybeHandleSessionExpired(msg);
     throw new ApiError(res.status, msg);
   }
   return res.json();
@@ -212,6 +255,7 @@ export async function apiText(path: string): Promise<string> {
   if (!res.ok) {
     let msg = `${res.status}`;
     try { const j = await res.json(); msg = j.detail || msg; } catch {}
+    maybeHandleSessionExpired(msg);
     throw new ApiError(res.status, msg);
   }
   return res.text();
@@ -237,6 +281,7 @@ export async function apiBlob(path: string): Promise<Blob> {
   if (!res.ok) {
     let msg = `${res.status}`;
     try { const j = await res.json(); msg = j.detail || msg; } catch {}
+    maybeHandleSessionExpired(msg);
     throw new ApiError(res.status, msg);
   }
   return res.blob();
@@ -266,6 +311,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [agent, setAgent] = useState<AppAgent | null>(null);
   const [roleLabel, setRoleLabel] = useState<string>('');
   const [loading, setLoading] = useState(true);
+
+  // Lets maybeHandleSessionExpired() (any api() call, not just reload())
+  // clear this provider's state when it discovers a dead session.
+  useEffect(() => {
+    clearAuthState = () => { setUser(null); setAgent(null); setRoleLabel(''); };
+    return () => { clearAuthState = null; };
+  }, []);
 
   // A cold start commonly loses the very first request to a not-yet-ready
   // network stack (or a Railway cold spin-up) — that is a transient failure,
