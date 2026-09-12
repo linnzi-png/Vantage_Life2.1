@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, useAuth, roleTitle, isFinanceAdmin, levelNum, COLORS, Role } from '../src/lib/auth';
+import { api, useAuth, roleTitle, isFinanceAdmin, isSessionExpiredError, levelNum, COLORS, Role } from '../src/lib/auth';
 import { useTour } from '../src/lib/tour';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { WarReportImport } from '../src/components/WarReportImport';
@@ -57,6 +57,14 @@ interface RemovePlan {
 }
 
 type LoginFilter = 'all' | 'in' | 'out';
+
+// A dead session already gets its own "Session Expired" alert + redirect to
+// /login from auth.tsx's shared handler — showing this screen's own generic
+// error on top would just be a second, more confusing alert stacked on it.
+const notifyError = (e: unknown, fallback: string): void => {
+  if (isSessionExpiredError(e)) return;
+  notify('Error', e instanceof Error ? e.message : fallback);
+};
 
 // e.g. "Aug 20" this year, "Aug 20, 2025" otherwise; '—' when never signed in.
 const fmtWhen = (iso?: string | null): string => {
@@ -130,7 +138,7 @@ export default function AdminScreen() {
       setArchivedPeople(r.archived || []);
       setSummary(r.summary);
     } catch (e: unknown) {
-      notify('Error', e instanceof Error ? e.message : 'Failed to load roster');
+      notifyError(e, 'Failed to load roster');
     } finally {
       setLoading(false);
     }
@@ -171,7 +179,7 @@ export default function AdminScreen() {
       });
       setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, role } : x)));
     } catch (e: unknown) {
-      notify('Error', e instanceof Error ? e.message : 'Role change failed');
+      notifyError(e, 'Role change failed');
     }
   };
 
@@ -199,7 +207,7 @@ export default function AdminScreen() {
       await api('/api/admin/set-flags', { method: 'POST', body: JSON.stringify({ email: p.email, [flag]: value }) });
       setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, [flag]: value } : x)));
     } catch (e: unknown) {
-      notify('Error', e instanceof Error ? e.message : 'Flag update failed');
+      notifyError(e, 'Flag update failed');
     }
   };
 
@@ -223,7 +231,7 @@ export default function AdminScreen() {
       setShowAdd(false);
       await load();
     } catch (e: unknown) {
-      notify('Error', e instanceof Error ? e.message : 'Could not add person');
+      notifyError(e, 'Could not add person');
     } finally {
       setSaving(false);
     }
@@ -255,7 +263,7 @@ export default function AdminScreen() {
         setDestFor(p);
         return;
       }
-      notify('Error', msg);
+      notifyError(e, 'Remove failed');
     }
   };
 
@@ -272,7 +280,7 @@ export default function AdminScreen() {
         method: 'POST', body: JSON.stringify({ agent_id: p.agent_id, upline_agent_id: uplineId || null }) });
       await load();
     } catch (e: unknown) {
-      notify('Error', e instanceof Error ? e.message : 'Restore failed');
+      notifyError(e, 'Restore failed');
     }
   };
 
@@ -281,7 +289,7 @@ export default function AdminScreen() {
       await api('/api/admin/clear-review', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id }) });
       setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, needs_review: false } : x)));
     } catch (e: unknown) {
-      notify('Error', e instanceof Error ? e.message : 'Could not mark verified');
+      notifyError(e, 'Could not mark verified');
     }
   };
 
@@ -291,7 +299,7 @@ export default function AdminScreen() {
       await api('/api/admin/set-tenure', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id, is_rookie: isRookie }) });
       setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, is_rookie: isRookie } : x)));
     } catch (e: unknown) {
-      notify('Error', e instanceof Error ? e.message : 'Tenure update failed');
+      notifyError(e, 'Tenure update failed');
     }
   };
 
