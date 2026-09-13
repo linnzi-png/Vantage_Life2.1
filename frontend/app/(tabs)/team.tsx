@@ -323,7 +323,7 @@ export default function TeamScreen() {
                 <Ionicons name="chevron-forward" size={12} color={COLORS.textDim} style={{ marginLeft: 'auto' }} />
               </View>
               <Text style={styles.meta}>
-                {r.office} · {roleTitle(r.io_role, r.role) || r.role.replace('level_', 'L')}
+                {r.office} · {roleTitle(r.io_role, r.role)}
                 {r.phone ? ` · ${formatPhone(r.phone)}` : ''}
               </Text>
               {r.alerts?.length ? (

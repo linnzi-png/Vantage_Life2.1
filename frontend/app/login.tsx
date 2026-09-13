@@ -1,15 +1,17 @@
 // Login screen with Google sign-in + 4 demo level buttons (no Google needed)
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
 import * as AuthSession from 'expo-auth-session';
 import { useAuth, COLORS, Role } from '../src/lib/auth';
+// Not Alert.alert: react-native-web ships Alert as an empty function, so every
+// sign-in failure was silent in the browser and the button just looked dead.
+import { notify } from '../src/lib/dialog';
 
 // Completes the popup-based web flow when Auth0 redirects back to the app.
 WebBrowser.maybeCompleteAuthSession();
@@ -31,7 +33,7 @@ const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] =
 ];
 
 export default function LoginScreen() {
-  const { signInDemo, signInApple, signInAuth0, signInGoogleSession } = useAuth();
+  const { signInDemo, signInApple, signInAuth0 } = useAuth();
   const router = useRouter();
   const [busy, setBusy] = useState<Role | 'google' | 'apple' | null>(null);
 
@@ -81,7 +83,7 @@ export default function LoginScreen() {
     if (authResponse.type !== 'success') {
       // 'dismiss'/'cancel' are the user closing the sheet — stay silent.
       if (authResponse.type === 'error') {
-        Alert.alert('Sign-In Error', authResponse.params?.error_description || 'Please try again.');
+        notify('Sign-In Error', authResponse.params?.error_description || 'Please try again.');
       }
       // Reacting to the OAuth flow's outcome, not deriving local state.
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -91,7 +93,7 @@ export default function LoginScreen() {
     const code = authResponse.params.code;
     const codeVerifier = authRequest?.codeVerifier;
     if (!code || !codeVerifier) {
-      Alert.alert('Sign-In Error', 'Google sign-in did not complete. Please try again.');
+      notify('Sign-In Error', 'Google sign-in did not complete. Please try again.');
       setBusy(null);
       return;
     }
@@ -112,7 +114,7 @@ export default function LoginScreen() {
         await signInAuth0(tokenResponse.idToken);
         router.replace('/');
       } catch (e: unknown) {
-        Alert.alert('Sign-In Error', e instanceof Error ? e.message : String(e));
+        notify('Sign-In Error', e instanceof Error ? e.message : String(e));
       } finally {
         setBusy(null);
       }
@@ -126,7 +128,7 @@ export default function LoginScreen() {
       await signInDemo(level);
       router.replace('/');
     } catch (e: any) {
-      Alert.alert('Login Error', e.message || String(e));
+      notify('Login Error', e.message || String(e));
     } finally {
       setBusy(null);
     }
@@ -154,47 +156,26 @@ export default function LoginScreen() {
       const err = e as { code?: string; message?: string };
       // User dismissed the Apple sheet — not an error, stay silent.
       if (err.code === 'ERR_REQUEST_CANCELED' || err.code === 'ERR_CANCELED') return;
-      Alert.alert('Sign-In Error', err.message || 'Unknown error. Please check your connection and try again.');
+      notify('Sign-In Error', err.message || 'Unknown error. Please check your connection and try again.');
     } finally {
       setBusy(null);
     }
   };
 
   const onGoogle = async () => {
+    if (!AUTH0_CONFIGURED) {
+      // Missing env vars on this build (e.g. local dev without an Auth0
+      // tenant set up) — not a user-facing sign-in failure to retry.
+      Alert.alert('Google Sign-In Unavailable', 'This build has no Auth0 tenant configured.');
+      return;
+    }
     setBusy('google');
     try {
-      if (AUTH0_CONFIGURED) {
-        // Auth0 Universal Login opens, federates to Google, and the ID token
-        // lands in the authResponse effect above.
-        await promptAuth0();
-        return;
-      }
-      // TEMPORARY: no Auth0 tenant configured on this build yet (see
-      // EMERGENT_AUTH_URL in backend/server.py) — fall back to the Emergent
-      // portal rather than dead-ending on a Google button that can't work.
-      // Remove this branch alongside that backend fallback.
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-        const redirectUrl = window.location.origin + '/';
-        window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-        return;
-      }
-      // Native (iOS/Android): open the same Emergent portal in the system
-      // browser and catch the deep-link redirect back into the app.
-      const redirectUrl = Linking.createURL('');
-      const result = await WebBrowser.openAuthSessionAsync(
-        `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`,
-        redirectUrl,
-      );
-      if (result.type === 'success') {
-        const hash = result.url.split('#')[1] ?? '';
-        const sid = hash.split('session_id=')[1]?.split('&')[0];
-        if (!sid) throw new Error('No session_id returned from sign-in');
-        await signInGoogleSession(sid);
-        router.replace('/');
-      }
+      // Auth0 Universal Login opens, federates to Google, and the ID token
+      // lands in the authResponse effect above.
+      await promptAuth0();
     } catch (e: any) {
-      Alert.alert('Sign-In Error', e.message || String(e));
+      notify('Sign-In Error', e.message || String(e));
     } finally {
       setBusy(null);
     }

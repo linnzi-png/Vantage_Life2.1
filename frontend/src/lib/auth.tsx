@@ -10,8 +10,8 @@ const SESSION_KEY = 'vl_session_token';
 
 /**
  * A missing EXPO_PUBLIC_BACKEND_URL used to fail silently: every fetch()
- * below just resolved to a bare relative path like "/api/auth/session",
- * which React Native's fetch rejects with "Invalid URL: /api/auth/session" —
+ * below just resolved to a bare relative path like "/api/auth/me",
+ * which React Native's fetch rejects with "Invalid URL: /api/auth/me" —
  * surfaced to the tester as an opaque "Unable to reach the server" alert
  * with no indication it was a build/config problem, not a network one
  * (vantagelife-feedback-db issues #24, #25). EXPO_PUBLIC_ vars are inlined
@@ -296,9 +296,6 @@ interface AuthCtx {
   signInDemo: (level: Role) => Promise<void>;
   signInApple: (identityToken: string, givenName: string | null, familyName: string | null) => Promise<void>;
   signInAuth0: (idToken: string) => Promise<void>;
-  /** TEMPORARY: see EMERGENT_AUTH_URL in backend/server.py — remove once the
-   * OTA rollout to signInAuth0 is confirmed complete on the fleet. */
-  signInGoogleSession: (sessionId: string) => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   switchRole: (role: Role) => Promise<void>;
@@ -309,13 +306,18 @@ const AuthContext = createContext<AuthCtx | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [agent, setAgent] = useState<AppAgent | null>(null);
-  const [roleLabel, setRoleLabel] = useState<string>('');
   const [loading, setLoading] = useState(true);
+
+  // Derived, never stored. The server's `role_label` is tier-only for
+  // producing agents and never sees io_role, so a Partner used to read
+  // "Partner" on the dashboard and "Executive Producer" on their own profile
+  // card. One expression, one title, everywhere.
+  const roleLabel = accountTitle(user, agent);
 
   // Lets maybeHandleSessionExpired() (any api() call, not just reload())
   // clear this provider's state when it discovers a dead session.
   useEffect(() => {
-    clearAuthState = () => { setUser(null); setAgent(null); setRoleLabel(''); };
+    clearAuthState = () => { setUser(null); setAgent(null); };
     return () => { clearAuthState = null; };
   }, []);
 
@@ -331,8 +333,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     for (let attempt = 0; ; attempt++) {
       try {
-        const r = await api<{ user: AppUser; agent: AppAgent | null; role_label: string }>('/api/auth/me');
-        setUser(r.user); setAgent(r.agent); setRoleLabel(r.role_label);
+        const r = await api<{ user: AppUser; agent: AppAgent | null }>('/api/auth/me');
+        setUser(r.user); setAgent(r.agent);
         setLoading(false);
         return;
       } catch (e: unknown) {
@@ -382,11 +384,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInDemo = async (level: Role) => {
     setLoading(true);
-    const r = await api<{ user: AppUser; session_token: string; role_label: string }>('/api/auth/demo-login', {
+    const r = await api<{ user: AppUser; session_token: string }>('/api/auth/demo-login', {
       method: 'POST', body: JSON.stringify({ level }),
     });
     await setToken(r.session_token);
-    setUser(r.user); setRoleLabel(r.role_label);
+    setUser(r.user);
     await reload();
   };
 
@@ -414,32 +416,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await reload();
   };
 
-  const signInGoogleSession = async (sessionId: string) => {
-    // TEMPORARY: the Emergent portal redirects back to the app with a
-    // session_id; exchange it via the temporary /auth/session fallback. Used
-    // only while login.tsx's AUTH0_CONFIGURED is false (Auth0 tenant not set
-    // up yet, or this exact build predates the migration).
-    setLoading(true);
-    const r = await api<{ user: AppUser; session_token: string }>('/api/auth/session', {
-      method: 'POST',
-      body: JSON.stringify({ session_id: sessionId }),
-    });
-    await setToken(r.session_token);
-    setUser(r.user);
-    await reload();
-  };
-
   const signOut = async () => {
     try { await api('/api/push/unregister', { method: 'POST' }); } catch {}
     try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
     await setToken(null);
-    setUser(null); setAgent(null); setRoleLabel('');
+    setUser(null); setAgent(null);
   };
 
   const deleteAccount = async () => {
     await api('/api/auth/account', { method: 'DELETE' });
     await setToken(null);
-    setUser(null); setAgent(null); setRoleLabel('');
+    setUser(null); setAgent(null);
   };
 
   const switchRole = async (role: Role) => {
@@ -450,7 +437,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInAuth0, signInGoogleSession, signOut, deleteAccount, switchRole }}>
+    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInAuth0, signOut, deleteAccount, switchRole }}>
       {children}
     </AuthContext.Provider>
   );
@@ -500,11 +487,26 @@ const TIER_TITLES: Record<string, string> = {
   finance_admin: 'Financial Administrator',
 };
 
+// Total by construction: every call returns something renderable, so no caller
+// needs a `|| role.replace(...)` fallback — those only ever fired on a null or
+// unmapped role, where `.replace` on undefined threw and blanked the screen.
 export function roleTitle(io_role?: string | null, role?: string | null): string {
   if (io_role && IO_ROLE_TITLES[io_role]) return IO_ROLE_TITLES[io_role];
   if (io_role) return io_role;
   if (role && TIER_TITLES[role]) return TIER_TITLES[role];
-  return '';
+  if (role) return role.replace('level_', 'L');
+  return '—';
+}
+
+/**
+ * The signed-in person's own title. Mirrors how /api/auth/me builds
+ * `role_label` — non-producing staff are titled by io_role, a finance admin by
+ * their tier — but unlike the server it also lets a producing agent's io_role
+ * win, so a Partner reads "Partner" here and not "Executive Producer".
+ */
+export function accountTitle(user?: AppUser | null, agent?: AppAgent | null): string {
+  if (isFinanceAdmin(user?.role) && !agent?.non_producing) return TIER_TITLES.finance_admin;
+  return roleTitle(agent?.io_role, user?.role);
 }
 
 export const COLORS = {

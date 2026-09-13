@@ -87,17 +87,6 @@ ADMIN_EMAILS = {
 APPLE_BUNDLE_ID = "com.aopremiere.vantagelife"
 APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
 
-# TEMPORARY ROLLOUT FALLBACK (remove in a follow-up cleanup PR once the OTA
-# update that switches the app to /auth/auth0 is confirmed live on the fleet):
-# Railway deploys this file the instant the Auth0 PR merges, but Expo OTA
-# updates reach installed devices gradually, not instantly. Production is
-# still on the Emergent-proxied Google flow as of this migration (Auth0
-# hasn't shipped yet), so any device that hasn't picked up the new bundle
-# yet must keep being able to complete /auth/session — deleting it in the
-# same commit that adds Auth0 would 404 every sign-in on those devices until
-# their OTA update lands. Owner sign-off, 2026-09-03.
-EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
-
 # Google sign-in goes through Auth0 (replacing both the old Emergent auth
 # proxy and the brief direct-Google-JWKS flow that preceded it). Auth0 issues
 # its own ID token after federating to Google, so we verify against Auth0's
@@ -212,11 +201,6 @@ class StatusCheck(BaseModel):
 
 class DemoLoginIn(BaseModel):
     level: str  # level_1..level_4
-
-
-class SessionExchangeIn(BaseModel):
-    """TEMPORARY: see EMERGENT_AUTH_URL — remove alongside /auth/session."""
-    session_id: str
 
 
 class AppleLoginIn(BaseModel):
@@ -672,27 +656,6 @@ async def verify_auth0_token(id_token: str) -> Dict[str, Any]:
 # =========================================================
 #                       AUTH ROUTES
 # =========================================================
-
-@api_router.post("/auth/session")
-async def auth_session(payload: SessionExchangeIn, response: Response):
-    """TEMPORARY: exchange an Emergent session_id for a session_token. See
-    EMERGENT_AUTH_URL — kept only so devices still on the pre-Auth0 bundle
-    can keep signing in until the OTA update reaches them; remove this route
-    alongside that constant once rollout is confirmed."""
-    async with httpx.AsyncClient(timeout=15.0) as cli:
-        r = await cli.get(EMERGENT_AUTH_URL, headers={"X-Session-ID": payload.session_id})
-    if r.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid session_id")
-    data = r.json()
-    email = data.get("email")
-    name = data.get("name") or email
-    picture = data.get("picture")
-    session_token = data.get("session_token") or f"st_{uuid.uuid4().hex}"
-
-    user = await upsert_user_and_session(email=email, name=name, picture=picture, session_token=session_token)
-    set_session_cookie(response, session_token)
-    return {"user": user, "session_token": session_token}
-
 
 @api_router.post("/auth/demo-login")
 async def demo_login(payload: DemoLoginIn, response: Response):
@@ -1531,19 +1494,85 @@ async def _ancestor_chain(agent_id: str) -> List[str]:
 
 async def send_expo_push(push_tokens: List[str], title: str, body: str) -> None:
     """Send via Expo's push HTTP API. No credentials needed for the standard
-    managed workflow — just valid ExponentPushToken[...] strings."""
+    managed workflow — just valid ExponentPushToken[...] strings.
+
+    Expo returns HTTP 200 even when an individual message fails -- the
+    per-message result ("ticket") is in the response body, not the status
+    code. Previously that body was never read, so a rejected push (a stale
+    token, missing APNs/FCM credentials, etc.) looked identical to a
+    delivered one: no error anywhere, nothing to retry. Every ticket --
+    delivered or rejected -- is now logged to push_log (surfaced at
+    GET /api/admin/push-log) so the full send history is visible, not just
+    the failures, and a token Expo reports as DeviceNotRegistered is
+    deleted so it stops being retried forever.
+
+    The recipient's agent_id is looked up from push_tokens (not passed in)
+    so every call site gets this for free -- push_tokens is the only place
+    that mapping lives, and it's already keyed by the same token."""
     if not push_tokens:
         return
+    owners = {
+        t["push_token"]: t.get("agent_id")
+        async for t in db.push_tokens.find({"push_token": {"$in": push_tokens}}, {"_id": 0, "push_token": 1, "agent_id": 1})
+    }
     messages = [{"to": t, "title": title, "body": body, "sound": "default"} for t in push_tokens]
     try:
         async with httpx.AsyncClient(timeout=10.0) as client_http:
-            await client_http.post(
+            resp = await client_http.post(
                 "https://exp.host/--/api/v2/push/send",
                 json=messages,
                 headers={"Accept": "application/json", "Content-Type": "application/json"},
             )
+        tickets = resp.json().get("data", [])
+        for token, ticket in zip(push_tokens, tickets):
+            is_error = ticket.get("status") == "error"
+            error_code = (ticket.get("details") or {}).get("error") if is_error else None
+            if is_error:
+                logger.warning(f"Expo push rejected for {token}: {error_code or ticket.get('message')}")
+            await db.push_log.insert_one({
+                "push_token": token,
+                "agent_id": owners.get(token),
+                "title": title,
+                "body": body,
+                "status": "error" if is_error else "ok",
+                "error_code": error_code,
+                "error_message": ticket.get("message") if is_error else None,
+                "ts": now_utc(),
+            })
+            if error_code == "DeviceNotRegistered":
+                await db.push_tokens.delete_many({"push_token": token})
     except Exception as e:
         logger.warning(f"Expo push send failed: {e}")
+
+
+@api_router.get("/admin/push-log")
+async def admin_push_log(user: Dict[str, Any] = Depends(require_level4_or_admin)):
+    """Recent Expo push attempts, delivered and rejected alike -- the only
+    place a silently rejected notification (stale token, missing push
+    credentials, etc.) becomes visible. Same shape/limit convention as
+    GET /manager/audit.
+
+    Enriched with the recipient's name/office/role (batch lookup, no N+1 --
+    same pattern as GET /shoutouts) so the frontend can group by team and
+    show who a push actually went to, not just a bare device token."""
+    cur = db.push_log.find({}, {"_id": 0}).sort("ts", -1).limit(200)
+    items = []
+    async for f in cur:
+        if isinstance(f.get("ts"), datetime):
+            f["ts"] = iso_utc(f["ts"])
+        items.append(f)
+    recipient_ids = list({i["agent_id"] for i in items if i.get("agent_id")})
+    recipients = {
+        a["agent_id"]: a async for a in db.agent_profiles.find(
+            {"agent_id": {"$in": recipient_ids}}, {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1})
+    }
+    for i in items:
+        r = recipients.get(i.get("agent_id"))
+        i["recipient_name"] = r["name"] if r else None
+        i["recipient_office"] = r.get("office") if r else None
+        i["recipient_role"] = r.get("role") if r else None
+        i["recipient_io_role"] = r.get("io_role") if r else None
+    return {"items": items}
 
 
 def _current_escalation_stage(dt_local: datetime) -> Optional[Dict[str, Any]]:

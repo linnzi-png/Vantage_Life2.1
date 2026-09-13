@@ -106,7 +106,7 @@ function AgentCard({ agent, onPress }: { agent: HierarchyAgent; onPress: () => v
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.name} numberOfLines={1}>{agent.name}</Text>
         <Text style={[styles.title, { color }]} numberOfLines={1}>
-          {roleTitle(agent.io_role, agent.role) || agent.role.replace('level_', 'L')}
+          {roleTitle(agent.io_role, agent.role)}
         </Text>
       </View>
       {agent.is_rookie ? (

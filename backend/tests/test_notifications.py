@@ -282,3 +282,130 @@ async def test_push_failure_never_fails_the_submission(client, seeded_db, monkey
     assert r.status_code == 200, r.text
     entry = await seeded_db.production_entries.find_one({"agent_id": "AG_1"})
     assert entry is not None
+
+
+# ---------------- Expo response handling (send_expo_push internals) ----------------
+
+class _FakeExpoResponse:
+    def __init__(self, tickets):
+        self._tickets = tickets
+
+    def json(self):
+        return {"data": self._tickets}
+
+
+class _FakeExpoClient:
+    """Stands in for httpx.AsyncClient — captures the request, returns
+    whatever ticket list the test wants back from Expo's push API."""
+    def __init__(self, tickets):
+        self._tickets = tickets
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, json, headers):
+        return _FakeExpoResponse(self._tickets)
+
+
+def _patch_expo(monkeypatch, tickets):
+    monkeypatch.setattr(server.httpx, "AsyncClient", lambda **kw: _FakeExpoClient(tickets))
+
+
+async def test_expo_error_ticket_is_logged_for_admin_visibility(seeded_db, monkeypatch):
+    """A rejected message (bad payload, missing credentials, etc.) used to
+    vanish silently -- Expo's 200 response hid the per-message error. It
+    must now land in push_log so GET /admin/push-log surfaces it."""
+    _patch_expo(monkeypatch, [{"status": "error", "message": "boom", "details": {"error": "MessageTooBig"}}])
+    await server.send_expo_push(["tok_1"], "Title", "Body")
+    entry = await seeded_db.push_log.find_one({"push_token": "tok_1"}, {"_id": 0})
+    assert entry["status"] == "error"
+    assert entry["error_code"] == "MessageTooBig"
+    assert entry["error_message"] == "boom"
+
+
+async def test_expo_device_not_registered_prunes_the_stale_token(seeded_db, monkeypatch):
+    """DeviceNotRegistered means the token is permanently dead (uninstalled
+    app, reset simulator, ...) -- keeping it around just means retrying a
+    push that can never succeed, forever. It must be deleted."""
+    await seeded_db.push_tokens.insert_one({"user_id": "u1", "agent_id": "AG_1", "push_token": "tok_stale"})
+    _patch_expo(monkeypatch, [{"status": "error", "details": {"error": "DeviceNotRegistered"}}])
+    await server.send_expo_push(["tok_stale"], "Title", "Body")
+    assert await seeded_db.push_tokens.find_one({"push_token": "tok_stale"}) is None
+
+
+async def test_expo_ok_ticket_is_also_logged(seeded_db, monkeypatch):
+    """Delivered pushes are logged too, not just failures — the log is the
+    full send history, so an admin can tell "never sent" apart from "sent
+    but rejected" apart from "sent and delivered"."""
+    _patch_expo(monkeypatch, [{"status": "ok", "id": "receipt_1"}])
+    await server.send_expo_push(["tok_ok"], "Title", "Body")
+    entry = await seeded_db.push_log.find_one({"push_token": "tok_ok"}, {"_id": 0})
+    assert entry["status"] == "ok"
+    assert entry["error_code"] is None
+
+
+# ---------------- GET /admin/push-log ----------------
+
+async def test_push_log_requires_level4_or_admin(client, seeded_db):
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    r = await client.get("/api/admin/push-log", headers=auth(token))
+    assert r.status_code == 403
+
+
+async def test_push_log_returns_recent_entries_of_every_status(client, seeded_db):
+    await seeded_db.push_log.insert_many([
+        {"push_token": "tok_1", "title": "VantageLife", "body": "msg", "status": "error",
+         "error_code": "DeviceNotRegistered", "error_message": None, "ts": server.now_utc()},
+        {"push_token": "tok_2", "title": "VantageLife", "body": "msg", "status": "ok",
+         "error_code": None, "error_message": None, "ts": server.now_utc()},
+    ])
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/admin/push-log", headers=auth(token))
+    assert r.status_code == 200, r.text
+    items = r.json()["items"]
+    assert len(items) == 2
+    statuses = {i["status"] for i in items}
+    assert statuses == {"error", "ok"}
+
+
+async def test_send_expo_push_captures_the_recipient_agent_id(seeded_db, monkeypatch):
+    """The log used to show only a bare device token — no way to tell who a
+    push actually went to. send_expo_push looks the owner up from
+    push_tokens (the only place that mapping lives) at send time."""
+    await seeded_db.push_tokens.insert_one({"user_id": "u_ga1", "agent_id": "GA_1", "push_token": "tok_ga1"})
+    _patch_expo(monkeypatch, [{"status": "ok", "id": "receipt_1"}])
+    await server.send_expo_push(["tok_ga1"], "Title", "Body")
+    entry = await seeded_db.push_log.find_one({"push_token": "tok_ga1"}, {"_id": 0})
+    assert entry["agent_id"] == "GA_1"
+
+
+async def test_push_log_enriches_recipient_name_office_and_role(client, seeded_db):
+    await seeded_db.push_log.insert_one({
+        "push_token": "tok_ga1", "agent_id": "GA_1", "title": "VantageLife", "body": "msg",
+        "status": "ok", "error_code": None, "error_message": None, "ts": server.now_utc(),
+    })
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/admin/push-log", headers=auth(token))
+    assert r.status_code == 200, r.text
+    item = r.json()["items"][0]
+    assert item["recipient_name"] == "Ga One"
+    assert item["recipient_office"] == "MCM"
+    assert item["recipient_role"] == "level_2"
+
+
+async def test_push_log_recipient_fields_are_none_without_a_matching_agent(client, seeded_db):
+    """A push to a plain is_admin account (no agent_id) or a pruned/unknown
+    token must not 500 or fake a recipient — the fields stay null."""
+    await seeded_db.push_log.insert_one({
+        "push_token": "tok_admin", "agent_id": None, "title": "VantageLife", "body": "msg",
+        "status": "ok", "error_code": None, "error_message": None, "ts": server.now_utc(),
+    })
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/admin/push-log", headers=auth(token))
+    assert r.status_code == 200, r.text
+    item = r.json()["items"][0]
+    assert item["recipient_name"] is None
+    assert item["recipient_office"] is None
