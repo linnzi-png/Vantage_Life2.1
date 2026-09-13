@@ -166,7 +166,7 @@ export default function LoginScreen() {
     if (!AUTH0_CONFIGURED) {
       // Missing env vars on this build (e.g. local dev without an Auth0
       // tenant set up) — not a user-facing sign-in failure to retry.
-      Alert.alert('Google Sign-In Unavailable', 'This build has no Auth0 tenant configured.');
+      notify('Google Sign-In Unavailable', 'This build has no Auth0 tenant configured.');
       return;
     }
     setBusy('google');
