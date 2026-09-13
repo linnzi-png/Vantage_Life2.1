@@ -369,3 +369,43 @@ async def test_push_log_returns_recent_entries_of_every_status(client, seeded_db
     assert len(items) == 2
     statuses = {i["status"] for i in items}
     assert statuses == {"error", "ok"}
+
+
+async def test_send_expo_push_captures_the_recipient_agent_id(seeded_db, monkeypatch):
+    """The log used to show only a bare device token — no way to tell who a
+    push actually went to. send_expo_push looks the owner up from
+    push_tokens (the only place that mapping lives) at send time."""
+    await seeded_db.push_tokens.insert_one({"user_id": "u_ga1", "agent_id": "GA_1", "push_token": "tok_ga1"})
+    _patch_expo(monkeypatch, [{"status": "ok", "id": "receipt_1"}])
+    await server.send_expo_push(["tok_ga1"], "Title", "Body")
+    entry = await seeded_db.push_log.find_one({"push_token": "tok_ga1"}, {"_id": 0})
+    assert entry["agent_id"] == "GA_1"
+
+
+async def test_push_log_enriches_recipient_name_office_and_role(client, seeded_db):
+    await seeded_db.push_log.insert_one({
+        "push_token": "tok_ga1", "agent_id": "GA_1", "title": "VantageLife", "body": "msg",
+        "status": "ok", "error_code": None, "error_message": None, "ts": server.now_utc(),
+    })
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/admin/push-log", headers=auth(token))
+    assert r.status_code == 200, r.text
+    item = r.json()["items"][0]
+    assert item["recipient_name"] == "Ga One"
+    assert item["recipient_office"] == "MCM"
+    assert item["recipient_role"] == "level_2"
+
+
+async def test_push_log_recipient_fields_are_none_without_a_matching_agent(client, seeded_db):
+    """A push to a plain is_admin account (no agent_id) or a pruned/unknown
+    token must not 500 or fake a recipient — the fields stay null."""
+    await seeded_db.push_log.insert_one({
+        "push_token": "tok_admin", "agent_id": None, "title": "VantageLife", "body": "msg",
+        "status": "ok", "error_code": None, "error_message": None, "ts": server.now_utc(),
+    })
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/admin/push-log", headers=auth(token))
+    assert r.status_code == 200, r.text
+    item = r.json()["items"][0]
+    assert item["recipient_name"] is None
+    assert item["recipient_office"] is None
