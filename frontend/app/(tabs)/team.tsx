@@ -1,6 +1,6 @@
 // Team View — Level 2+
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,7 +34,7 @@ const ALERT_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export default function TeamScreen() {
-  const { user, agent } = useAuth();
+  const { user, agent, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<TeamRow[]>([]);
   const [moveTarget, setMoveTarget] = useState<TeamRow | null>(null);
   const [upline, setUpline] = useState<AgentContact | null>(null);
@@ -174,6 +174,19 @@ export default function TeamScreen() {
   const visible = q
     ? sorted.filter((r) => `${r.name} ${r.office} ${roleTitle(r.io_role, r.role)}`.toLowerCase().includes(q))
     : sorted;
+
+  // `user` is null while AuthProvider restores the session, and
+  // levelNum(undefined) is 0 — so without this every GA and above was shown
+  // the lock screen for a beat on every cold start.
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.empty}>
+          <ActivityIndicator color={COLORS.primary} accessibilityLabel="Checking your access" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (levelNum(user?.role) < 2) {
     return (

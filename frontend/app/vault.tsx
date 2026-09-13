@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import { api, apiText, apiBlob, COLORS, useAuth } from '../src/lib/auth';
+import { api, apiText, apiBlob, COLORS, useAuth, levelNum } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { notify } from '../src/lib/dialog';
 import { LineChart, BarChart, Point } from '../src/components/Charts';
@@ -83,7 +83,7 @@ export default function VaultScreen() {
   const [cmp, setCmp] = useState<Compare | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
   const [exportingCsv, setExportingCsv] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   // Two different grants, deliberately. The workbook is the report the office
   // has always read, so any admin gets it; the flat CSV is a wider dump and is
   // narrower. Offering a button the server refuses is worse than hiding it, and
@@ -252,6 +252,28 @@ export default function VaultScreen() {
       setExportingCsv(null);
     }
   };
+
+  // This screen's header has said "Level 4 only" since it was written, but it
+  // had no client-side gate at all: the only role reads were the two export
+  // grants above. The backend enforces the endpoints, so nothing leaked — but
+  // anyone reaching /vault got the full chrome and then silent empties, which
+  // reads as a broken screen rather than one they shouldn't be on.
+  if (authLoading) {
+    return (
+      <View style={styles.gate}>
+        <ActivityIndicator color={COLORS.primary} accessibilityLabel="Checking your access" />
+      </View>
+    );
+  }
+  if (levelNum(user?.role) < 4) {
+    return (
+      <View style={styles.gate}>
+        <Stack.Screen options={{ title: 'COMPANY HEALTH', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
+        <Ionicons name="lock-closed" size={32} color={COLORS.textDim} />
+        <Text style={styles.gateTxt}>Company Health is an RGA-only view.</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -466,6 +488,8 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
 }
 
 const styles = StyleSheet.create({
+  gate: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bg, padding: 28, gap: 12 },
+  gateTxt: { color: COLORS.textDim, fontSize: 14, textAlign: 'center' },
   kicker: { color: COLORS.primary, fontWeight: '900', fontSize: 11, letterSpacing: 2 },
   intro: { color: COLORS.textDim, fontSize: 12, marginVertical: 8 },
   loading: { padding: 40, alignItems: 'center' },

@@ -1,17 +1,17 @@
-// Manager Command Panel — Net ALP Eraser (Level 4 only)
+// Manager Command Panel — Net ALP Eraser (MGA/RGA only)
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { api, COLORS, useAuth, levelNum } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
-import { notify } from '../src/lib/dialog';
+import { confirmAsync, notify } from '../src/lib/dialog';
 
 interface AgentRow { agent_id: string; name: string; office: string; gross_alp: number; net_alp: number; sales: number; }
 
 export default function ManagerScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [list, setList] = useState<AgentRow[]>([]);
   const [selected, setSelected] = useState<AgentRow | null>(null);
   const [newAlp, setNewAlp] = useState('');
@@ -31,6 +31,17 @@ export default function ManagerScreen() {
     })();
   }, []);
 
+  // `user` is null for the whole of AuthProvider's first load, and
+  // levelNum(undefined) is 0, so without this every MGA and RGA was shown the
+  // lock screen for a moment on every cold start and deep link.
+  if (authLoading) {
+    return (
+      <View style={styles.lock}>
+        <ActivityIndicator color={COLORS.primary} accessibilityLabel="Checking your access" />
+      </View>
+    );
+  }
+
   // Matches the backend: /api/manager/erase is level_3+ (MGA + RGA).
   if (levelNum(user?.role) < 3) {
     return (
@@ -43,6 +54,23 @@ export default function ManagerScreen() {
     const v = parseFloat(newAlp);
     if (isNaN(v)) return notify('Enter a valid Net ALP value.');
     if (reason.trim().length < 10) return notify('Reason must be at least 10 characters.');
+
+    // This rewrites a person's Net ALP for a sales day and is not undoable —
+    // it only leaves an audit entry. A tier change is already gated behind a
+    // confirm in admin.tsx; an irreversible money adjustment had none.
+    const from = `$${Math.round(selected.net_alp).toLocaleString()}`;
+    const to = `$${Math.round(v).toLocaleString()}`;
+    const ok = await confirmAsync({
+      title: 'Apply this adjustment?',
+      message:
+        `${selected.name} · ${salesDay}\n\n` +
+        `Net ALP ${from} → ${to}\n\n` +
+        'Gross ALP and the Platinum Wall are unchanged. This cannot be undone — it is recorded in the audit log with your name and reason.',
+      confirmText: 'Apply',
+      destructive: true,
+    });
+    if (!ok) return;
+
     setBusy(true);
     try {
       const r = await api<{ ok: boolean; delta: number; audit: any }>('/api/manager/erase', {

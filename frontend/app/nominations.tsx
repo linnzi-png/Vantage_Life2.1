@@ -1,7 +1,7 @@
 // Platinum Rule nominations inbox — level_2+ endorse (SA is a level_2 title,
 // so SA/GA/MGA/RGA); MGA/RGA post to the Platinum Wall.
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,7 +26,7 @@ interface Nomination {
 }
 
 export default function NominationsScreen() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const lvl = levelNum(user?.role);
   const canEndorse = lvl >= 2;
   const [items, setItems] = useState<Nomination[]>([]);
@@ -88,6 +88,19 @@ export default function NominationsScreen() {
       setBusyId(null);
     }
   };
+
+  // Same as the Team tab: the tier is unknown until AuthProvider resolves, so
+  // gating on it immediately flashed the lock screen at everyone entitled.
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <Stack.Screen options={{ title: 'NOMINATIONS' }} />
+        <View style={styles.center}>
+          <ActivityIndicator color={COLORS.primary} accessibilityLabel="Checking your access" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!canEndorse) {
     return (
