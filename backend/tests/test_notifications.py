@@ -317,12 +317,13 @@ def _patch_expo(monkeypatch, tickets):
 async def test_expo_error_ticket_is_logged_for_admin_visibility(seeded_db, monkeypatch):
     """A rejected message (bad payload, missing credentials, etc.) used to
     vanish silently -- Expo's 200 response hid the per-message error. It
-    must now land in push_delivery_failures so GET /admin/push-log surfaces it."""
+    must now land in push_log so GET /admin/push-log surfaces it."""
     _patch_expo(monkeypatch, [{"status": "error", "message": "boom", "details": {"error": "MessageTooBig"}}])
     await server.send_expo_push(["tok_1"], "Title", "Body")
-    failure = await seeded_db.push_delivery_failures.find_one({"push_token": "tok_1"}, {"_id": 0})
-    assert failure["error_code"] == "MessageTooBig"
-    assert failure["error_message"] == "boom"
+    entry = await seeded_db.push_log.find_one({"push_token": "tok_1"}, {"_id": 0})
+    assert entry["status"] == "error"
+    assert entry["error_code"] == "MessageTooBig"
+    assert entry["error_message"] == "boom"
 
 
 async def test_expo_device_not_registered_prunes_the_stale_token(seeded_db, monkeypatch):
@@ -335,10 +336,15 @@ async def test_expo_device_not_registered_prunes_the_stale_token(seeded_db, monk
     assert await seeded_db.push_tokens.find_one({"push_token": "tok_stale"}) is None
 
 
-async def test_expo_ok_ticket_is_not_logged(seeded_db, monkeypatch):
+async def test_expo_ok_ticket_is_also_logged(seeded_db, monkeypatch):
+    """Delivered pushes are logged too, not just failures — the log is the
+    full send history, so an admin can tell "never sent" apart from "sent
+    but rejected" apart from "sent and delivered"."""
     _patch_expo(monkeypatch, [{"status": "ok", "id": "receipt_1"}])
     await server.send_expo_push(["tok_ok"], "Title", "Body")
-    assert await seeded_db.push_delivery_failures.count_documents({}) == 0
+    entry = await seeded_db.push_log.find_one({"push_token": "tok_ok"}, {"_id": 0})
+    assert entry["status"] == "ok"
+    assert entry["error_code"] is None
 
 
 # ---------------- GET /admin/push-log ----------------
@@ -349,14 +355,17 @@ async def test_push_log_requires_level4_or_admin(client, seeded_db):
     assert r.status_code == 403
 
 
-async def test_push_log_returns_recent_failures(client, seeded_db):
-    await seeded_db.push_delivery_failures.insert_one({
-        "push_token": "tok_1", "title": "VantageLife", "body": "msg",
-        "error_code": "DeviceNotRegistered", "error_message": None, "ts": server.now_utc(),
-    })
+async def test_push_log_returns_recent_entries_of_every_status(client, seeded_db):
+    await seeded_db.push_log.insert_many([
+        {"push_token": "tok_1", "title": "VantageLife", "body": "msg", "status": "error",
+         "error_code": "DeviceNotRegistered", "error_message": None, "ts": server.now_utc()},
+        {"push_token": "tok_2", "title": "VantageLife", "body": "msg", "status": "ok",
+         "error_code": None, "error_message": None, "ts": server.now_utc()},
+    ])
     token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
     r = await client.get("/api/admin/push-log", headers=auth(token))
     assert r.status_code == 200, r.text
     items = r.json()["items"]
-    assert len(items) == 1
-    assert items[0]["error_code"] == "DeviceNotRegistered"
+    assert len(items) == 2
+    statuses = {i["status"] for i in items}
+    assert statuses == {"error", "ok"}
