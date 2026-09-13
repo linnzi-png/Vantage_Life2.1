@@ -1,6 +1,6 @@
 // Executive Dashboard — default screen
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth } from '../../src/lib/auth';
@@ -13,6 +13,7 @@ import Ticker, { TickerItem } from '../../src/components/Ticker';
 import { AgentHistory } from '../../src/components/AgentHistory';
 import { PeriodSelector, usePersistedPeriod, Period } from '../../src/components/PeriodSelector';
 import { TourAnchor } from '../../src/components/TourAnchor';
+import { LoadState } from '../../src/components/LoadState';
 
 interface Summary {
   total_alp: number; total_net_alp: number; total_sits: number; total_sales: number;
@@ -39,6 +40,21 @@ export default function DashboardScreen() {
   const [viewDay, setViewDay] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [todayDay, setTodayDay] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Which window the summary on screen was fetched for. Switching
+  // Daily/Weekly/Monthly or picking a past day keeps the previous summary
+  // while the new request is in flight; without this, a failed scope change
+  // would be masked and last week's figures would sit under the new label.
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  // The wall and the office tiles are scoped too, so they need their own
+  // scope and error: leaving their arrays untouched when their request fails
+  // made an outage render as the wall's "No production in this period", and
+  // across a scope change it relabelled one window's producers as another's.
+  const [wallScope, setWallScope] = useState<string | null>(null);
+  const [wallError, setWallError] = useState<string | null>(null);
+  const [officesScope, setOfficesScope] = useState<string | null>(null);
+  const [officesError, setOfficesError] = useState<string | null>(null);
   // Dashboard defaults to Daily (the specific-day picker only applies here);
   // Weekly/Monthly show a rolling window and hide the day picker.
   const [period, changePeriod] = usePersistedPeriod('vl_dashboard_period', 'daily');
@@ -62,15 +78,25 @@ export default function DashboardScreen() {
     ? period.toUpperCase()
     : viewDay ?? 'TODAY';
 
+  const scopeKey = period !== 'daily' ? `period:${period}` : `day:${viewDay ?? 'today'}`;
+  const summaryMatchesScope = loadedScope === scopeKey;
+  const wallMatchesScope = wallScope === scopeKey;
+  const officesMatchScope = officesScope === scopeKey;
+
   const fetchAll = useCallback(async () => {
     const requestId = ++fetchIdRef.current;
+    const scope = period !== 'daily' ? `period:${period}` : `day:${viewDay ?? 'today'}`;
     try {
       // Daily uses the (optionally historical) day; weekly/monthly use a rolling
       // window. Every section takes the same window so nothing on screen can
       // disagree with anything else — the wall used to ignore it entirely and
       // was therefore always empty for a historical day. Ticker stays live.
       const q = period !== 'daily' ? `?period=${period}` : (viewDay ? `?sales_day=${viewDay}` : '');
-      const [s, t, p, o] = await Promise.all([
+      // allSettled, not all: with Promise.all a single failing section —
+      // the ticker, say — rejected the whole batch, so none of the four
+      // setState calls ran, `summary` stayed null, and the screen showed a
+      // bare spinner forever. Each section now lands or fails on its own.
+      const [s, t, p, o] = await Promise.allSettled([
         api<Summary>(`/api/dashboard/summary${q}`),
         api<{ items: TickerItem[] }>('/api/dashboard/ticker'),
         api<{ vets: WallItem[]; rookies: WallItem[]; unranked?: WallItem[]; platinum_rule?: PlatinumRulePost[] }>(
@@ -82,11 +108,51 @@ export default function DashboardScreen() {
       // land instead. Applying this older response now would overwrite
       // correct data with stale data for a tab that's no longer active.
       if (fetchIdRef.current !== requestId) return;
-      setSummary(s); setTicker(t.items); setVets(p.vets); setRookies(p.rookies);
-      setUnranked(p.unranked || []); setPlatinum(p.platinum_rule || []); setOffices(o.offices);
-      if (!viewDay && period === 'daily') setTodayDay(s.sales_day);
+
+      // The summary is the screen: without it there are no cards and no
+      // header, so its failure is the one the user has to be told about.
+      if (s.status === 'fulfilled') {
+        setSummary(s.value);
+        setLoadedScope(scope);
+        setError(null);
+        if (!viewDay && period === 'daily') setTodayDay(s.value.sales_day);
+      } else {
+        const e = s.reason;
+        setError(e instanceof Error ? e.message : 'The dashboard could not be loaded.');
+      }
+
+      // The ticker is unscoped and live, so stale items are still true — a
+      // failed tick just leaves the last ones running.
+      if (t.status === 'fulfilled') setTicker(t.value.items);
+
+      // The wall and the office tiles ARE scoped, so a failure cannot leave
+      // their previous contents standing: they would be presented under the
+      // new windowLabel as if they belonged to it. Each records the scope its
+      // data answers, and the render below refuses to show a mismatch.
+      if (p.status === 'fulfilled') {
+        setVets(p.value.vets);
+        setRookies(p.value.rookies);
+        setUnranked(p.value.unranked || []);
+        setPlatinum(p.value.platinum_rule || []);
+        setWallScope(scope);
+        setWallError(null);
+      } else {
+        const e = p.reason;
+        setWallError(e instanceof Error ? e.message : 'The Platinum Wall could not be loaded.');
+      }
+
+      if (o.status === 'fulfilled') {
+        setOffices(o.value.offices);
+        setOfficesScope(scope);
+        setOfficesError(null);
+      } else {
+        const e = o.reason;
+        setOfficesError(e instanceof Error ? e.message : 'Office production could not be loaded.');
+      }
     } catch (e) {
       if (fetchIdRef.current === requestId) console.warn('Dashboard fetch error:', e);
+    } finally {
+      if (fetchIdRef.current === requestId) setLoading(false);
     }
   }, [viewDay, period]);
 
@@ -164,9 +230,21 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
       >
-        {!summary ? (
-          <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
-        ) : (
+        <LoadState
+          // A summary fetched for another window is not an answer for this
+          // one, so a period or day change shows the spinner rather than the
+          // previous window's figures under the new label.
+          loading={loading || !summaryMatchesScope}
+          // Masked only for a failure that leaves a correct summary on
+          // screen: those numbers are still the last good ones for this
+          // window. A failed scope change has no such summary, so it
+          // surfaces with RETRY.
+          error={summary && summaryMatchesScope ? null : error}
+          onRetry={fetchAll}
+          loadingText="Loading production…"
+          testID="dashboard"
+        >
+          {!summary || !summaryMatchesScope ? null : (
           <>
             <Text style={styles.sectionTitle}>
               {period !== 'daily'
@@ -200,6 +278,13 @@ export default function DashboardScreen() {
             </TourAnchor>
 
             <TourAnchor id="dash-wall">
+              <LoadState
+                loading={!wallMatchesScope && !wallError}
+                error={wallMatchesScope ? null : wallError}
+                onRetry={fetchAll}
+                loadingText="Loading the wall…"
+                testID="dashboard-wall"
+              >
               <PlatinumWall
                 vets={vets}
                 rookies={rookies}
@@ -211,9 +296,18 @@ export default function DashboardScreen() {
                   phone: it.phone, email: it.email, office: it.office,
                 })}
               />
+              </LoadState>
             </TourAnchor>
 
-            <OfficeTabs offices={offices} windowLabel={windowLabel} />
+            <LoadState
+              loading={!officesMatchScope && !officesError}
+              error={officesMatchScope ? null : officesError}
+              onRetry={fetchAll}
+              loadingText="Loading offices…"
+              testID="dashboard-offices"
+            >
+              <OfficeTabs offices={offices} windowLabel={windowLabel} />
+            </LoadState>
 
             {user?.agent_id ? (
               <TourAnchor id="dash-history">
@@ -223,7 +317,8 @@ export default function DashboardScreen() {
 
             <View style={{ height: 40 }} />
           </>
-        )}
+          )}
+        </LoadState>
       </ScrollView>
 
       <TourAnchor id="dash-ticker">
