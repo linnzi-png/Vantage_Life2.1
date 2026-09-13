@@ -1504,9 +1504,17 @@ async def send_expo_push(push_tokens: List[str], title: str, body: str) -> None:
     delivered or rejected -- is now logged to push_log (surfaced at
     GET /api/admin/push-log) so the full send history is visible, not just
     the failures, and a token Expo reports as DeviceNotRegistered is
-    deleted so it stops being retried forever."""
+    deleted so it stops being retried forever.
+
+    The recipient's agent_id is looked up from push_tokens (not passed in)
+    so every call site gets this for free -- push_tokens is the only place
+    that mapping lives, and it's already keyed by the same token."""
     if not push_tokens:
         return
+    owners = {
+        t["push_token"]: t.get("agent_id")
+        async for t in db.push_tokens.find({"push_token": {"$in": push_tokens}}, {"_id": 0, "push_token": 1, "agent_id": 1})
+    }
     messages = [{"to": t, "title": title, "body": body, "sound": "default"} for t in push_tokens]
     try:
         async with httpx.AsyncClient(timeout=10.0) as client_http:
@@ -1523,6 +1531,7 @@ async def send_expo_push(push_tokens: List[str], title: str, body: str) -> None:
                 logger.warning(f"Expo push rejected for {token}: {error_code or ticket.get('message')}")
             await db.push_log.insert_one({
                 "push_token": token,
+                "agent_id": owners.get(token),
                 "title": title,
                 "body": body,
                 "status": "error" if is_error else "ok",
@@ -1541,13 +1550,28 @@ async def admin_push_log(user: Dict[str, Any] = Depends(require_level4_or_admin)
     """Recent Expo push attempts, delivered and rejected alike -- the only
     place a silently rejected notification (stale token, missing push
     credentials, etc.) becomes visible. Same shape/limit convention as
-    GET /manager/audit."""
+    GET /manager/audit.
+
+    Enriched with the recipient's name/office/role (batch lookup, no N+1 --
+    same pattern as GET /shoutouts) so the frontend can group by team and
+    show who a push actually went to, not just a bare device token."""
     cur = db.push_log.find({}, {"_id": 0}).sort("ts", -1).limit(200)
     items = []
     async for f in cur:
         if isinstance(f.get("ts"), datetime):
             f["ts"] = iso_utc(f["ts"])
         items.append(f)
+    recipient_ids = list({i["agent_id"] for i in items if i.get("agent_id")})
+    recipients = {
+        a["agent_id"]: a async for a in db.agent_profiles.find(
+            {"agent_id": {"$in": recipient_ids}}, {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1})
+    }
+    for i in items:
+        r = recipients.get(i.get("agent_id"))
+        i["recipient_name"] = r["name"] if r else None
+        i["recipient_office"] = r.get("office") if r else None
+        i["recipient_role"] = r.get("role") if r else None
+        i["recipient_io_role"] = r.get("io_role") if r else None
     return {"items": items}
 
 
