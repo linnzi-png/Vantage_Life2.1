@@ -8,6 +8,7 @@ import { AuthProvider } from '../src/lib/auth';
 import { TourProvider } from '../src/lib/tour';
 import { TourOverlay } from '../src/components/TourOverlay';
 import NotificationNagOverlay from '../src/components/NotificationNagOverlay';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
 
 // Keep the splash visible until the layout tree is mounted.
 // Without this, the splash auto-hides before React has painted the dark
@@ -27,6 +28,10 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0D0D0D' }}>
       <SafeAreaProvider>
         <AuthProvider>
+          {/* Inside AuthProvider on purpose: a render throw in a screen shows
+              the recovery card while the session stays loaded, so TRY AGAIN
+              re-mounts the screen rather than signing the agent back in. */}
+          <ErrorBoundary>
           <TourProvider>
             <StatusBar style="light" />
             <Stack
@@ -54,6 +59,7 @@ export default function RootLayout() {
             <TourOverlay />
             <NotificationNagOverlay />
           </TourProvider>
+          </ErrorBoundary>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
