@@ -1,7 +1,7 @@
 // Login screen with Google sign-in + 4 demo level buttons (no Google needed)
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,9 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { useAuth, COLORS, Role } from '../src/lib/auth';
+// Not Alert.alert: react-native-web ships Alert as an empty function, so every
+// sign-in failure was silent in the browser and the button just looked dead.
+import { notify } from '../src/lib/dialog';
 
 // Completes the popup-based web flow when Auth0 redirects back to the app.
 WebBrowser.maybeCompleteAuthSession();
@@ -80,7 +83,7 @@ export default function LoginScreen() {
     if (authResponse.type !== 'success') {
       // 'dismiss'/'cancel' are the user closing the sheet — stay silent.
       if (authResponse.type === 'error') {
-        Alert.alert('Sign-In Error', authResponse.params?.error_description || 'Please try again.');
+        notify('Sign-In Error', authResponse.params?.error_description || 'Please try again.');
       }
       // Reacting to the OAuth flow's outcome, not deriving local state.
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -90,7 +93,7 @@ export default function LoginScreen() {
     const code = authResponse.params.code;
     const codeVerifier = authRequest?.codeVerifier;
     if (!code || !codeVerifier) {
-      Alert.alert('Sign-In Error', 'Google sign-in did not complete. Please try again.');
+      notify('Sign-In Error', 'Google sign-in did not complete. Please try again.');
       setBusy(null);
       return;
     }
@@ -111,7 +114,7 @@ export default function LoginScreen() {
         await signInAuth0(tokenResponse.idToken);
         router.replace('/');
       } catch (e: unknown) {
-        Alert.alert('Sign-In Error', e instanceof Error ? e.message : String(e));
+        notify('Sign-In Error', e instanceof Error ? e.message : String(e));
       } finally {
         setBusy(null);
       }
@@ -125,7 +128,7 @@ export default function LoginScreen() {
       await signInDemo(level);
       router.replace('/');
     } catch (e: any) {
-      Alert.alert('Login Error', e.message || String(e));
+      notify('Login Error', e.message || String(e));
     } finally {
       setBusy(null);
     }
@@ -153,7 +156,7 @@ export default function LoginScreen() {
       const err = e as { code?: string; message?: string };
       // User dismissed the Apple sheet — not an error, stay silent.
       if (err.code === 'ERR_REQUEST_CANCELED' || err.code === 'ERR_CANCELED') return;
-      Alert.alert('Sign-In Error', err.message || 'Unknown error. Please check your connection and try again.');
+      notify('Sign-In Error', err.message || 'Unknown error. Please check your connection and try again.');
     } finally {
       setBusy(null);
     }
@@ -172,7 +175,7 @@ export default function LoginScreen() {
       // lands in the authResponse effect above.
       await promptAuth0();
     } catch (e: any) {
-      Alert.alert('Sign-In Error', e.message || String(e));
+      notify('Sign-In Error', e.message || String(e));
     } finally {
       setBusy(null);
     }
