@@ -42,6 +42,11 @@ export default function DashboardScreen() {
   const [todayDay, setTodayDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Which window the summary on screen was fetched for. Switching
+  // Daily/Weekly/Monthly or picking a past day keeps the previous summary
+  // while the new request is in flight; without this, a failed scope change
+  // would be masked and last week's figures would sit under the new label.
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
   // Dashboard defaults to Daily (the specific-day picker only applies here);
   // Weekly/Monthly show a rolling window and hide the day picker.
   const [period, changePeriod] = usePersistedPeriod('vl_dashboard_period', 'daily');
@@ -65,8 +70,12 @@ export default function DashboardScreen() {
     ? period.toUpperCase()
     : viewDay ?? 'TODAY';
 
+  const scopeKey = period !== 'daily' ? `period:${period}` : `day:${viewDay ?? 'today'}`;
+  const summaryMatchesScope = loadedScope === scopeKey;
+
   const fetchAll = useCallback(async () => {
     const requestId = ++fetchIdRef.current;
+    const scope = period !== 'daily' ? `period:${period}` : `day:${viewDay ?? 'today'}`;
     try {
       // Daily uses the (optionally historical) day; weekly/monthly use a rolling
       // window. Every section takes the same window so nothing on screen can
@@ -94,6 +103,7 @@ export default function DashboardScreen() {
       // header, so its failure is the one the user has to be told about.
       if (s.status === 'fulfilled') {
         setSummary(s.value);
+        setLoadedScope(scope);
         setError(null);
         if (!viewDay && period === 'daily') setTodayDay(s.value.sales_day);
       } else {
@@ -194,16 +204,20 @@ export default function DashboardScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
       >
         <LoadState
-          loading={loading && !summary}
-          // Once the summary is on screen, a failed refresh leaves it there:
-          // the numbers are still the last good ones, and replacing them with
-          // an error card mid-glance helps nobody.
-          error={summary ? null : error}
+          // A summary fetched for another window is not an answer for this
+          // one, so a period or day change shows the spinner rather than the
+          // previous window's figures under the new label.
+          loading={loading || !summaryMatchesScope}
+          // Masked only for a failure that leaves a correct summary on
+          // screen: those numbers are still the last good ones for this
+          // window. A failed scope change has no such summary, so it
+          // surfaces with RETRY.
+          error={summary && summaryMatchesScope ? null : error}
           onRetry={fetchAll}
           loadingText="Loading production…"
           testID="dashboard"
         >
-          {!summary ? null : (
+          {!summary || !summaryMatchesScope ? null : (
           <>
             <Text style={styles.sectionTitle}>
               {period !== 'daily'
