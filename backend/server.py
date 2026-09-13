@@ -2431,6 +2431,55 @@ async def agent_history(
     return {"agent": profile, "series": series}
 
 
+@api_router.get("/agents/{agent_id}/day")
+async def agent_day(
+    agent_id: str,
+    sales_day: Optional[str] = None,
+    user: Dict[str, Any] = Depends(require_agent_or_finance_admin),
+):
+    """What one agent submitted for one sales_day — read-only drill-down from
+    the agent card's date picker.
+
+    Same RBAC as agent_history (visible_agent_ids), and same day validation as
+    the self-correction screen (resolve_history_day: no future dates, defaults
+    to today). Unlike pulse_me_day, this is not self-only — an upline may look
+    at any downline agent's day, same scope as agent_history. It is read-only:
+    no correction path lives here, that stays on pulse_correct (self) and the
+    Manager Eraser (upline), both unchanged by this endpoint.
+
+    Returns the day's summed 14-field totals (aggregate_full_pulse — the same
+    helper the correction screen uses, so the numbers are guaranteed to match
+    what a correction would start from) plus close_rate / show_rate /
+    alp_per_sale computed the canonical way, via metrics.py, never inline.
+    """
+    ids = await visible_agent_ids(user)
+    if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
+        raise HTTPException(status_code=403, detail="Not in your team")
+
+    profile = await db.agent_profiles.find_one(
+        {"agent_id": agent_id},
+        {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1},
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    sd = resolve_history_day(sales_day)
+    q = {"agent_id": agent_id, "sales_day": sd}
+    totals = await aggregate_full_pulse(q)
+    entry_count = await db.production_entries.count_documents(q)
+
+    return {
+        "agent": profile,
+        "sales_day": sd,
+        "totals": totals,
+        "close_rate": round(metrics.close_rate(totals["sales"], totals["sits"]), 1),
+        "show_rate": round(metrics.show_rate(totals["sits"], totals["n1"], totals["sets"]), 1),
+        "alp_per_sale": round(totals["gross_alp"] / totals["sales"], 2) if totals["sales"] else 0.0,
+        "has_entries": entry_count > 0,
+        "entry_count": entry_count,
+    }
+
+
 @api_router.get("/vault/trends")
 async def vault_trends(
     office: Optional[str] = None,

@@ -4,7 +4,7 @@ import {
   Linking, Platform, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, roleTitle } from '../lib/auth';
+import { COLORS, roleTitle, useAuth, levelNum, Role } from '../lib/auth';
 import { notify } from '../lib/dialog';
 import { AgentHistory } from './AgentHistory';
 
@@ -52,9 +52,19 @@ function openLink(url: string, errorMessage: string) {
 }
 
 export function AgentContactSheet({ agent, onClose, onEnterNumbers, onMove, onRemove }: Props) {
+  const { user } = useAuth();
+
   if (!agent) return null;
 
   const label = roleTitle(agent.io_role, agent.role);
+  // Coaching Tips is a leader tool: show it only when the viewer outranks the
+  // agent on this card and it isn't the viewer's own card (an RGA viewing
+  // another RGA, or anyone viewing themselves, sits at equal level and gets
+  // nothing here). Levels alone are enough — a viewer who isn't actually this
+  // agent's upline never gets this far anyway, because AgentHistory hides
+  // itself entirely on the 403 visible_agent_ids() already enforces.
+  const isSelf = !!agent.agent_id && agent.agent_id === user?.agent_id;
+  const showCoachingTips = !isSelf && levelNum(user?.role as Role | undefined) > levelNum(agent.role as Role | undefined);
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -198,7 +208,7 @@ export function AgentContactSheet({ agent, onClose, onEnterNumbers, onMove, onRe
           </TouchableOpacity>
         ) : null}
 
-        {agent.agent_id ? <AgentHistory agentId={agent.agent_id} /> : null}
+        {agent.agent_id ? <AgentHistory agentId={agent.agent_id} showCoachingTips={showCoachingTips} /> : null}
         </ScrollView>
 
         <TouchableOpacity style={styles.closeBtn} onPress={onClose}>

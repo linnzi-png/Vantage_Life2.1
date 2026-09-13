@@ -164,3 +164,82 @@ async def test_team_weeks_is_scoped_to_the_callers_team(client, seeded_db):
 async def test_team_weeks_requires_level_2(client, seeded_db):
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     assert (await client.get("/api/team/weeks", headers=auth(token))).status_code == 403
+
+
+# ---------------- agent day: what one agent submitted on one date ----------------
+
+async def test_agent_day_returns_totals_for_that_sales_day_only(client, seeded_db):
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sets=10, sits=8, sales=3, n1=1, gross_alp=750.0)
+    await entry(seeded_db, day="2026-02-19", agent_id="AG_1", sets=5, sits=4, sales=9, gross_alp=9000.0)  # different day
+
+    r = await client.get("/api/agents/AG_1/day?sales_day=2026-02-18", headers=auth(token))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["sales_day"] == "2026-02-18"
+    assert body["totals"]["sales"] == 3
+    assert body["totals"]["gross_alp"] == 750.0
+    assert body["has_entries"] is True
+    assert body["entry_count"] == 1
+    # 3 sales / 8 sits = 37.5% (close_rate never subtracts N1 twice)
+    assert body["close_rate"] == 37.5
+    # show_rate = (sits + n1) / sets = (8 + 1) / 10 = 90%
+    assert body["show_rate"] == 90.0
+    assert body["alp_per_sale"] == 250.0
+
+
+async def test_agent_day_with_no_submission_is_a_clean_zero_not_an_error(client, seeded_db):
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/agents/AG_1/day?sales_day=2026-02-18", headers=auth(token))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["has_entries"] is False
+    assert body["entry_count"] == 0
+    assert body["totals"]["sales"] == 0
+    assert body["close_rate"] == 0
+    assert body["show_rate"] == 0
+
+
+async def test_agent_day_sums_multiple_entries_same_day(client, seeded_db):
+    """A correction adds a second row for the same sales_day — the day view
+    must show the true current total, same as the self-correction screen."""
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sales=2, gross_alp=400.0)
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sales=1, gross_alp=100.0, is_adjustment=True)
+    body = (await client.get("/api/agents/AG_1/day?sales_day=2026-02-18", headers=auth(token))).json()
+    assert body["totals"]["sales"] == 3
+    assert body["totals"]["gross_alp"] == 500.0
+    assert body["entry_count"] == 2
+
+
+async def test_agent_day_defaults_to_today_when_sales_day_omitted(client, seeded_db):
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/agents/AG_1/day", headers=auth(token))
+    assert r.status_code == 200
+    assert r.json()["sales_day"] == server.current_sales_day_str()
+
+
+async def test_agent_day_rejects_a_future_date(client, seeded_db):
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/agents/AG_1/day?sales_day=2099-01-01", headers=auth(token))
+    assert r.status_code == 400
+
+
+async def test_agent_cannot_read_a_peers_day(client, seeded_db):
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_2", sales=9, gross_alp=9000.0)
+    r = await client.get("/api/agents/AG_2/day?sales_day=2026-02-18", headers=auth(token))
+    assert r.status_code == 403
+
+
+async def test_upline_can_read_a_downline_agents_day(client, seeded_db):
+    token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sales=3, gross_alp=750.0)
+    r = await client.get("/api/agents/AG_1/day?sales_day=2026-02-18", headers=auth(token))
+    assert r.status_code == 200
+    assert r.json()["totals"]["sales"] == 3
+
+
+async def test_agent_day_404s_for_an_unknown_agent(client, seeded_db):
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    assert (await client.get("/api/agents/NOPE/day?sales_day=2026-02-18", headers=auth(token))).status_code == 404
