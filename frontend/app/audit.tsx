@@ -1,10 +1,11 @@
 // Audit Log — Level 4 only
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import { api, COLORS } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
+import { LoadState } from '../src/components/LoadState';
 
 // /api/manager/audit returns the whole audit_log, not just ALP adjustments:
 // adding, removing, reassigning and merging people are all in here, as are
@@ -37,7 +38,27 @@ function formatValue(v: Audit['original_value'], money: boolean): string {
 
 export default function AuditScreen() {
   const [items, setItems] = useState<Audit[]>([]);
-  useEffect(() => { (async () => { try { const r = await api<{ items: Audit[] }>('/api/manager/audit'); setItems(r.items); } catch {} })(); }, []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api<{ items: Audit[] }>('/api/manager/audit');
+      setItems(r.items);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'The audit log could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Fetching on mount, not deriving local state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+  }, [load]);
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -47,9 +68,16 @@ export default function AuditScreen() {
           <Text style={styles.kicker}>IMMUTABLE LEDGER</Text>
           <Text style={styles.intro}>Every Net ALP adjustment, roster change and role change is recorded with a timestamp and who made it.</Text>
         </TourAnchor>
-        {items.length === 0 ? (
-          <Text style={styles.empty}>Nothing recorded yet.</Text>
-        ) : items.map((a) => {
+        <LoadState
+          loading={loading}
+          error={error}
+          onRetry={load}
+          isEmpty={items.length === 0}
+          emptyText="Nothing recorded yet."
+          loadingText="Loading the ledger…"
+          testID="audit"
+        >
+          {items.map((a) => {
           const money = MONEY_ACTIONS.has(a.action);
           const dropped = money && typeof a.delta === 'number' && a.delta < 0;
           // Only the ALP actions have a direction to show; a role or tenure
@@ -85,7 +113,8 @@ export default function AuditScreen() {
               <Text style={styles.by}>By {a.changed_by_name || 'system'}</Text>
             </View>
           );
-        })}
+          })}
+        </LoadState>
       </ScrollView>
     </View>
   );

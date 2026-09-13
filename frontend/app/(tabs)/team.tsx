@@ -12,6 +12,7 @@ import { MoveMemberSheet } from '../../src/components/MoveMemberSheet';
 import { PeriodSelector, usePersistedPeriod } from '../../src/components/PeriodSelector';
 import { SearchBar } from '../../src/components/SearchBar';
 import { TourAnchor } from '../../src/components/TourAnchor';
+import { LoadState } from '../../src/components/LoadState';
 import { confirmAsync, notify } from '../../src/lib/dialog';
 
 interface TeamRow {
@@ -50,8 +51,19 @@ export default function TeamScreen() {
   // past reporting week instead, so a manager can review it as it stood.
   const [weekStart, setWeekStart] = useState<string | null>(null);
   const [weekOptions, setWeekOptions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Which reporting window the rows currently on screen were fetched for.
+  // Without it, switching Daily/Weekly/Monthly or pinning a past week kept
+  // the previous window's rows on screen while the controls described the
+  // new one — and if the new request failed, the masking below hid the
+  // failure and those stale figures read as the selected window.
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const scopeKey = weekStart ? `week:${weekStart}` : `period:${period}`;
+  const rowsMatchScope = loadedScope === scopeKey;
 
   const fetchAll = async () => {
+    const scope = weekStart ? `week:${weekStart}` : `period:${period}`;
     try {
       const [r, u, n] = await Promise.all([
         api<{ team: TeamRow[] }>(
@@ -62,7 +74,13 @@ export default function TeamScreen() {
       setRows(r.team);
       setUpline(u.upline);
       setReadyNoms(n.nominations.length);
-    } catch {}
+      setLoadedScope(scope);
+      setError(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Your team could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
   };
   // Re-fetch whenever the period changes; keep the 30s live refresh going.
   useEffect(() => {
@@ -305,9 +323,22 @@ export default function TeamScreen() {
         contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
       >
-        {visible.length === 0 ? (
-          <Text style={styles.emptyTxt}>{q ? 'No matches for your search.' : 'No team data yet.'}</Text>
-        ) : visible.map((r) => (
+        <LoadState
+          // Rows from the previous window are not an answer for this one, so
+          // a scope change shows the spinner rather than stale figures under
+          // the new label.
+          loading={loading || !rowsMatchScope}
+          // Masked only for a failure that leaves correct rows on screen — a
+          // flaky 30s poll must not replace a good roster with an error card.
+          // A failed period or week change has no such rows, so it surfaces.
+          error={rowsMatchScope && rows.length > 0 ? null : error}
+          onRetry={fetchAll}
+          isEmpty={visible.length === 0}
+          emptyText={q ? 'No matches for your search.' : 'No team data yet.'}
+          loadingText="Loading your team…"
+          testID="team"
+        >
+          {visible.map((r) => (
           <TouchableOpacity
             key={r.agent_id}
             style={styles.row}
@@ -344,7 +375,8 @@ export default function TeamScreen() {
               ) : null}
             </View>
           </TouchableOpacity>
-        ))}
+          ))}
+        </LoadState>
       </ScrollView>
 
       <AgentContactSheet
