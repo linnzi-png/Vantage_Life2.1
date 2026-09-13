@@ -12,6 +12,7 @@ import { Stack } from 'expo-router';
 import { api, COLORS, useAuth, levelNum, Role } from '../src/lib/auth';
 import { HierarchyTree, HierarchyAgent } from '../src/components/HierarchyTree';
 import { AgentContactSheet } from '../src/components/AgentContactSheet';
+import { LoadState } from '../src/components/LoadState';
 import { MoveMemberSheet, MoveCandidate } from '../src/components/MoveMemberSheet';
 
 interface TeamRow {
@@ -32,6 +33,8 @@ export default function HierarchyScreen() {
   const [office, setOffice] = useState<string | null>(null);
   const [selected, setSelected] = useState<HierarchyAgent | null>(null);
   const [moveTarget, setMoveTarget] = useState<TeamRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -41,7 +44,12 @@ export default function HierarchyScreen() {
       ]);
       setAgents(h.agents);
       setTeamRows(t.team);
-    } catch {}
+      setError(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'The hierarchy could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
   }, [canMoveAtAll]);
 
   useEffect(() => {
@@ -130,11 +138,19 @@ export default function HierarchyScreen() {
       </View>
 
       <View style={{ flex: 1 }}>
-        {officeAgents.length === 0 && agents.length > 0 ? (
-          <View style={styles.empty}><Text style={styles.emptyTxt}>Loading office…</Text></View>
-        ) : (
+        <LoadState
+          loading={loading}
+          error={error}
+          onRetry={fetchAll}
+          // The one frame between the roster arriving and the office-default
+          // effect picking one. Not an empty company.
+          isEmpty={officeAgents.length === 0 && agents.length > 0}
+          emptyText="Opening office…"
+          loadingText="Loading the hierarchy…"
+          testID="hierarchy"
+        >
           <HierarchyTree agents={officeAgents} onSelect={setSelected} />
-        )}
+        </LoadState>
       </View>
 
       <AgentContactSheet

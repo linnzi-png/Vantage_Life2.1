@@ -8,6 +8,7 @@ import { NominateSheet } from '../../src/components/NominateSheet';
 import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 import { SearchBar } from '../../src/components/SearchBar';
 import { TourAnchor } from '../../src/components/TourAnchor';
+import { LoadState } from '../../src/components/LoadState';
 
 interface Shoutout {
   shoutout_id: string;
@@ -42,6 +43,8 @@ export default function ShoutoutsScreen() {
   const [nominateOpen, setNominateOpen] = useState(false);
   const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
   const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const q = query.trim().toLowerCase();
   const visible = q
     ? items.filter((s) => {
@@ -50,8 +53,15 @@ export default function ShoutoutsScreen() {
       })
     : items;
   const fetchAll = async () => {
-    try { const r = await api<{ shoutouts: Shoutout[] }>('/api/shoutouts'); setItems(r.shoutouts); }
-    catch {}
+    try {
+      const r = await api<{ shoutouts: Shoutout[] }>('/api/shoutouts');
+      setItems(r.shoutouts);
+      setError(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Shoutouts could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => {
     // Fetching + polling an external API on mount, not deriving local state.
@@ -92,9 +102,17 @@ export default function ShoutoutsScreen() {
         contentContainerStyle={{ padding: 16, paddingBottom: 30 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
       >
-        {visible.length === 0 ? (
-          <Text style={styles.empty}>{q ? 'No matches for your search.' : 'No shoutouts yet — go close one.'}</Text>
-        ) : visible.map((s) => {
+        <LoadState
+          loading={loading}
+          // Only when there is nothing to show — a flaky 30s poll must not
+          // replace a good feed with an error card.
+          error={items.length === 0 ? error : null}
+          onRetry={fetchAll}
+          isEmpty={visible.length === 0}
+          emptyText={q ? 'No matches for your search.' : 'No shoutouts yet — go close one.'}
+          testID="shoutouts"
+        >
+          {visible.map((s) => {
           const c = cfg[s.type] || { icon: 'megaphone', color: COLORS.text, title: s.type.toUpperCase(), bg: 'transparent' };
           return (
             <View key={s.shoutout_id} style={[styles.card, { borderTopColor: c.color, backgroundColor: c.bg }]} testID={`shoutout-${s.shoutout_id}`}>
@@ -131,7 +149,8 @@ export default function ShoutoutsScreen() {
               </View>
             </View>
           );
-        })}
+          })}
+        </LoadState>
       </ScrollView>
       <NominateSheet visible={nominateOpen} onClose={() => setNominateOpen(false)} onSubmitted={fetchAll} />
       <AgentContactSheet agent={contactAgent} onClose={() => setContactAgent(null)} />
