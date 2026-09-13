@@ -47,6 +47,14 @@ export default function DashboardScreen() {
   // while the new request is in flight; without this, a failed scope change
   // would be masked and last week's figures would sit under the new label.
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  // The wall and the office tiles are scoped too, so they need their own
+  // scope and error: leaving their arrays untouched when their request fails
+  // made an outage render as the wall's "No production in this period", and
+  // across a scope change it relabelled one window's producers as another's.
+  const [wallScope, setWallScope] = useState<string | null>(null);
+  const [wallError, setWallError] = useState<string | null>(null);
+  const [officesScope, setOfficesScope] = useState<string | null>(null);
+  const [officesError, setOfficesError] = useState<string | null>(null);
   // Dashboard defaults to Daily (the specific-day picker only applies here);
   // Weekly/Monthly show a rolling window and hide the day picker.
   const [period, changePeriod] = usePersistedPeriod('vl_dashboard_period', 'daily');
@@ -72,6 +80,8 @@ export default function DashboardScreen() {
 
   const scopeKey = period !== 'daily' ? `period:${period}` : `day:${viewDay ?? 'today'}`;
   const summaryMatchesScope = loadedScope === scopeKey;
+  const wallMatchesScope = wallScope === scopeKey;
+  const officesMatchScope = officesScope === scopeKey;
 
   const fetchAll = useCallback(async () => {
     const requestId = ++fetchIdRef.current;
@@ -111,17 +121,34 @@ export default function DashboardScreen() {
         setError(e instanceof Error ? e.message : 'The dashboard could not be loaded.');
       }
 
-      // The rest are supporting sections. A failing one keeps whatever it had
-      // rather than blanking the screen — each already renders its own empty
-      // state when it genuinely has nothing.
+      // The ticker is unscoped and live, so stale items are still true — a
+      // failed tick just leaves the last ones running.
       if (t.status === 'fulfilled') setTicker(t.value.items);
+
+      // The wall and the office tiles ARE scoped, so a failure cannot leave
+      // their previous contents standing: they would be presented under the
+      // new windowLabel as if they belonged to it. Each records the scope its
+      // data answers, and the render below refuses to show a mismatch.
       if (p.status === 'fulfilled') {
         setVets(p.value.vets);
         setRookies(p.value.rookies);
         setUnranked(p.value.unranked || []);
         setPlatinum(p.value.platinum_rule || []);
+        setWallScope(scope);
+        setWallError(null);
+      } else {
+        const e = p.reason;
+        setWallError(e instanceof Error ? e.message : 'The Platinum Wall could not be loaded.');
       }
-      if (o.status === 'fulfilled') setOffices(o.value.offices);
+
+      if (o.status === 'fulfilled') {
+        setOffices(o.value.offices);
+        setOfficesScope(scope);
+        setOfficesError(null);
+      } else {
+        const e = o.reason;
+        setOfficesError(e instanceof Error ? e.message : 'Office production could not be loaded.');
+      }
     } catch (e) {
       if (fetchIdRef.current === requestId) console.warn('Dashboard fetch error:', e);
     } finally {
@@ -251,6 +278,13 @@ export default function DashboardScreen() {
             </TourAnchor>
 
             <TourAnchor id="dash-wall">
+              <LoadState
+                loading={!wallMatchesScope && !wallError}
+                error={wallMatchesScope ? null : wallError}
+                onRetry={fetchAll}
+                loadingText="Loading the wall…"
+                testID="dashboard-wall"
+              >
               <PlatinumWall
                 vets={vets}
                 rookies={rookies}
@@ -262,9 +296,18 @@ export default function DashboardScreen() {
                   phone: it.phone, email: it.email, office: it.office,
                 })}
               />
+              </LoadState>
             </TourAnchor>
 
-            <OfficeTabs offices={offices} windowLabel={windowLabel} />
+            <LoadState
+              loading={!officesMatchScope && !officesError}
+              error={officesMatchScope ? null : officesError}
+              onRetry={fetchAll}
+              loadingText="Loading offices…"
+              testID="dashboard-offices"
+            >
+              <OfficeTabs offices={offices} windowLabel={windowLabel} />
+            </LoadState>
 
             {user?.agent_id ? (
               <TourAnchor id="dash-history">
