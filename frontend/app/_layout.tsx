@@ -49,6 +49,7 @@ export default function RootLayout() {
               <Stack.Screen name="manager" options={{ title: 'Manager Command' }} />
               <Stack.Screen name="audit" options={{ title: 'Audit Log' }} />
               <Stack.Screen name="vault" options={{ title: 'Historical Vault' }} />
+              <Stack.Screen name="push-log" options={{ title: 'Push Delivery Log' }} />
               <Stack.Screen name="admin" options={{ title: 'Admin Panel' }} />
             </Stack>
             <TourOverlay />

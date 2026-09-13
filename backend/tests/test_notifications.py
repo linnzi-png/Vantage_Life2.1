@@ -282,3 +282,81 @@ async def test_push_failure_never_fails_the_submission(client, seeded_db, monkey
     assert r.status_code == 200, r.text
     entry = await seeded_db.production_entries.find_one({"agent_id": "AG_1"})
     assert entry is not None
+
+
+# ---------------- Expo response handling (send_expo_push internals) ----------------
+
+class _FakeExpoResponse:
+    def __init__(self, tickets):
+        self._tickets = tickets
+
+    def json(self):
+        return {"data": self._tickets}
+
+
+class _FakeExpoClient:
+    """Stands in for httpx.AsyncClient — captures the request, returns
+    whatever ticket list the test wants back from Expo's push API."""
+    def __init__(self, tickets):
+        self._tickets = tickets
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, json, headers):
+        return _FakeExpoResponse(self._tickets)
+
+
+def _patch_expo(monkeypatch, tickets):
+    monkeypatch.setattr(server.httpx, "AsyncClient", lambda **kw: _FakeExpoClient(tickets))
+
+
+async def test_expo_error_ticket_is_logged_for_admin_visibility(seeded_db, monkeypatch):
+    """A rejected message (bad payload, missing credentials, etc.) used to
+    vanish silently -- Expo's 200 response hid the per-message error. It
+    must now land in push_delivery_failures so GET /admin/push-log surfaces it."""
+    _patch_expo(monkeypatch, [{"status": "error", "message": "boom", "details": {"error": "MessageTooBig"}}])
+    await server.send_expo_push(["tok_1"], "Title", "Body")
+    failure = await seeded_db.push_delivery_failures.find_one({"push_token": "tok_1"}, {"_id": 0})
+    assert failure["error_code"] == "MessageTooBig"
+    assert failure["error_message"] == "boom"
+
+
+async def test_expo_device_not_registered_prunes_the_stale_token(seeded_db, monkeypatch):
+    """DeviceNotRegistered means the token is permanently dead (uninstalled
+    app, reset simulator, ...) -- keeping it around just means retrying a
+    push that can never succeed, forever. It must be deleted."""
+    await seeded_db.push_tokens.insert_one({"user_id": "u1", "agent_id": "AG_1", "push_token": "tok_stale"})
+    _patch_expo(monkeypatch, [{"status": "error", "details": {"error": "DeviceNotRegistered"}}])
+    await server.send_expo_push(["tok_stale"], "Title", "Body")
+    assert await seeded_db.push_tokens.find_one({"push_token": "tok_stale"}) is None
+
+
+async def test_expo_ok_ticket_is_not_logged(seeded_db, monkeypatch):
+    _patch_expo(monkeypatch, [{"status": "ok", "id": "receipt_1"}])
+    await server.send_expo_push(["tok_ok"], "Title", "Body")
+    assert await seeded_db.push_delivery_failures.count_documents({}) == 0
+
+
+# ---------------- GET /admin/push-log ----------------
+
+async def test_push_log_requires_level4_or_admin(client, seeded_db):
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    r = await client.get("/api/admin/push-log", headers=auth(token))
+    assert r.status_code == 403
+
+
+async def test_push_log_returns_recent_failures(client, seeded_db):
+    await seeded_db.push_delivery_failures.insert_one({
+        "push_token": "tok_1", "title": "VantageLife", "body": "msg",
+        "error_code": "DeviceNotRegistered", "error_message": None, "ts": server.now_utc(),
+    })
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/admin/push-log", headers=auth(token))
+    assert r.status_code == 200, r.text
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["error_code"] == "DeviceNotRegistered"
