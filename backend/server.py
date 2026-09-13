@@ -1500,10 +1500,11 @@ async def send_expo_push(push_tokens: List[str], title: str, body: str) -> None:
     per-message result ("ticket") is in the response body, not the status
     code. Previously that body was never read, so a rejected push (a stale
     token, missing APNs/FCM credentials, etc.) looked identical to a
-    delivered one: no error anywhere, nothing to retry. Every ticket is now
-    logged to push_delivery_failures (surfaced at GET /api/admin/push-log)
-    so a silent drop is at least visible, and a token Expo reports as
-    DeviceNotRegistered is deleted so it stops being retried forever."""
+    delivered one: no error anywhere, nothing to retry. Every ticket --
+    delivered or rejected -- is now logged to push_log (surfaced at
+    GET /api/admin/push-log) so the full send history is visible, not just
+    the failures, and a token Expo reports as DeviceNotRegistered is
+    deleted so it stops being retried forever."""
     if not push_tokens:
         return
     messages = [{"to": t, "title": title, "body": body, "sound": "default"} for t in push_tokens]
@@ -1516,16 +1517,17 @@ async def send_expo_push(push_tokens: List[str], title: str, body: str) -> None:
             )
         tickets = resp.json().get("data", [])
         for token, ticket in zip(push_tokens, tickets):
-            if ticket.get("status") != "error":
-                continue
-            error_code = (ticket.get("details") or {}).get("error")
-            logger.warning(f"Expo push rejected for {token}: {error_code or ticket.get('message')}")
-            await db.push_delivery_failures.insert_one({
+            is_error = ticket.get("status") == "error"
+            error_code = (ticket.get("details") or {}).get("error") if is_error else None
+            if is_error:
+                logger.warning(f"Expo push rejected for {token}: {error_code or ticket.get('message')}")
+            await db.push_log.insert_one({
                 "push_token": token,
                 "title": title,
                 "body": body,
+                "status": "error" if is_error else "ok",
                 "error_code": error_code,
-                "error_message": ticket.get("message"),
+                "error_message": ticket.get("message") if is_error else None,
                 "ts": now_utc(),
             })
             if error_code == "DeviceNotRegistered":
@@ -1536,10 +1538,11 @@ async def send_expo_push(push_tokens: List[str], title: str, body: str) -> None:
 
 @api_router.get("/admin/push-log")
 async def admin_push_log(user: Dict[str, Any] = Depends(require_level4_or_admin)):
-    """Recent Expo push delivery failures -- the only place a silently
-    rejected notification (stale token, missing push credentials, etc.)
-    becomes visible. Same shape/limit convention as GET /manager/audit."""
-    cur = db.push_delivery_failures.find({}, {"_id": 0}).sort("ts", -1).limit(200)
+    """Recent Expo push attempts, delivered and rejected alike -- the only
+    place a silently rejected notification (stale token, missing push
+    credentials, etc.) becomes visible. Same shape/limit convention as
+    GET /manager/audit."""
+    cur = db.push_log.find({}, {"_id": 0}).sort("ts", -1).limit(200)
     items = []
     async for f in cur:
         if isinstance(f.get("ts"), datetime):
