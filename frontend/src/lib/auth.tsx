@@ -10,8 +10,8 @@ const SESSION_KEY = 'vl_session_token';
 
 /**
  * A missing EXPO_PUBLIC_BACKEND_URL used to fail silently: every fetch()
- * below just resolved to a bare relative path like "/api/auth/session",
- * which React Native's fetch rejects with "Invalid URL: /api/auth/session" —
+ * below just resolved to a bare relative path like "/api/auth/me",
+ * which React Native's fetch rejects with "Invalid URL: /api/auth/me" —
  * surfaced to the tester as an opaque "Unable to reach the server" alert
  * with no indication it was a build/config problem, not a network one
  * (vantagelife-feedback-db issues #24, #25). EXPO_PUBLIC_ vars are inlined
@@ -296,9 +296,6 @@ interface AuthCtx {
   signInDemo: (level: Role) => Promise<void>;
   signInApple: (identityToken: string, givenName: string | null, familyName: string | null) => Promise<void>;
   signInAuth0: (idToken: string) => Promise<void>;
-  /** TEMPORARY: see EMERGENT_AUTH_URL in backend/server.py — remove once the
-   * OTA rollout to signInAuth0 is confirmed complete on the fleet. */
-  signInGoogleSession: (sessionId: string) => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   switchRole: (role: Role) => Promise<void>;
@@ -414,21 +411,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await reload();
   };
 
-  const signInGoogleSession = async (sessionId: string) => {
-    // TEMPORARY: the Emergent portal redirects back to the app with a
-    // session_id; exchange it via the temporary /auth/session fallback. Used
-    // only while login.tsx's AUTH0_CONFIGURED is false (Auth0 tenant not set
-    // up yet, or this exact build predates the migration).
-    setLoading(true);
-    const r = await api<{ user: AppUser; session_token: string }>('/api/auth/session', {
-      method: 'POST',
-      body: JSON.stringify({ session_id: sessionId }),
-    });
-    await setToken(r.session_token);
-    setUser(r.user);
-    await reload();
-  };
-
   const signOut = async () => {
     try { await api('/api/push/unregister', { method: 'POST' }); } catch {}
     try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
@@ -450,7 +432,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInAuth0, signInGoogleSession, signOut, deleteAccount, switchRole }}>
+    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInAuth0, signOut, deleteAccount, switchRole }}>
       {children}
     </AuthContext.Provider>
   );
