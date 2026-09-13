@@ -13,7 +13,10 @@ export interface AgentContact {
   // shows contact details only and no production history.
   agent_id?: string;
   name: string;
-  role: string;
+  // Optional on purpose: /api/shoutouts and /api/nominations can omit it, and
+  // roleTitle() handles that. Callers used to pass `role || 'level_1'`, which
+  // presented anyone with a missing role to the team as "Agent".
+  role?: string;
   io_role?: string;
   phone?: string;
   email?: string;
@@ -51,7 +54,7 @@ function openLink(url: string, errorMessage: string) {
 export function AgentContactSheet({ agent, onClose, onEnterNumbers, onMove, onRemove }: Props) {
   if (!agent) return null;
 
-  const label = roleTitle(agent.io_role, agent.role) || agent.role.replace('level_', 'L');
+  const label = roleTitle(agent.io_role, agent.role);
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>

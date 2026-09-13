@@ -129,7 +129,7 @@ export default function NominationsScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <TouchableOpacity
                   onPress={() => setContactAgent({
-                    name: n.nominee_name, role: n.nominee_role || 'level_1', io_role: n.nominee_io_role,
+                    name: n.nominee_name, role: n.nominee_role, io_role: n.nominee_io_role,
                     phone: n.nominee_phone, email: n.nominee_email, office: n.nominee_office,
                   })}
                   activeOpacity={0.7}
