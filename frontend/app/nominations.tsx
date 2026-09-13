@@ -9,6 +9,7 @@ import { api, COLORS, useAuth, levelNum } from '../src/lib/auth';
 import { SearchBar } from '../src/components/SearchBar';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { AgentContactSheet, AgentContact } from '../src/components/AgentContactSheet';
+import { LoadState } from '../src/components/LoadState';
 import { confirmAsync, notify } from '../src/lib/dialog';
 
 interface Endorsement { agent_id: string; name: string; ts: string; }
@@ -34,13 +35,20 @@ export default function NominationsScreen() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
       const r = await api<{ nominations: Nomination[]; threshold: number }>('/api/nominations');
       setItems(r.nominations);
       setThreshold(r.threshold);
-    } catch {}
+      setError(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Nominations could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -114,9 +122,17 @@ export default function NominationsScreen() {
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
       >
-        {visible.length === 0 ? (
-          <Text style={styles.emptyTxt}>{q ? 'No matches for your search.' : 'No nominations for your team yet.'}</Text>
-        ) : visible.map((n) => {
+        <LoadState
+          loading={loading}
+          // Only surface the failure when there is nothing to show: a flaky
+          // 30s poll must not replace a good list with an error card.
+          error={items.length === 0 ? error : null}
+          onRetry={fetchAll}
+          isEmpty={visible.length === 0}
+          emptyText={q ? 'No matches for your search.' : 'No nominations for your team yet.'}
+          testID="nominations"
+        >
+          {visible.map((n) => {
           const count = n.endorsements.length;
           const ready = n.status === 'threshold_met';
           const posted = n.status === 'posted';
@@ -184,7 +200,8 @@ export default function NominationsScreen() {
               ) : null}
             </View>
           );
-        })}
+          })}
+        </LoadState>
       </ScrollView>
       <AgentContactSheet agent={contactAgent} onClose={() => setContactAgent(null)} />
     </SafeAreaView>

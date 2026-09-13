@@ -12,6 +12,7 @@ import { MoveMemberSheet } from '../../src/components/MoveMemberSheet';
 import { PeriodSelector, usePersistedPeriod } from '../../src/components/PeriodSelector';
 import { SearchBar } from '../../src/components/SearchBar';
 import { TourAnchor } from '../../src/components/TourAnchor';
+import { LoadState } from '../../src/components/LoadState';
 import { confirmAsync, notify } from '../../src/lib/dialog';
 
 interface TeamRow {
@@ -50,6 +51,8 @@ export default function TeamScreen() {
   // past reporting week instead, so a manager can review it as it stood.
   const [weekStart, setWeekStart] = useState<string | null>(null);
   const [weekOptions, setWeekOptions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchAll = async () => {
     try {
@@ -62,7 +65,12 @@ export default function TeamScreen() {
       setRows(r.team);
       setUpline(u.upline);
       setReadyNoms(n.nominations.length);
-    } catch {}
+      setError(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Your team could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
   };
   // Re-fetch whenever the period changes; keep the 30s live refresh going.
   useEffect(() => {
@@ -305,9 +313,18 @@ export default function TeamScreen() {
         contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
       >
-        {visible.length === 0 ? (
-          <Text style={styles.emptyTxt}>{q ? 'No matches for your search.' : 'No team data yet.'}</Text>
-        ) : visible.map((r) => (
+        <LoadState
+          loading={loading}
+          // Only when there is nothing to show — a flaky 30s poll must not
+          // replace a good roster with an error card.
+          error={rows.length === 0 ? error : null}
+          onRetry={fetchAll}
+          isEmpty={visible.length === 0}
+          emptyText={q ? 'No matches for your search.' : 'No team data yet.'}
+          loadingText="Loading your team…"
+          testID="team"
+        >
+          {visible.map((r) => (
           <TouchableOpacity
             key={r.agent_id}
             style={styles.row}
@@ -344,7 +361,8 @@ export default function TeamScreen() {
               ) : null}
             </View>
           </TouchableOpacity>
-        ))}
+          ))}
+        </LoadState>
       </ScrollView>
 
       <AgentContactSheet
