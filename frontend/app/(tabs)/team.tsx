@@ -53,8 +53,17 @@ export default function TeamScreen() {
   const [weekOptions, setWeekOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Which reporting window the rows currently on screen were fetched for.
+  // Without it, switching Daily/Weekly/Monthly or pinning a past week kept
+  // the previous window's rows on screen while the controls described the
+  // new one — and if the new request failed, the masking below hid the
+  // failure and those stale figures read as the selected window.
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const scopeKey = weekStart ? `week:${weekStart}` : `period:${period}`;
+  const rowsMatchScope = loadedScope === scopeKey;
 
   const fetchAll = async () => {
+    const scope = weekStart ? `week:${weekStart}` : `period:${period}`;
     try {
       const [r, u, n] = await Promise.all([
         api<{ team: TeamRow[] }>(
@@ -65,6 +74,7 @@ export default function TeamScreen() {
       setRows(r.team);
       setUpline(u.upline);
       setReadyNoms(n.nominations.length);
+      setLoadedScope(scope);
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Your team could not be loaded.');
@@ -314,10 +324,14 @@ export default function TeamScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
       >
         <LoadState
-          loading={loading}
-          // Only when there is nothing to show — a flaky 30s poll must not
-          // replace a good roster with an error card.
-          error={rows.length === 0 ? error : null}
+          // Rows from the previous window are not an answer for this one, so
+          // a scope change shows the spinner rather than stale figures under
+          // the new label.
+          loading={loading || !rowsMatchScope}
+          // Masked only for a failure that leaves correct rows on screen — a
+          // flaky 30s poll must not replace a good roster with an error card.
+          // A failed period or week change has no such rows, so it surfaces.
+          error={rowsMatchScope && rows.length > 0 ? null : error}
           onRetry={fetchAll}
           isEmpty={visible.length === 0}
           emptyText={q ? 'No matches for your search.' : 'No team data yet.'}
