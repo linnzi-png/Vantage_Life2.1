@@ -43,6 +43,7 @@ export default function MoreScreen() {
     // backend/server.py.
     { id: 'audit', icon: 'list', label: 'Audit Log', onPress: () => router.push('/audit'), show: lvl >= 4 || !!user?.is_admin },
     { id: 'vault', icon: 'stats-chart', label: 'Company Health', onPress: () => router.push('/vault'), show: lvl >= 4 || !!user?.is_admin },
+    { id: 'push-log', icon: 'notifications-off', label: 'Push Delivery Log', onPress: () => router.push('/push-log'), show: lvl >= 4 || !!user?.is_admin },
   ];
 
   const onSwitch = async (role: Role) => {
