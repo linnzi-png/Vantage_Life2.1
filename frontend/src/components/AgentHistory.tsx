@@ -30,11 +30,16 @@ const shortDate = (iso: string) => {
   return `${Number(m)}/${Number(d)}`;
 };
 
-export function AgentHistory({ agentId, weeks = 13, showCoachingTips = false }: { agentId: string; weeks?: number; showCoachingTips?: boolean }) {
+export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?: number }) {
   const { width } = useWindowDimensions();
   const chartW = Math.min(width, 900) - 32 - 24;
 
   const [series, setSeries] = useState<HistoryWeek[] | null>(null);
+  // Whether to show the coaching card is the server's answer, never a tier
+  // comparison made here: only someone strictly above this agent in their own
+  // chain may see it (owner, 2026-09-13), and read scope is deliberately wider
+  // than that. Defaults to false, so a failed or older response shows nothing.
+  const [coachingVisible, setCoachingVisible] = useState(false);
   // Only a 403 means "not your team" and should hide the section entirely.
   // Anything else is a real failure and must say so — silently rendering
   // nothing on every error makes a missing endpoint look like a permissions
@@ -48,15 +53,17 @@ export function AgentHistory({ agentId, weeks = 13, showCoachingTips = false }: 
     let cancelled = false;
     (async () => {
       try {
-        const r = await api<{ series: HistoryWeek[] }>(
+        const r = await api<{ series: HistoryWeek[]; coaching_visible?: boolean }>(
           `/api/agents/${encodeURIComponent(agentId)}/history?weeks=${weeks}`);
         if (cancelled) return;
         setSeries(r.series);
+        setCoachingVisible(!!r.coaching_visible);
         setDenied(false);
         setFailed(null);
       } catch (e: unknown) {
         if (cancelled) return;
         setSeries(null);
+        setCoachingVisible(false);
         const status = e instanceof ApiError ? e.status : 0;
         setDenied(status === 403);
         setFailed(status === 403 ? null
@@ -86,7 +93,7 @@ export function AgentHistory({ agentId, weeks = 13, showCoachingTips = false }: 
         <Text style={styles.kicker}>PRODUCTION HISTORY</Text>
         <Text style={styles.empty}>No production recorded yet.</Text>
         <AgentDayDetail agentId={agentId} />
-        {showCoachingTips ? <CoachingTips /> : null}
+        {coachingVisible ? <CoachingTips /> : null}
       </View>
     );
   }
@@ -134,7 +141,7 @@ export function AgentHistory({ agentId, weeks = 13, showCoachingTips = false }: 
       <BarChart data={salesPoints} width={chartW} height={100} />
 
       <AgentDayDetail agentId={agentId} />
-      {showCoachingTips ? <CoachingTips /> : null}
+      {coachingVisible ? <CoachingTips /> : null}
     </View>
   );
 }

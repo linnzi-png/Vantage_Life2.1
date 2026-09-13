@@ -820,6 +820,38 @@ async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
     return await downline_agent_ids(agent_id)
 
 
+async def is_upline_of(
+    user: Dict[str, Any], target_agent_id: str, target_role: Optional[str] = None
+) -> bool:
+    """True when this user sits strictly ABOVE target_agent_id in the hierarchy.
+
+    This is a relationship test, not a tier comparison. Per owner 2026-09-13:
+    everyone above an agent in their chain — SA, GA, MGA, RGA — may see that
+    agent's coaching card, and nobody at or below them may. Tier comparison
+    gets this wrong in both directions, which is why it is not used here:
+      * SA and GA are both level_2 (SA is a title, not a tier — see CLAUDE.md),
+        so a GA reading their own SA's card compares 2 > 2 and is denied,
+        exactly where the rule says access belongs.
+      * Conversely a higher tier in an unrelated branch outranks the agent
+        without being anywhere in their chain.
+    Walks the same downline_agent_ids() BFS as visible_agent_ids/can_enter_for,
+    so all three agree on what "upline" means.
+
+    finance_admin sits outside the ladder and is never anyone's upline, even
+    though it has full read scope. level_4 is above the whole agency (matching
+    visible_agent_ids' None), except over another level_4, who is a peer.
+    """
+    own_agent_id = user.get("agent_id")
+    if not own_agent_id or target_agent_id == own_agent_id:
+        return False
+    role = user.get("role", "level_1")
+    if role == FINANCE_ADMIN_ROLE or role == "level_1":
+        return False
+    if role == "level_4":
+        return target_role != "level_4"
+    return target_agent_id in await downline_agent_ids(own_agent_id)
+
+
 async def can_enter_for(user: Dict[str, Any], target_agent_id: str) -> bool:
     """Nightly Numbers entry permission (distinct from read-visibility above).
     Any upline (level_2+ — SA/GA, MGA, RGA) may submit on someone else's
@@ -2386,13 +2418,21 @@ async def weekly_series(
         sales = int(w["sales"])
         sits = int(w["sits"])
         sets_ = int(w["sets"])
+        n1 = int(w["n1"])
         series.append({
             "week_start": ws,
             **{m: (round(w[m], 2) if m.endswith("alp") else int(w[m])) for m in _TREND_SUMS},
             # Close Rate via metrics.py, never inline. N1 is already excluded
             # from Sits at entry, so it is not subtracted again.
             "close_rate": round(metrics.close_rate(sales, sits), 1),
-            "show_rate": round((sits / sets_ * 100) if sets_ > 0 else 0.0, 1),
+            # Show Rate ("Sit Rate") via metrics.py, never inline: (Sits + N1)
+            # / Sets. N1 people DID keep the appointment, so they are added
+            # back here even though close_rate above leaves them out. This used
+            # to be an inline sits / sets_, which disagreed with the agent card,
+            # the day drill-down and the WAR export, all of which use
+            # metrics.show_rate. (Per owner 2026-09-13: Sit Rate is always
+            # (Sits + N1) / Sets.)
+            "show_rate": round(metrics.show_rate(sits, n1, sets_), 1),
             "alp_per_sale": round(w["gross_alp"] / sales, 2) if sales else 0.0,
             "agent_count": len(w["agents"]),
             "office_count": len(w["offices"]),
@@ -2428,7 +2468,14 @@ async def agent_history(
     series, _ = await weekly_series({"agent_id": agent_id})
     if weeks and weeks > 0:
         series = series[-weeks:]
-    return {"agent": profile, "series": series}
+    # Coaching card visibility is decided here, server-side, and never by the
+    # client comparing tiers: read scope (visible_agent_ids) is wider than the
+    # coaching rule and is on track to get wider still, so the two must not be
+    # conflated. The payload carries no coaching content — the tips are static
+    # client text — but the flag keeps one authoritative definition of who is
+    # an upline, so widening read scope can never widen coaching access.
+    coaching_visible = await is_upline_of(user, agent_id, profile.get("role"))
+    return {"agent": profile, "series": series, "coaching_visible": coaching_visible}
 
 
 @api_router.get("/agents/{agent_id}/day")

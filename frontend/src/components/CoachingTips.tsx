@@ -23,7 +23,7 @@ const GROUPS: TipGroup[] = [
     ],
   },
   {
-    metric: 'SIT RATE (Sits + N1 ÷ Sets)',
+    metric: 'SIT RATE ((Sits + N1) ÷ Sets)',
     tips: [
       "A low sit rate is usually a confirmation problem, not a selling problem — check whether appointments get confirmed the day before AND morning-of.",
       'Look at who set the appointment (the agent vs. a dialer vs. a referral). Sit rate often splits sharply by who booked it.',
