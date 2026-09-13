@@ -50,8 +50,11 @@ export default function NotificationNagOverlay() {
   const visible = !!user?.agent_id && !agent?.non_producing && status !== null && status !== 'granted' && !dismissed;
   if (!visible) return null;
 
+  // onRequestClose: Android's back button dismisses exactly like "Not Now" —
+  // the same session-only dismissal, and the next foreground re-arms it. The
+  // re-prompt frequency is deliberate and stays as it is.
   return (
-    <Modal visible transparent animationType="fade" statusBarTranslucent>
+    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={() => setDismissed(true)}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Ionicons name="notifications-off" size={32} color={COLORS.yellow} />
