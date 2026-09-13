@@ -1,6 +1,6 @@
 // Executive Dashboard — default screen
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth } from '../../src/lib/auth';
@@ -13,6 +13,7 @@ import Ticker, { TickerItem } from '../../src/components/Ticker';
 import { AgentHistory } from '../../src/components/AgentHistory';
 import { PeriodSelector, usePersistedPeriod, Period } from '../../src/components/PeriodSelector';
 import { TourAnchor } from '../../src/components/TourAnchor';
+import { LoadState } from '../../src/components/LoadState';
 
 interface Summary {
   total_alp: number; total_net_alp: number; total_sits: number; total_sales: number;
@@ -39,6 +40,8 @@ export default function DashboardScreen() {
   const [viewDay, setViewDay] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [todayDay, setTodayDay] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   // Dashboard defaults to Daily (the specific-day picker only applies here);
   // Weekly/Monthly show a rolling window and hide the day picker.
   const [period, changePeriod] = usePersistedPeriod('vl_dashboard_period', 'daily');
@@ -70,7 +73,11 @@ export default function DashboardScreen() {
       // disagree with anything else — the wall used to ignore it entirely and
       // was therefore always empty for a historical day. Ticker stays live.
       const q = period !== 'daily' ? `?period=${period}` : (viewDay ? `?sales_day=${viewDay}` : '');
-      const [s, t, p, o] = await Promise.all([
+      // allSettled, not all: with Promise.all a single failing section —
+      // the ticker, say — rejected the whole batch, so none of the four
+      // setState calls ran, `summary` stayed null, and the screen showed a
+      // bare spinner forever. Each section now lands or fails on its own.
+      const [s, t, p, o] = await Promise.allSettled([
         api<Summary>(`/api/dashboard/summary${q}`),
         api<{ items: TickerItem[] }>('/api/dashboard/ticker'),
         api<{ vets: WallItem[]; rookies: WallItem[]; unranked?: WallItem[]; platinum_rule?: PlatinumRulePost[] }>(
@@ -82,11 +89,33 @@ export default function DashboardScreen() {
       // land instead. Applying this older response now would overwrite
       // correct data with stale data for a tab that's no longer active.
       if (fetchIdRef.current !== requestId) return;
-      setSummary(s); setTicker(t.items); setVets(p.vets); setRookies(p.rookies);
-      setUnranked(p.unranked || []); setPlatinum(p.platinum_rule || []); setOffices(o.offices);
-      if (!viewDay && period === 'daily') setTodayDay(s.sales_day);
+
+      // The summary is the screen: without it there are no cards and no
+      // header, so its failure is the one the user has to be told about.
+      if (s.status === 'fulfilled') {
+        setSummary(s.value);
+        setError(null);
+        if (!viewDay && period === 'daily') setTodayDay(s.value.sales_day);
+      } else {
+        const e = s.reason;
+        setError(e instanceof Error ? e.message : 'The dashboard could not be loaded.');
+      }
+
+      // The rest are supporting sections. A failing one keeps whatever it had
+      // rather than blanking the screen — each already renders its own empty
+      // state when it genuinely has nothing.
+      if (t.status === 'fulfilled') setTicker(t.value.items);
+      if (p.status === 'fulfilled') {
+        setVets(p.value.vets);
+        setRookies(p.value.rookies);
+        setUnranked(p.value.unranked || []);
+        setPlatinum(p.value.platinum_rule || []);
+      }
+      if (o.status === 'fulfilled') setOffices(o.value.offices);
     } catch (e) {
       if (fetchIdRef.current === requestId) console.warn('Dashboard fetch error:', e);
+    } finally {
+      if (fetchIdRef.current === requestId) setLoading(false);
     }
   }, [viewDay, period]);
 
@@ -164,9 +193,17 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
       >
-        {!summary ? (
-          <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
-        ) : (
+        <LoadState
+          loading={loading && !summary}
+          // Once the summary is on screen, a failed refresh leaves it there:
+          // the numbers are still the last good ones, and replacing them with
+          // an error card mid-glance helps nobody.
+          error={summary ? null : error}
+          onRetry={fetchAll}
+          loadingText="Loading production…"
+          testID="dashboard"
+        >
+          {!summary ? null : (
           <>
             <Text style={styles.sectionTitle}>
               {period !== 'daily'
@@ -223,7 +260,8 @@ export default function DashboardScreen() {
 
             <View style={{ height: 40 }} />
           </>
-        )}
+          )}
+        </LoadState>
       </ScrollView>
 
       <TourAnchor id="dash-ticker">

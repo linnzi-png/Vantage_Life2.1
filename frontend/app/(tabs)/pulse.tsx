@@ -127,6 +127,7 @@ export default function PulseScreen() {
   const [form, setForm] = useState<PulseForm>(empty);
   const [today, setToday] = useState<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string } | null>(null);
   const [streak, setStreak] = useState(0);
+  const [todayError, setTodayError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [nifSubmitting, setNifSubmitting] = useState(false);
   // True during the midnight–6 AM window; drives the "submit now" urgency
@@ -153,7 +154,14 @@ export default function PulseScreen() {
       setToday(t);
       setStreak(s.streak);
       setUpline(u.upline);
-    } catch { /* not linked */ }
+      setTodayError(null);
+    } catch (e: unknown) {
+      // This used to be `catch { /* not linked */ }`, asserting a cause the
+      // code cannot know. A 500 or a dead network left `today` null, and the
+      // card below then rendered "$0 · 0 sales · 0 sits" — an outage shown as
+      // a zero night, on the screen whose entire job is the running total.
+      setTodayError(e instanceof Error ? e.message : 'Your running total could not be loaded.');
+    }
   }, []);
 
   useEffect(() => {
@@ -302,6 +310,9 @@ export default function PulseScreen() {
   const displayTotals = isToday ? today?.totals : dayData?.totals;
   const totalAlp = displayTotals?.gross_alp ?? 0;
   const isPlayersClub = totalAlp >= 10000;
+  // A failed fetch, not a zero day. Entry stays available either way — a
+  // missing total is no reason to stop someone logging their numbers.
+  const totalsUnavailable = isToday && !today && !!todayError;
 
   // Memoised so the value is stable across renders within the same mount
   const entries = useMemo(
@@ -378,11 +389,29 @@ export default function PulseScreen() {
 
           <View style={styles.todayCard}>
             <Text style={styles.todayLabel}>{isToday ? "TODAY'S RUNNING TOTAL" : `${salesDay} TOTAL`}</Text>
-            <Text style={[styles.todayAlp, isPlayersClub && { color: COLORS.gold }]}>${Math.round(totalAlp).toLocaleString()}</Text>
-            <Text style={styles.todayMeta}>{displayTotals?.sales ?? 0} sales · {displayTotals?.sits ?? 0} sits</Text>
-            {isPlayersClub ? (
-              <View style={styles.club}><Ionicons name="trophy" size={14} color={COLORS.gold} /><Text style={styles.clubTxt}>{"PLAYER'S CLUB · $10K HIT"}</Text></View>
-            ) : null}
+            {totalsUnavailable ? (
+              <>
+                <Text style={[styles.todayAlp, { color: COLORS.textDim }]}>—</Text>
+                <Text style={styles.todayMeta}>Couldn&apos;t load your total. You can still log tonight&apos;s numbers.</Text>
+                <TouchableOpacity
+                  style={styles.totalRetry}
+                  onPress={refresh}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading today's total"
+                  testID="pulse-total-retry"
+                >
+                  <Text style={styles.totalRetryTxt}>RETRY</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.todayAlp, isPlayersClub && { color: COLORS.gold }]}>${Math.round(totalAlp).toLocaleString()}</Text>
+                <Text style={styles.todayMeta}>{displayTotals?.sales ?? 0} sales · {displayTotals?.sits ?? 0} sits</Text>
+                {isPlayersClub ? (
+                  <View style={styles.club}><Ionicons name="trophy" size={14} color={COLORS.gold} /><Text style={styles.clubTxt}>{"PLAYER'S CLUB · $10K HIT"}</Text></View>
+                ) : null}
+              </>
+            )}
           </View>
 
           <TourAnchor id="pulse-stepper" onLayout={(e) => { stepCardY.current = e.nativeEvent.layout.y; }}>
@@ -583,6 +612,18 @@ const styles = StyleSheet.create({
   todayLabel: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 1.6 },
   todayAlp: { color: '#fff', fontSize: 36, fontWeight: '900', marginTop: 4, letterSpacing: -1 },
   todayMeta: { color: COLORS.textDim, fontSize: 12, marginTop: 4 },
+  totalRetry: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  totalRetryTxt: { color: COLORS.primary, fontSize: 11, fontWeight: '900', letterSpacing: 1 },
   club: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, alignSelf: 'flex-start', backgroundColor: 'rgba(255,215,0,0.1)', paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: COLORS.gold, borderRadius: 4 },
   clubTxt: { color: COLORS.gold, fontWeight: '900', fontSize: 10, letterSpacing: 1 },
   stepCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, padding: 16, borderRadius: 6, marginTop: 8 },
