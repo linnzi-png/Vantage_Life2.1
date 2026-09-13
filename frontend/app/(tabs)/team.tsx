@@ -175,12 +175,12 @@ export default function TeamScreen() {
     ? sorted.filter((r) => `${r.name} ${r.office} ${roleTitle(r.io_role, r.role)}`.toLowerCase().includes(q))
     : sorted;
 
-  if (levelNum(user?.role) < 2) {
+  if (levelNum(user?.role) < 1) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.empty}>
           <Ionicons name="lock-closed" size={32} color={COLORS.textDim} />
-          <Text style={styles.emptyTxt}>Team View is for GA, MGA, and RGA roles.</Text>
+          <Text style={styles.emptyTxt}>Team View is for Agent, GA, MGA, and RGA roles.</Text>
         </View>
       </SafeAreaView>
     );

@@ -807,6 +807,26 @@ async def downline_agent_ids(agent_id: str) -> List[str]:
     return list(visible)
 
 
+async def office_agent_ids(user: Dict[str, Any]) -> List[str]:
+    """Agent ids sharing the caller's office. A level_1 Agent has no downline,
+    so visible_agent_ids collapses their read scope to themselves alone —
+    correct for every other route, but not for a lateral "my team" view.
+    (Per owner, 2026-09-13): the Team tab's read-only rollup uses office as
+    the level_1 team boundary instead, matching the same office scoping
+    Platinum Wall already uses for level_1 (see dashboard_wall). This does
+    NOT touch visible_agent_ids or can_enter_for — an Agent still enters only
+    their own numbers, and every other route's level_1 scope is unchanged."""
+    agent_id = user.get("agent_id")
+    if not agent_id:
+        return []
+    me = await db.agent_profiles.find_one({"agent_id": agent_id}, {"_id": 0, "office": 1})
+    office = (me or {}).get("office")
+    if not office:
+        return []
+    return [a["agent_id"] async for a in db.agent_profiles.find(
+        {"office": office}, {"_id": 0, "agent_id": 1})]
+
+
 async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
     """Return list of agent_ids visible to this user, or None for full access (level_4)."""
     role = user.get("role", "level_1")
@@ -1793,7 +1813,7 @@ def scoreboard_window(period: str, sales_day: Optional[str] = None) -> Tuple[Dic
 async def team_view(
     period: str = DEFAULT_SCOREBOARD_PERIOD,
     week_start: Optional[str] = None,
-    user: Dict[str, Any] = Depends(require_level(2)),
+    user: Dict[str, Any] = Depends(require_level(1)),
 ):
     """Team rollup. `week_start` (a Wednesday) pulls up a specific past week
     instead of a rolling window.
@@ -1803,8 +1823,15 @@ async def team_view(
     but a past week must be defined by the days the production belongs to —
     otherwise a backfilled entry, stamped when it was imported rather than when
     it was sold, would land in the wrong week.
+
+    Open to level_1+ (per owner, 2026-09-13): a level_1 Agent reads their own
+    office's full rollup here, same fields GA+ sees for their downline — see
+    office_agent_ids. Write actions below (add/move/remove a team member,
+    entering on someone else's behalf) all stay behind their own level_2+
+    checks (canEnter client-side; require_level(2)/can_enter_for server-side),
+    so this only ever widens read access, never write.
     """
-    ids = await visible_agent_ids(user)
+    ids = await office_agent_ids(user) if user.get("role") == "level_1" else await visible_agent_ids(user)
     today = current_sales_day_str()
     if week_start:
         day_from, day_to = week_day_range(week_start)
@@ -1909,10 +1936,11 @@ async def team_view(
 
 
 @api_router.get("/team/weeks")
-async def team_weeks(user: Dict[str, Any] = Depends(require_level(2))):
+async def team_weeks(user: Dict[str, Any] = Depends(require_level(1))):
     """Reporting weeks that have production for the caller's visible team —
-    the options for the Team screen's week picker."""
-    ids = await visible_agent_ids(user)
+    the options for the Team screen's week picker. level_1 scope mirrors
+    /api/team: office, not downline (see office_agent_ids)."""
+    ids = await office_agent_ids(user) if user.get("role") == "level_1" else await visible_agent_ids(user)
     q: Dict[str, Any] = {} if ids is None else {"agent_id": {"$in": ids}}
     days = await db.production_entries.distinct("sales_day", q)
     weeks = set()
