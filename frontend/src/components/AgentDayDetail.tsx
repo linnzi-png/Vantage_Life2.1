@@ -4,11 +4,11 @@
 // (self or downline only, via visible_agent_ids()) and is read-only: there is
 // no correction path here — that stays on the self-correction screen and the
 // Manager Eraser, both untouched by this component.
-import React, { useMemo, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
-import { PULSE_FIELDS, recentSalesDays, currentSalesDay } from '../lib/cycle';
+import { PULSE_FIELDS, recentSalesDaysDetroit, currentSalesDayDetroit } from '../lib/cycle';
 
 // How far back the picker reaches. Matches the window AgentHistory already
 // pulls (13 weeks ≈ 91 days) so a leader can drill into any day the chart
@@ -40,11 +40,25 @@ export function AgentDayDetail({ agentId }: { agentId: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Newest-first, anchored on the currently open sales day — the same
-  // 6 AM-boundary logic the rest of the app uses for "today", not a naive
-  // midnight cutoff.
-  const dayOptions = useMemo(() => recentSalesDays(DAY_WINDOW), []);
-  const today = useMemo(() => currentSalesDay(), []);
+  // Newest-first, anchored on the currently open sales day in Detroit — the
+  // zone the backend defines a sales_day in, not the device's. Rebuilt every
+  // time the picker opens rather than memoized once: a card left open across
+  // the 6 AM boundary would otherwise keep labelling yesterday as TODAY and
+  // never offer the day that just opened.
+  const [dayOptions, setDayOptions] = useState<string[]>(() => recentSalesDaysDetroit(DAY_WINDOW));
+  const [today, setToday] = useState<string>(() => currentSalesDayDetroit());
+
+  const openPicker = () => {
+    setDayOptions(recentSalesDaysDetroit(DAY_WINDOW));
+    setToday(currentSalesDayDetroit());
+    setPickerOpen(true);
+  };
+
+  // Picking a second date before the first request lands would otherwise race:
+  // whichever response arrived last won, so a slow connection could show one
+  // day's production under another day's label. Only the newest request may
+  // write state.
+  const reqRef = useRef(0);
 
   const pick = async (d: string) => {
     setPickerOpen(false);
@@ -52,20 +66,21 @@ export function AgentDayDetail({ agentId }: { agentId: string }) {
     setDay(null);
     setError(null);
     setLoading(true);
+    const seq = ++reqRef.current;
     try {
       const r = await api<AgentDay>(`/api/agents/${encodeURIComponent(agentId)}/day?sales_day=${d}`);
-      setDay(r);
+      if (seq === reqRef.current) setDay(r);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not load that day.');
+      if (seq === reqRef.current) setError(e instanceof Error ? e.message : 'Could not load that day.');
     } finally {
-      setLoading(false);
+      if (seq === reqRef.current) setLoading(false);
     }
   };
 
   return (
     <View style={styles.section}>
       <Text style={styles.kicker}>WHAT THEY SUBMITTED ON A SPECIFIC DAY</Text>
-      <TouchableOpacity style={styles.dayPill} onPress={() => setPickerOpen(true)} testID="agent-day-picker-open">
+      <TouchableOpacity style={styles.dayPill} onPress={openPicker} testID="agent-day-picker-open">
         <Ionicons name="calendar-outline" size={13} color={COLORS.gold} />
         <Text style={styles.dayPillTxt}>{pickedDay ? fmtDay(pickedDay) : 'PICK A DATE'}</Text>
         <Ionicons name="chevron-down" size={11} color={COLORS.textDim} />
