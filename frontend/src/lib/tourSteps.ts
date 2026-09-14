@@ -16,9 +16,13 @@ import { Role } from './auth';
 // tab, all tiers).
 // v4: Hierarchy Map mention in the outro (all tiers); brand-new Financial
 // Admin walkthrough (finance_admin previously had none at all).
-// v5: Team tab for level_1 Agents (per owner, 2026-09-13) — a read-only
-// office rollup, new for that tier.
-export const TOUR_VERSION = 5;
+// v5: team-roster no longer claims a blanket "tap a row to see their
+// production history" for every tier that gets that step (#133).
+// v6: Team tab for level_1 Agents (per owner, 2026-09-13) — a read-only
+// office rollup, new for that tier. A separate number from v5 on purpose:
+// v5 is already on main and may have reached devices, and a tour only
+// re-shows when the version it last recorded is older than this one.
+export const TOUR_VERSION = 6;
 
 export type TourAnchorId =
   | 'dash-header'
@@ -245,7 +249,7 @@ const TEAM_STEPS: TourStep[] = [
     screen: '/team',
     anchor: 'team-roster',
     title: 'YOUR TEAM, LIVE',
-    body: "Your full downline rolls up in the TEAM tab — Gross and Net ALP, sales, close rate, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row for a contact card with that agent's 13-week production history. Bringing someone new onto your team directly? Tap ADD, top right.",
+    body: "Your full downline rolls up in the TEAM tab — Gross and Net ALP, sales, close rate, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row to open their contact card and reach out — call, text, or email, straight from the app. Bringing someone new onto your team directly? Tap ADD, top right.",
   },
   teamWeeksStep,
   {

@@ -8,6 +8,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { api, ApiError, COLORS } from '../lib/auth';
 import { LineChart, BarChart, Point } from './Charts';
+import { AgentDayDetail } from './AgentDayDetail';
+import { CoachingTips } from './CoachingTips';
 
 export interface HistoryWeek {
   week_start: string;
@@ -15,6 +17,7 @@ export interface HistoryWeek {
   sits: number;
   sales: number;
   n1: number;
+  sets: number;
   close_rate: number;
   alp_per_sale: number;
 }
@@ -32,6 +35,11 @@ export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?:
   const chartW = Math.min(width, 900) - 32 - 24;
 
   const [series, setSeries] = useState<HistoryWeek[] | null>(null);
+  // Whether to show the coaching card is the server's answer, never a tier
+  // comparison made here: only someone strictly above this agent in their own
+  // chain may see it (owner, 2026-09-13), and read scope is deliberately wider
+  // than that. Defaults to false, so a failed or older response shows nothing.
+  const [coachingVisible, setCoachingVisible] = useState(false);
   // Only a 403 means "not your team" and should hide the section entirely.
   // Anything else is a real failure and must say so — silently rendering
   // nothing on every error makes a missing endpoint look like a permissions
@@ -45,15 +53,17 @@ export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?:
     let cancelled = false;
     (async () => {
       try {
-        const r = await api<{ series: HistoryWeek[] }>(
+        const r = await api<{ series: HistoryWeek[]; coaching_visible?: boolean }>(
           `/api/agents/${encodeURIComponent(agentId)}/history?weeks=${weeks}`);
         if (cancelled) return;
         setSeries(r.series);
+        setCoachingVisible(!!r.coaching_visible);
         setDenied(false);
         setFailed(null);
       } catch (e: unknown) {
         if (cancelled) return;
         setSeries(null);
+        setCoachingVisible(false);
         const status = e instanceof ApiError ? e.status : 0;
         setDenied(status === 403);
         setFailed(status === 403 ? null
@@ -82,6 +92,8 @@ export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?:
       <View style={styles.section}>
         <Text style={styles.kicker}>PRODUCTION HISTORY</Text>
         <Text style={styles.empty}>No production recorded yet.</Text>
+        <AgentDayDetail agentId={agentId} />
+        {coachingVisible ? <CoachingTips /> : null}
       </View>
     );
   }
@@ -89,9 +101,18 @@ export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?:
   const totalAlp = series.reduce((n, w) => n + w.gross_alp, 0);
   const totalSales = series.reduce((n, w) => n + w.sales, 0);
   const totalSits = series.reduce((n, w) => n + w.sits, 0);
+  const totalSets = series.reduce((n, w) => n + w.sets, 0);
+  const totalN1 = series.reduce((n, w) => n + w.n1, 0);
   // Close Rate = Sales / Sits. N1 (medically unqualified) is already left out
   // of Sits at entry, so subtracting it again would exclude them twice.
   const closeRate = totalSits > 0 ? (totalSales / totalSits) * 100 : 0;
+  // Sit Rate ("show rate") = (Sits + N1) / Sets — mirrors backend/metrics.py's
+  // show_rate() exactly: N1 people DID show up, so they belong back in the
+  // numerator here even though close_rate leaves them out. Summed from raw
+  // counts across the window rather than averaging each week's own rate, same
+  // methodology as Close Rate above.
+  const sitRate = totalSets > 0 ? ((totalSits + totalN1) / totalSets) * 100 : 0;
+  const alpPerSale = totalSales > 0 ? totalAlp / totalSales : 0;
   const best = series.reduce((m, w) => (w.gross_alp > m.gross_alp ? w : m), series[0]);
 
   const alpPoints: Point[] = series.map((w) => ({ label: shortDate(w.week_start), value: w.gross_alp }));
@@ -107,12 +128,20 @@ export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?:
         <Stat label="CLOSE" value={`${closeRate.toFixed(1)}%`} />
         <Stat label="BEST WK" value={compact(best.gross_alp)} />
       </View>
+      <View style={[styles.statRow, styles.statRow2]}>
+        <Stat label="SIT RATE" value={`${sitRate.toFixed(1)}%`} />
+        <Stat label="SITS/APPTS" value={`${totalSits} / ${totalSets}`} />
+        <Stat label="AVG ALP/SALE" value={money(alpPerSale)} />
+      </View>
 
       <Text style={styles.chartLab}>GROSS ALP BY WEEK</Text>
       <LineChart data={alpPoints} width={chartW} height={120} formatValue={compact} />
 
       <Text style={styles.chartLab}>SALES BY WEEK</Text>
       <BarChart data={salesPoints} width={chartW} height={100} />
+
+      <AgentDayDetail agentId={agentId} />
+      {coachingVisible ? <CoachingTips /> : null}
     </View>
   );
 }
@@ -133,6 +162,7 @@ const styles = StyleSheet.create({
   empty: { color: COLORS.textMuted, fontSize: 12, marginTop: 8 },
   failed: { color: COLORS.orange, fontSize: 12, marginTop: 8 },
   statRow: { flexDirection: 'row', gap: 6, marginTop: 10 },
+  statRow2: { marginTop: 6 },
   stat: { flex: 1, backgroundColor: COLORS.surface2, borderRadius: 6, padding: 8 },
   statLab: { color: COLORS.textMuted, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
   statVal: { color: '#fff', fontSize: 14, fontWeight: '900', marginTop: 2 },

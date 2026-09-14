@@ -1,6 +1,6 @@
 // Team View — Level 2+
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,7 +34,7 @@ const ALERT_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export default function TeamScreen() {
-  const { user, agent } = useAuth();
+  const { user, agent, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<TeamRow[]>([]);
   const [moveTarget, setMoveTarget] = useState<TeamRow | null>(null);
   const [upline, setUpline] = useState<AgentContact | null>(null);
@@ -175,6 +175,22 @@ export default function TeamScreen() {
     ? sorted.filter((r) => `${r.name} ${r.office} ${roleTitle(r.io_role, r.role)}`.toLowerCase().includes(q))
     : sorted;
 
+  // `user` is null while AuthProvider restores the session, and
+  // levelNum(undefined) is 0 — so without this every GA and above was shown
+  // the lock screen for a beat on every cold start. With the level_1 Team tab
+  // it matters more, not less: that beat would now hit every tier.
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.empty}>
+          <ActivityIndicator color={COLORS.primary} accessibilityLabel="Checking your access" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // < 1 rather than < 2: level_1 reads their own office here (office_agent_ids).
+  // levelNum is 0 for finance_admin and pending, so both still get the lock.
   if (levelNum(user?.role) < 1) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>

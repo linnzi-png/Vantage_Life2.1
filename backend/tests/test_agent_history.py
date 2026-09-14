@@ -171,3 +171,158 @@ async def test_team_weeks_allows_level_1_scoped_to_office(client, seeded_db):
     r = await client.get("/api/team/weeks", headers=auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["weeks"] == ["2026-02-18"]
+
+
+# ---------------- agent day: what one agent submitted on one date ----------------
+
+async def test_agent_day_returns_totals_for_that_sales_day_only(client, seeded_db):
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sets=10, sits=8, sales=3, n1=1, gross_alp=750.0)
+    await entry(seeded_db, day="2026-02-19", agent_id="AG_1", sets=5, sits=4, sales=9, gross_alp=9000.0)  # different day
+
+    r = await client.get("/api/agents/AG_1/day?sales_day=2026-02-18", headers=auth(token))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["sales_day"] == "2026-02-18"
+    assert body["totals"]["sales"] == 3
+    assert body["totals"]["gross_alp"] == 750.0
+    assert body["has_entries"] is True
+    assert body["entry_count"] == 1
+    # 3 sales / 8 sits = 37.5% (close_rate never subtracts N1 twice)
+    assert body["close_rate"] == 37.5
+    # show_rate = (sits + n1) / sets = (8 + 1) / 10 = 90%
+    assert body["show_rate"] == 90.0
+    assert body["alp_per_sale"] == 250.0
+
+
+async def test_agent_day_with_no_submission_is_a_clean_zero_not_an_error(client, seeded_db):
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/agents/AG_1/day?sales_day=2026-02-18", headers=auth(token))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["has_entries"] is False
+    assert body["entry_count"] == 0
+    assert body["totals"]["sales"] == 0
+    assert body["close_rate"] == 0
+    assert body["show_rate"] == 0
+
+
+async def test_agent_day_sums_multiple_entries_same_day(client, seeded_db):
+    """A correction adds a second row for the same sales_day — the day view
+    must show the true current total, same as the self-correction screen."""
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sales=2, gross_alp=400.0)
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sales=1, gross_alp=100.0, is_adjustment=True)
+    body = (await client.get("/api/agents/AG_1/day?sales_day=2026-02-18", headers=auth(token))).json()
+    assert body["totals"]["sales"] == 3
+    assert body["totals"]["gross_alp"] == 500.0
+    assert body["entry_count"] == 2
+
+
+async def test_agent_day_defaults_to_today_when_sales_day_omitted(client, seeded_db):
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/agents/AG_1/day", headers=auth(token))
+    assert r.status_code == 200
+    assert r.json()["sales_day"] == server.current_sales_day_str()
+
+
+async def test_agent_day_rejects_a_future_date(client, seeded_db):
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    r = await client.get("/api/agents/AG_1/day?sales_day=2099-01-01", headers=auth(token))
+    assert r.status_code == 400
+
+
+async def test_agent_cannot_read_a_peers_day(client, seeded_db):
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_2", sales=9, gross_alp=9000.0)
+    r = await client.get("/api/agents/AG_2/day?sales_day=2026-02-18", headers=auth(token))
+    assert r.status_code == 403
+
+
+async def test_upline_can_read_a_downline_agents_day(client, seeded_db):
+    token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sales=3, gross_alp=750.0)
+    r = await client.get("/api/agents/AG_1/day?sales_day=2026-02-18", headers=auth(token))
+    assert r.status_code == 200
+    assert r.json()["totals"]["sales"] == 3
+
+
+async def test_agent_day_404s_for_an_unknown_agent(client, seeded_db):
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    assert (await client.get("/api/agents/NOPE/day?sales_day=2026-02-18", headers=auth(token))).status_code == 404
+
+
+# ---------------- coaching card visibility ----------------
+#
+# Owner rule (2026-09-13): everyone ABOVE an agent in that agent's own chain —
+# SA, GA, MGA, RGA — may see their coaching card. Nobody at or below them may,
+# and nobody sideways. The server answers this with `coaching_visible` so the
+# client never decides it by comparing tiers: SA and GA are both level_2, so a
+# tier comparison denies a GA their own SA's card.
+
+async def coaching(client, token, agent_id: str) -> bool:
+    r = await client.get(f"/api/agents/{agent_id}/history", headers=auth(token))
+    assert r.status_code == 200
+    return r.json()["coaching_visible"]
+
+
+async def test_every_upline_tier_sees_an_agents_coaching_card(client, seeded_db):
+    """AG_1's chain is SA_1 → GA_1 → MGA_1 → RGA_1; all four are above him."""
+    for agent_id, role in (("SA_1", "level_2"), ("GA_1", "level_2"),
+                           ("MGA_1", "level_3"), ("RGA_1", "level_4")):
+        token = await make_session(seeded_db, role=role, agent_id=agent_id,
+                                   email=f"{agent_id.lower()}@test.dev")
+        assert await coaching(client, token, "AG_1") is True, agent_id
+
+
+async def test_ga_sees_their_own_sas_coaching_card(client, seeded_db):
+    """The case a tier comparison gets wrong: GA_1 is SA_1's upline, but both
+    are level_2, so `viewer_level > agent_level` would deny it."""
+    token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    assert await coaching(client, token, "SA_1") is True
+
+
+async def test_nobody_sees_their_own_coaching_card(client, seeded_db):
+    for agent_id, role in (("AG_1", "level_1"), ("SA_1", "level_2"), ("RGA_1", "level_4")):
+        token = await make_session(seeded_db, role=role, agent_id=agent_id,
+                                   email=f"{agent_id.lower()}@test.dev")
+        assert await coaching(client, token, agent_id) is False, agent_id
+
+
+async def test_downline_never_sees_an_uplines_coaching_card(client, seeded_db):
+    """SA_1 cannot even read GA_1's history, let alone their coaching card."""
+    token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
+    assert (await client.get("/api/agents/GA_1/history", headers=auth(token))).status_code == 403
+
+
+async def test_rga_does_not_see_another_rgas_coaching_card(client, seeded_db):
+    """level_4 reads the whole agency, but a peer RGA is not below them."""
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "RGA_2", "name": "Rga Two", "email": "rga2@test.dev",
+        "role": "level_4", "upline_id": None, "office": "AMP",
+    })
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    assert await coaching(client, token, "RGA_2") is False
+
+
+async def test_finance_admin_reads_history_without_coaching(client, seeded_db):
+    """finance_admin has full read scope but sits outside the ladder, so it is
+    nobody's upline."""
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "FA_1", "name": "Fin Admin", "email": "fa@test.dev",
+        "role": "finance_admin", "upline_id": None, "office": "",
+    })
+    token = await make_session(seeded_db, role="finance_admin", agent_id="FA_1", email="fa@test.dev")
+    assert await coaching(client, token, "AG_1") is False
+
+
+# ---------------- weekly Sit Rate ----------------
+
+async def test_weekly_show_rate_adds_n1_back_into_the_numerator(client, seeded_db):
+    """Sit Rate is always (Sits + N1) / Sets (owner, 2026-09-13). The weekly
+    series used to compute a bare sits / sets, which disagreed with the day
+    drill-down, the agent card and the WAR export."""
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sets=10, sits=6, n1=2, sales=3)
+    series = (await client.get("/api/agents/AG_1/history", headers=auth(token))).json()["series"]
+    assert series[0]["show_rate"] == 80.0  # (6 + 2) / 10, not 6 / 10

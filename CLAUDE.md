@@ -105,6 +105,22 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
   excluded them twice and inflated every score — the WAR spreadsheets' own
   Close Rate column matched `Sales / Sits` in all 54 rows where the two differ
   and `Sales / (Sits - N1)` in none; office-wide 57.2% vs 68.0%.)
+- Sit Rate (a.k.a. Show Rate) formula: `(Sits + N1) / Sets` — implemented in
+  `backend/metrics.py` as `show_rate()`. This is the mirror image of Close Rate
+  on the N1 question and for the opposite reason: an N1 person **did** keep the
+  appointment and sit through the presentation, they simply could not be
+  insured afterwards, so they are added back into the numerator here. It is
+  never a bare `Sits / Sets`. (Owner, 2026-09-13, restating the WAR reports'
+  own `=IFERROR(SUM(H+L)/G,0)`.)
+- Coaching card visibility: everyone **above** an agent in that agent's own
+  chain may see their coaching card — SA, GA, MGA, RGA alike — and nobody at or
+  below them, and nobody sideways. This is a hierarchy question, never a tier
+  comparison: SA and GA are both level_2, so `viewer_level > agent_level`
+  denies a GA their own SA's card. Decided server-side by `is_upline_of()` and
+  returned as `coaching_visible` on `/api/agents/{id}/history`; the client must
+  never re-derive it from roles. Read scope (`visible_agent_ids`) is
+  deliberately wider than this and must not be conflated with it.
+  (Owner, 2026-09-13.)
 - All metric calculations go in `backend/metrics.py`, never inline in route handlers
 
 ## Commands
@@ -133,7 +149,8 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 - Reporting cycle starts 6AM Detroit time - all date range queries must go through `sales_day_for()`.
 - Users not on the agent roster have role `"pending"` and no `agent_id` — every business-data route must sit behind `require_agent`/`require_level`, which reject them.
 - Google OAuth flows through Auth0 (`AUTH0_DOMAIN`/`AUTH0_CLIENT_IDS`, `/api/auth/auth0`): the app runs Auth0 Universal Login routed to the Google connection, and the backend verifies the resulting Auth0-issued ID token against Auth0's own JWKS/issuer, not Google's directly. Sign in with Apple is unaffected and still verifies natively against Apple's JWKS.
-- TEMPORARY (remove once confirmed): `/api/auth/session` (Emergent) still exists alongside `/api/auth/auth0` — Railway deploys the backend instantly on merge, but Expo OTA updates reach devices gradually, so any device still on the pre-Auth0 bundle needs the old endpoint until the OTA rollout is confirmed complete. Delete it, `EMERGENT_AUTH_URL`, and `SessionExchangeIn` in a follow-up cleanup PR — not before.
+- The Emergent auth proxy is fully gone. `/api/auth/session`, `EMERGENT_AUTH_URL`, `SessionExchangeIn`, `signInGoogleSession`, and the OAuth-fragment handler in `index.tsx` were all removed after the Auth0 OTA update reached the fleet (published 2026-09-04, re-published 2026-09-09). Don't reintroduce a session-id exchange path.
+- There is no longer a config-only rollback for Google sign-in. While the Emergent fallback existed, clearing the `EXPO_PUBLIC_AUTH0_*` vars fell the app back to the old flow; now an unconfigured build just shows "Google Sign-In Unavailable" and only Apple and demo logins work. Rolling Google back means republishing a previous EAS Update group, not flipping an env var.
 
 ## AI Agent Notes
 - Ask before modifying any business logic or calculation

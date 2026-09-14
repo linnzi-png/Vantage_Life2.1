@@ -55,6 +55,12 @@ export function AgentContactSheet({ agent, onClose, onEnterNumbers, onMove, onRe
   if (!agent) return null;
 
   const label = roleTitle(agent.io_role, agent.role);
+  // Coaching Tips is deliberately NOT gated here. Who may see an agent's
+  // coaching card is a hierarchy question — strictly above them in their own
+  // chain — and the client cannot answer it from tier labels: SA and GA are
+  // both level_2, so a GA reading their own SA's card would compare 2 > 2 and
+  // be denied. AgentHistory renders the card off `coaching_visible`, which
+  // /api/agents/{id}/history computes from the upline walk.
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
