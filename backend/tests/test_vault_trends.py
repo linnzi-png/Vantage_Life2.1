@@ -96,6 +96,15 @@ async def test_show_rate_and_alp_per_sale(client, seeded_db):
     assert w["alp_per_sale"] == 500.0
 
 
+async def test_show_rate_counts_n1_as_a_kept_appointment(client, seeded_db):
+    """Sit Rate is (Sits + N1) / Sets — an N1 person did show up. Same formula
+    everywhere: metrics.show_rate, never inline."""
+    token = await rga_token(seeded_db)
+    await entry(seeded_db, day="2026-02-18", sets=10, sits=6, n1=2, sales=2)
+    w = (await client.get("/api/vault/trends", headers=auth(token))).json()["series"][0]
+    assert w["show_rate"] == 80.0
+
+
 # ---------------- office filtering ----------------
 
 async def test_office_filter_narrows_the_series(client, seeded_db):

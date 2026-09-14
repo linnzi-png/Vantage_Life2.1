@@ -94,6 +94,22 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
   excluded them twice and inflated every score — the WAR spreadsheets' own
   Close Rate column matched `Sales / Sits` in all 54 rows where the two differ
   and `Sales / (Sits - N1)` in none; office-wide 57.2% vs 68.0%.)
+- Sit Rate (a.k.a. Show Rate) formula: `(Sits + N1) / Sets` — implemented in
+  `backend/metrics.py` as `show_rate()`. This is the mirror image of Close Rate
+  on the N1 question and for the opposite reason: an N1 person **did** keep the
+  appointment and sit through the presentation, they simply could not be
+  insured afterwards, so they are added back into the numerator here. It is
+  never a bare `Sits / Sets`. (Owner, 2026-09-13, restating the WAR reports'
+  own `=IFERROR(SUM(H+L)/G,0)`.)
+- Coaching card visibility: everyone **above** an agent in that agent's own
+  chain may see their coaching card — SA, GA, MGA, RGA alike — and nobody at or
+  below them, and nobody sideways. This is a hierarchy question, never a tier
+  comparison: SA and GA are both level_2, so `viewer_level > agent_level`
+  denies a GA their own SA's card. Decided server-side by `is_upline_of()` and
+  returned as `coaching_visible` on `/api/agents/{id}/history`; the client must
+  never re-derive it from roles. Read scope (`visible_agent_ids`) is
+  deliberately wider than this and must not be conflated with it.
+  (Owner, 2026-09-13.)
 - All metric calculations go in `backend/metrics.py`, never inline in route handlers
 
 ## Commands
