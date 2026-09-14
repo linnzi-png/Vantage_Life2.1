@@ -30,16 +30,24 @@ change (`com.aopremiere.vantagelife` bundle ID, `@aopremiere.com` demo emails).
 3. `level_3` MGA (Master General Agent) — sees GA-level rollups — displays as "Executive Producer"
 4. `level_4` RGA (Regional General Agent) — sees all MGA rollups — displays as "Chief Executive Producer"
 
-**Team tab exception for level_1 (per owner, 2026-09-13):** an Agent's Team
-tab (`GET /api/team`, `/api/team/weeks`) is scoped to their own **office**
-(`office_agent_ids()`), not their downline — an Agent has no downline. This
-is the one deliberate case where an Agent reads data beyond just themselves;
-it is read-only and lateral (peers in the same office), never upline/downline,
-and never extends to any other route. Write actions on that screen (add/move/
-remove a team member, entering Nightly Numbers on someone else's behalf) are
-unchanged and still require level_2+ (`canEnter` client-side; `require_level(2)`
-/ `can_enter_for` server-side). Every other route's level_1 scope
-(`visible_agent_ids` → `[agent_id]` only) is untouched.
+**Team tab exception for level_1 (per owner, 2026-09-13, extended
+2026-09-14):** an Agent's Team tab is scoped to their own **office**
+(`office_agent_ids()`), not their downline — an Agent has no downline. The
+office is the whole office, uplines included: any agent may see general team
+stats, their home office's sales numbers, any teammate's day/week/month
+production, and that teammate's basic ALP and close ratio on the contact card.
+The scope is shared by `GET /api/team`, `/api/team/weeks`,
+`/api/agents/{id}/history` and `/api/agents/{id}/day` through one helper,
+`team_scope_agent_ids()` — never re-derived per route.
+
+Two things are deliberately NOT widened with it. Coaching cards stay
+upline-only (`is_upline_of`), and the judgement alert chips
+(`UPLINE_ONLY_ALERTS`: low close ratio, low average deal, no pulse) are
+stripped from the rollup for a level_1 caller — the numbers are the office's,
+the assessment is the upline's. Neutral flags such as the rookie badge stay.
+Write actions are unchanged and still require level_2+ (`canEnter`
+client-side; `require_level(2)` / `can_enter_for` server-side); every other
+route's level_1 scope (`visible_agent_ids` → `[agent_id]` only) is untouched.
 
 Display titles (producer track) are separate from access tiers. `io_role`
 titles map via `roleTitle()` in `frontend/src/lib/auth.tsx`: SA → Regional
@@ -138,7 +146,7 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 
 ## Forbidden Patterns
 - NEVER subtract N1 from Sits — Sits already excludes them; subtracting double-counts the exclusion
-- NEVER allow an Agent to see data above their RBAC tier — the one documented exception is the Team tab's own-office read (see RBAC Hierarchy above); don't generalize it or extend it to other routes without an explicit owner decision
+- NEVER allow an Agent to see data above their RBAC tier — the one documented exception is the Team tab's own-office read and the agent card it opens (see RBAC Hierarchy above); don't generalize it or extend it to other routes without an explicit owner decision
 - NEVER change the 6AM cycle boundary without explicit instruction
 - NEVER bypass the Wednesday 2PM cutoff gate
 - NEVER collapse authentication and authorization into a single check
