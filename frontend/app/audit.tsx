@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import { api, COLORS, useAuth, levelNum } from '../src/lib/auth';
+import { api, COLORS, useAuth, hasFullControl } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { LoadState } from '../src/components/LoadState';
 
@@ -72,12 +72,16 @@ export default function AuditScreen() {
       </View>
     );
   }
-  if (levelNum(user?.role) < 4) {
+  // hasFullControl, not a bare level check: /api/manager/audit is gated by
+  // require_level4_or_admin, and the More menu offers this screen to is_admin
+  // at any tier, so a `< 4` gate showed those accounts a link that then locked
+  // them out.
+  if (!hasFullControl(user)) {
     return (
       <View style={styles.gate}>
         <Stack.Screen options={{ title: 'AUDIT LOG', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
         <Ionicons name="lock-closed" size={32} color={COLORS.textDim} />
-        <Text style={styles.gateTxt}>The audit log is an RGA-only view.</Text>
+        <Text style={styles.gateTxt}>The audit log is limited to RGA and admin accounts.</Text>
       </View>
     );
   }

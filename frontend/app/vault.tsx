@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import { api, apiText, apiBlob, COLORS, useAuth, levelNum } from '../src/lib/auth';
+import { api, apiText, apiBlob, COLORS, useAuth, canViewVault } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { notify } from '../src/lib/dialog';
 import { LineChart, BarChart, Point } from '../src/components/Charts';
@@ -265,12 +265,17 @@ export default function VaultScreen() {
       </View>
     );
   }
-  if (levelNum(user?.role) < 4) {
+  // canViewVault, not a bare level check: /api/vault/trends and /vault/export
+  // are gated by require_level4_or_finance_admin, so the screen must admit the
+  // same three — RGA, is_admin, finance_admin. levelNum('finance_admin') is 0,
+  // and the More menu already offers this screen to is_admin at any tier, so a
+  // `< 4` gate locked out accounts the server and the navigation both allow.
+  if (!canViewVault(user)) {
     return (
       <View style={styles.gate}>
         <Stack.Screen options={{ title: 'COMPANY HEALTH', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
         <Ionicons name="lock-closed" size={32} color={COLORS.textDim} />
-        <Text style={styles.gateTxt}>Company Health is an RGA-only view.</Text>
+        <Text style={styles.gateTxt}>Company Health is limited to RGA, admin and finance accounts.</Text>
       </View>
     );
   }
