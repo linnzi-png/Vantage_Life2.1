@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api, useAuth, roleTitle, isFinanceAdmin, isSessionExpiredError, levelNum, COLORS, Role } from '../src/lib/auth';
 import { useTour } from '../src/lib/tour';
 import { TourAnchor } from '../src/components/TourAnchor';
+import { AgentContactSheet } from '../src/components/AgentContactSheet';
 import { WarReportImport } from '../src/components/WarReportImport';
 import { OfficeMerge } from '../src/components/OfficeMerge';
 import { OrphanRepair } from '../src/components/OrphanRepair';
@@ -111,6 +112,9 @@ export default function AdminScreen() {
   // upline pick (finance_admin carries none) — pending person + new tier.
   const [revokeFAFor, setRevokeFAFor] = useState<{ person: Person; role: Role } | null>(null);
   const [revokeFAQuery, setRevokeFAQuery] = useState('');
+  // Tapping a roster row's contact icon opens the same call/text/email sheet
+  // every other screen uses — independent of the tier-management expand.
+  const [contactFor, setContactFor] = useState<Person | ArchivedPerson | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [loginFilter, setLoginFilter] = useState<LoginFilter>('all');
@@ -539,6 +543,13 @@ export default function AdminScreen() {
                   <Text style={styles.tierBadgeTxt}>{TIER_SHORT[p.role] || '—'}</Text>
                 </View>
                 {p.is_admin ? <Ionicons name="shield-checkmark" size={14} color={COLORS.gold} /> : null}
+                <TouchableOpacity
+                  style={styles.contactBtn}
+                  onPress={() => setContactFor(p)}
+                  testID={`admin-contact-${p.agent_id}`}
+                >
+                  <Ionicons name="call" size={16} color={COLORS.primary} />
+                </TouchableOpacity>
                 <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.textDim} />
               </TouchableOpacity>
 
@@ -725,6 +736,13 @@ export default function AdminScreen() {
                     </Text>
                   </View>
                   <TouchableOpacity
+                    style={styles.contactBtn}
+                    onPress={() => setContactFor(p)}
+                    testID={`admin-contact-${p.agent_id}`}
+                  >
+                    <Ionicons name="call" size={16} color={COLORS.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
                     style={styles.restoreBtn}
                     onPress={() => (p.role === 'level_4' ? restorePerson(p) : setRestoreFor(restoreFor?.agent_id === p.agent_id ? null : p))}
                     testID={`admin-restore-${p.agent_id}`}
@@ -758,6 +776,7 @@ export default function AdminScreen() {
           </>
         ) : null}
       </ScrollView>
+      <AgentContactSheet agent={contactFor} onClose={() => setContactFor(null)} />
     </View>
   );
 }
@@ -810,6 +829,7 @@ const styles = StyleSheet.create({
   personHead: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 },
   personName: { color: '#fff', fontWeight: '800', fontSize: 14 },
   personSub: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
+  contactBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surface2 },
   reviewBadge: { backgroundColor: 'rgba(255,215,0,0.16)', borderWidth: 1, borderColor: COLORS.gold, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   reviewBadgeTxt: { color: COLORS.gold, fontWeight: '900', fontSize: 9, letterSpacing: 1 },
   reviewCard: { backgroundColor: 'rgba(255,215,0,0.10)', borderWidth: 1, borderColor: 'rgba(255,215,0,0.45)', borderRadius: 8, padding: 10, marginTop: 10 },
