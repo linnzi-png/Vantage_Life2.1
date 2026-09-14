@@ -177,7 +177,8 @@ export default function TeamScreen() {
 
   // `user` is null while AuthProvider restores the session, and
   // levelNum(undefined) is 0 — so without this every GA and above was shown
-  // the lock screen for a beat on every cold start.
+  // the lock screen for a beat on every cold start. With the level_1 Team tab
+  // it matters more, not less: that beat would now hit every tier.
   if (authLoading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -188,12 +189,14 @@ export default function TeamScreen() {
     );
   }
 
-  if (levelNum(user?.role) < 2) {
+  // < 1 rather than < 2: level_1 reads their own office here (office_agent_ids).
+  // levelNum is 0 for finance_admin and pending, so both still get the lock.
+  if (levelNum(user?.role) < 1) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.empty}>
           <Ionicons name="lock-closed" size={32} color={COLORS.textDim} />
-          <Text style={styles.emptyTxt}>Team View is for GA, MGA, and RGA roles.</Text>
+          <Text style={styles.emptyTxt}>Team View is for Agent, GA, MGA, and RGA roles.</Text>
         </View>
       </SafeAreaView>
     );

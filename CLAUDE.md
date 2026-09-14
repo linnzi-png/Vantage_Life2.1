@@ -25,10 +25,21 @@ change (`com.aopremiere.vantagelife` bundle ID, `@aopremiere.com` demo emails).
 - `backend/tests/` — pytest suite
 
 ## RBAC Hierarchy (4-tier - NEVER flatten or bypass)
-1. `level_1` Agent — enters their own metrics only
+1. `level_1` Agent — enters their own metrics only; reads full metrics for their own office via the Team tab (per owner, 2026-09-13 — see below)
 2. `level_2` GA (General Agent) — sees their team rollup — displays as "CoExecutive Producer"
 3. `level_3` MGA (Master General Agent) — sees GA-level rollups — displays as "Executive Producer"
 4. `level_4` RGA (Regional General Agent) — sees all MGA rollups — displays as "Chief Executive Producer"
+
+**Team tab exception for level_1 (per owner, 2026-09-13):** an Agent's Team
+tab (`GET /api/team`, `/api/team/weeks`) is scoped to their own **office**
+(`office_agent_ids()`), not their downline — an Agent has no downline. This
+is the one deliberate case where an Agent reads data beyond just themselves;
+it is read-only and lateral (peers in the same office), never upline/downline,
+and never extends to any other route. Write actions on that screen (add/move/
+remove a team member, entering Nightly Numbers on someone else's behalf) are
+unchanged and still require level_2+ (`canEnter` client-side; `require_level(2)`
+/ `can_enter_for` server-side). Every other route's level_1 scope
+(`visible_agent_ids` → `[agent_id]` only) is untouched.
 
 Display titles (producer track) are separate from access tiers. `io_role`
 titles map via `roleTitle()` in `frontend/src/lib/auth.tsx`: SA → Regional
@@ -127,7 +138,7 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 
 ## Forbidden Patterns
 - NEVER subtract N1 from Sits — Sits already excludes them; subtracting double-counts the exclusion
-- NEVER allow an Agent to see data above their RBAC tier
+- NEVER allow an Agent to see data above their RBAC tier — the one documented exception is the Team tab's own-office read (see RBAC Hierarchy above); don't generalize it or extend it to other routes without an explicit owner decision
 - NEVER change the 6AM cycle boundary without explicit instruction
 - NEVER bypass the Wednesday 2PM cutoff gate
 - NEVER collapse authentication and authorization into a single check

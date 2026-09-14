@@ -161,9 +161,16 @@ async def test_team_weeks_is_scoped_to_the_callers_team(client, seeded_db):
     assert (await client.get("/api/team/weeks", headers=auth(token))).json()["weeks"] == ["2026-02-18"]
 
 
-async def test_team_weeks_requires_level_2(client, seeded_db):
+async def test_team_weeks_allows_level_1_scoped_to_office(client, seeded_db):
+    """Per owner, 2026-09-13: /api/team/weeks no longer 403s a level_1 caller
+    — it lists weeks from their own office (office_agent_ids), not their
+    downline (an Agent has none). AG_1 and AG_2 sit in different offices."""
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
-    assert (await client.get("/api/team/weeks", headers=auth(token))).status_code == 403
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1")   # AG_1's own office (MCM)
+    await entry(seeded_db, day="2026-05-06", agent_id="AG_2")   # different office (AMP)
+    r = await client.get("/api/team/weeks", headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["weeks"] == ["2026-02-18"]
 
 
 # ---------------- agent day: what one agent submitted on one date ----------------
