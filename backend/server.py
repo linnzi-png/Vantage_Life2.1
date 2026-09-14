@@ -112,6 +112,12 @@ UNASSIGNED_OFFICE = "Unassigned"
 LOW_CLOSE_RATIO_PCT = 50
 MIN_SITS_FOR_RATIO_ALERT = 5
 LOW_AVG_DEAL_USD = 1200
+# Alert chips that are a judgement about how someone is performing, as opposed
+# to a neutral fact about them. Per owner (2026-09-14) these are for that
+# agent's uplines only: a level_1 reading their office's Team tab sees the
+# production numbers and the rookie flag, never these. Stripped server-side in
+# team_view so the client cannot be the thing that decides it.
+UPLINE_ONLY_ALERTS = {"low_close_ratio", "low_avg_deal", "no_pulse"}
 MIN_SALES_FOR_DEAL_ALERT = 3
 
 # Browser origins allowed to make credentialed calls. Both the Vercel-hosted
@@ -825,6 +831,24 @@ async def office_agent_ids(user: Dict[str, Any]) -> List[str]:
         return []
     return [a["agent_id"] async for a in db.agent_profiles.find(
         {"office": office}, {"_id": 0, "agent_id": 1})]
+
+
+async def team_scope_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
+    """Read scope for the Team tab and the agent card opened from it.
+
+    Identical to visible_agent_ids for every tier except level_1, who has no
+    downline and reads their own office instead (office_agent_ids). Per owner
+    (2026-09-14) an agent may see any teammate's production numbers for a day,
+    week or month, and their basic ALP and close ratio on the contact card —
+    so /api/team, /api/team/weeks, /api/agents/{id}/history and
+    /api/agents/{id}/day all share this one definition rather than each
+    re-deriving it. Everything else keeps visible_agent_ids' stricter scope,
+    and can_enter_for (write) is untouched: an agent still enters only their
+    own numbers.
+    """
+    if user.get("role") == "level_1":
+        return await office_agent_ids(user)
+    return await visible_agent_ids(user)
 
 
 async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
@@ -1863,7 +1887,7 @@ async def team_view(
     checks (canEnter client-side; require_level(2)/can_enter_for server-side),
     so this only ever widens read access, never write.
     """
-    ids = await office_agent_ids(user) if user.get("role") == "level_1" else await visible_agent_ids(user)
+    ids = await team_scope_agent_ids(user)
     today = current_sales_day_str()
     if week_start:
         day_from, day_to = week_day_range(week_start)
@@ -1958,6 +1982,13 @@ async def team_view(
                 "gross_alp": 0, "net_alp": 0, "sits": 0, "sales": 0,
                 "close_ratio": 0, "avg_deal": 0, "alerts": no_entry_alerts,
             })
+    # See UPLINE_ONLY_ALERTS: the numbers are open to the whole office, the
+    # performance judgements are not. Applied here, after both row-building
+    # paths, so neither can forget it.
+    if user.get("role") == "level_1":
+        for row in out:
+            row["alerts"] = [a for a in row["alerts"] if a not in UPLINE_ONLY_ALERTS]
+
     return {
         "team": out,
         "sales_day": today,
@@ -1972,7 +2003,7 @@ async def team_weeks(user: Dict[str, Any] = Depends(require_level(1))):
     """Reporting weeks that have production for the caller's visible team —
     the options for the Team screen's week picker. level_1 scope mirrors
     /api/team: office, not downline (see office_agent_ids)."""
-    ids = await office_agent_ids(user) if user.get("role") == "level_1" else await visible_agent_ids(user)
+    ids = await team_scope_agent_ids(user)
     q: Dict[str, Any] = {} if ids is None else {"agent_id": {"$in": ids}}
     days = await db.production_entries.distinct("sales_day", q)
     weeks = set()
@@ -2476,13 +2507,19 @@ async def agent_history(
 ):
     """Weekly production history for one agent.
 
-    Authorization mirrors every other business route: an agent may read their
-    own history, and an upline may read anyone in their downline — resolved by
-    visible_agent_ids(), never by tier label. RGAs get ids=None (full agency),
-    and so does finance_admin (read-only, same scope, enforced by the route
-    dependency rather than by visible_agent_ids letting it write anywhere).
+    Authorization is the Team tab's scope, team_scope_agent_ids(), never a tier
+    label: an agent may read their own history, an upline may read anyone in
+    their downline, and a level_1 may read anyone in their own office (per
+    owner, 2026-09-14 — the card they open from the office roster shows that
+    person's numbers). RGAs get ids=None (full agency), and so does
+    finance_admin (read-only, same scope, enforced by the route dependency
+    rather than by the scope helper letting it write anywhere).
+
+    `coaching_visible` below is deliberately NOT widened with it: coaching stays
+    upline-only, so a level_1 reading an office peer gets the numbers and no
+    coaching card.
     """
-    ids = await visible_agent_ids(user)
+    ids = await team_scope_agent_ids(user)
     if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
         raise HTTPException(status_code=403, detail="Not in your team")
 
@@ -2515,10 +2552,12 @@ async def agent_day(
     """What one agent submitted for one sales_day — read-only drill-down from
     the agent card's date picker.
 
-    Same RBAC as agent_history (visible_agent_ids), and same day validation as
+    Same RBAC as agent_history (team_scope_agent_ids — downline for level_2+,
+    own office for level_1), and same day validation as
     the self-correction screen (resolve_history_day: no future dates, defaults
     to today). Unlike pulse_me_day, this is not self-only — an upline may look
-    at any downline agent's day, same scope as agent_history. It is read-only:
+    at any downline agent's day, and a level_1 at any office teammate's, same
+    scope as agent_history. It is read-only:
     no correction path lives here, that stays on pulse_correct (self) and the
     Manager Eraser (upline), both unchanged by this endpoint.
 
@@ -2527,7 +2566,7 @@ async def agent_day(
     what a correction would start from) plus close_rate / show_rate /
     alp_per_sale computed the canonical way, via metrics.py, never inline.
     """
-    ids = await visible_agent_ids(user)
+    ids = await team_scope_agent_ids(user)
     if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
         raise HTTPException(status_code=403, detail="Not in your team")
 

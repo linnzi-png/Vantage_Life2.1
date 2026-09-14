@@ -56,3 +56,50 @@ async def test_level_1_cannot_add_or_remove_team_members(client, seeded_db):
     r = await client.post("/api/team/remove-person", headers=auth(token),
                            json={"agent_id": "SA_1"})
     assert r.status_code == 403
+
+
+# ---------------- what an Agent sees on the office Team tab ----------------
+#
+# Owner, 2026-09-14: any agent, whatever their tier, may see general team
+# stats, their home office's sales numbers, any teammate's day/week/month
+# production, and that teammate's basic ALP and close ratio. The judgement
+# alerts — low close ratio, low average deal, no pulse — are for that person's
+# uplines only. Neutral flags such as the rookie badge are not restricted.
+
+async def test_level_1_team_rows_carry_no_judgement_alerts(client, seeded_db):
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    # SA_1 sits in AG_1's office and has a deliberately terrible day: enough
+    # sits for the ratio alert (5 of 15 = 33%), a small average deal ($200),
+    # and AG_1 has no entry at all, which is what raises no_pulse.
+    await seeded_db.production_entries.insert_one({
+        "entry_id": "pe_bad", "agent_id": "SA_1", "office": "MCM",
+        "sales_day": server.current_sales_day_str(),
+        "sets": 20, "sits": 15, "sales": 5, "ots_sits": 0, "ots_sales": 0, "n1": 0,
+        "refs_obtained": 0, "ref_sits": 0, "ref_sales": 0, "pos_sits": 0,
+        "pos_sales": 0, "vet_sits": 0, "vet_sales": 0, "gross_alp": 1000.0, "net_alp": 1000.0,
+    })
+    rows = (await client.get("/api/team", headers=auth(token))).json()["team"]
+    assert rows, "the office rollup should not be empty"
+    for row in rows:
+        assert not set(row["alerts"]) & server.UPLINE_ONLY_ALERTS, row
+    # The numbers themselves are not withheld — only the assessment is.
+    sa = next(r for r in rows if r["agent_id"] == "SA_1")
+    assert sa["gross_alp"] == 1000.0
+    assert sa["sales"] == 5
+    assert sa["close_ratio"] == 33.3
+
+
+async def test_upline_still_sees_the_judgement_alerts(client, seeded_db):
+    """The same row, read by someone above them, keeps its flags."""
+    token = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
+    await seeded_db.production_entries.insert_one({
+        "entry_id": "pe_bad", "agent_id": "SA_1", "office": "MCM",
+        "sales_day": server.current_sales_day_str(),
+        "sets": 20, "sits": 15, "sales": 5, "ots_sits": 0, "ots_sales": 0, "n1": 0,
+        "refs_obtained": 0, "ref_sits": 0, "ref_sales": 0, "pos_sits": 0,
+        "pos_sales": 0, "vet_sits": 0, "vet_sales": 0, "gross_alp": 1000.0, "net_alp": 1000.0,
+    })
+    rows = (await client.get("/api/team", headers=auth(token))).json()["team"]
+    sa = next(r for r in rows if r["agent_id"] == "SA_1")
+    assert "low_close_ratio" in sa["alerts"]
+    assert "low_avg_deal" in sa["alerts"]

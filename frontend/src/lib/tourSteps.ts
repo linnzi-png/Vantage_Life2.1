@@ -288,7 +288,7 @@ const AGENT_TEAM_STEPS: TourStep[] = [
     screen: '/team',
     anchor: 'team-roster',
     title: 'YOUR OFFICE, LIVE',
-    body: "Everyone in your office rolls up here — Gross and Net ALP, sales, close rate, and alert flags, live. Sort by any column, search by name or title, and tap a row for a contact card with that person's 13-week production history. You still enter your own Nightly Numbers only, back on the PULSE tab.",
+    body: "Everyone in your office rolls up here — Gross and Net ALP, sales, and close rate, live. Sort by any column, search by name or title, and tap a row for a contact card with that person's 13-week production history and any single day's numbers. You still enter your own Nightly Numbers only, back on the PULSE tab.",
   },
   teamWeeksStep,
 ];

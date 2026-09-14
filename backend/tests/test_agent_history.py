@@ -326,3 +326,41 @@ async def test_weekly_show_rate_adds_n1_back_into_the_numerator(client, seeded_d
     await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sets=10, sits=6, n1=2, sales=3)
     series = (await client.get("/api/agents/AG_1/history", headers=auth(token))).json()["series"]
     assert series[0]["show_rate"] == 80.0  # (6 + 2) / 10, not 6 / 10
+
+
+# ---------------- an Agent reading an office teammate's card ----------------
+
+async def test_level_1_can_read_an_office_teammates_history(client, seeded_db):
+    """Owner, 2026-09-14: an agent may see any teammate's production. SA_1 is
+    AG_1's upline and shares their office, so the card opens with numbers."""
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="SA_1", sales=4, sits=8, gross_alp=900.0)
+    r = await client.get("/api/agents/SA_1/history", headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["series"][0]["gross_alp"] == 900.0
+
+
+async def test_level_1_can_read_an_office_teammates_day(client, seeded_db):
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="GA_1", sales=2, sits=5, sets=6, gross_alp=400.0)
+    r = await client.get("/api/agents/GA_1/day?sales_day=2026-02-18", headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["totals"]["sales"] == 2
+
+
+async def test_level_1_still_cannot_read_another_office(client, seeded_db):
+    """The widening is the caller's own office and nothing else — AG_2 is in AMP."""
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_2", sales=9, gross_alp=9000.0)
+    assert (await client.get("/api/agents/AG_2/history", headers=auth(token))).status_code == 403
+    assert (await client.get("/api/agents/AG_2/day?sales_day=2026-02-18",
+                             headers=auth(token))).status_code == 403
+
+
+async def test_level_1_gets_the_numbers_but_never_the_coaching_card(client, seeded_db):
+    """Production is the office's; coaching stays the upline's. An agent is
+    nobody's upline, so coaching_visible is false even for a teammate they can
+    now read in full."""
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    assert await coaching(client, token, "SA_1") is False
+    assert await coaching(client, token, "GA_1") is False
