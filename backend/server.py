@@ -3578,13 +3578,20 @@ async def team_add_person(payload: TeamAddPersonIn, user: Dict[str, Any] = Depen
 #     new person always rolls up into team views (never an orphan).
 #   - Per-IP rate limit + honeypot field keep drive-by junk out.
 
-# Field title → RBAC tier, mirroring AddTeamMemberSheet (Agent→L1, SA→L2,
-# GA→L3) and the MGA/RGA=level_3+ convention used across permissions.
+# Field title → RBAC tier, mirroring AddTeamMemberSheet (Agent→L1, SA and
+# GA→L2) and the MGA/RGA=level_3+ convention used across permissions.
+#
+# GA is level_2, not level_3 (CLAUDE.md: "SA is a level_2 title: SAs and GAs
+# have identical permissions", per owner 2026-07-09). This map said level_3
+# until 2026-09-15, so anyone self-registering as a GA was minted with MGA-tier
+# visibility over their whole branch — the same wrong tier AddTeamMemberSheet
+# handed out until it was corrected in 2026-09, and the comment above was still
+# describing that old behaviour as if it matched.
 JOIN_TITLE_TIERS = {
     "inTraining": "level_1",
     "Agent": "level_1",
     "SA": "level_2",
-    "GA": "level_3",
+    "GA": "level_2",
     "MGA": "level_3",
     "RGA": "level_3",  # capped — see note above; requested_title preserves the ask
 }
