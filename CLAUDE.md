@@ -53,6 +53,19 @@ Three things are deliberately NOT widened with it:
   `in_my_downline` so the client only offers those actions where they would
   succeed; the Team tab also uses it for the MY TEAM / MY OFFICE filter.
 
+**Tier changes by an upline (per owner, 2026-09-14):** `POST /api/team/set-tier`
+lets an upline change the access tier of someone in their **own downline**, in
+either direction, and only to a tier **strictly below their own** — an MGA may
+make someone a GA, never another MGA. `is_admin` and `finance_admin` get the
+same control agency-wide, capped the same way. Setting `level_4`, changing an
+RGA's tier, and anything involving the Financial Admin role stay in the Admin
+Panel (`/api/admin/set-role`). The producer title (`io_role`) moves with the
+tier so access and displayed title cannot drift apart. Two shape guards: nobody
+may be raised above their own upline (that inverts the rollup), and nobody with
+active direct reports may be lowered (their branch would go dark to them) —
+reassign first. Every change is audit-logged as `set_role` and syncs the linked
+login so it applies without a re-login.
+
 Display titles (producer track) are separate from access tiers. `io_role`
 titles map via `roleTitle()` in `frontend/src/lib/auth.tsx`: SA → Regional
 Producer, GA → CoExecutive Producer, MGA → Executive Producer, RGA → Chief

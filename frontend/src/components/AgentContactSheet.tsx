@@ -35,6 +35,9 @@ interface Props {
   // strictly below the viewer's tier. Omitted = row not rendered.
   onMove?: () => void;
   onRemove?: () => void;
+  // Tier change (promotion or demotion) for someone strictly below the viewer
+  // in their own downline — gated by the caller, re-checked by /api/team/set-tier.
+  onChangeTier?: () => void;
 }
 
 export function formatPhone(raw: string | undefined | null): string {
@@ -51,7 +54,7 @@ function openLink(url: string, errorMessage: string) {
   });
 }
 
-export function AgentContactSheet({ agent, onClose, onEnterNumbers, onMove, onRemove }: Props) {
+export function AgentContactSheet({ agent, onClose, onEnterNumbers, onMove, onRemove, onChangeTier }: Props) {
   if (!agent) return null;
 
   const label = roleTitle(agent.io_role, agent.role);
@@ -163,6 +166,26 @@ export function AgentContactSheet({ agent, onClose, onEnterNumbers, onMove, onRe
             <View style={{ flex: 1 }}>
               <Text style={styles.contactLabel}>NIGHTLY NUMBERS</Text>
               <Text style={styles.contactValue}>Enter numbers for {agent.name.split(' ')[0]}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
+          </TouchableOpacity>
+        ) : null}
+
+        {onChangeTier ? (
+          <TouchableOpacity
+            style={[styles.contactRow, styles.tierRow]}
+            onPress={onChangeTier}
+            activeOpacity={0.7}
+            testID="change-tier-row"
+          >
+            <View style={styles.iconWrap}>
+              <Ionicons name="trending-up" size={18} color={COLORS.gold} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.contactLabel}>ACCESS TIER</Text>
+              <Text style={styles.contactValue}>
+                Change {agent.name.split(' ')[0]}'s tier — currently {label}
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
           </TouchableOpacity>
@@ -315,6 +338,10 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: COLORS.primary,
     marginTop: 4,
+  },
+  tierRow: {
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.gold,
   },
   moveRow: {
     borderLeftWidth: 3,
