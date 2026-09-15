@@ -4031,6 +4031,151 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
     return {"ok": True, "agent_id": target["agent_id"], "upline_id": new_upline["agent_id"]}
 
 
+# Field titles the roster uses. Mirrors IO_ROLES in frontend/app/admin.tsx and
+# the titles AddTeamMemberSheet hands out; kept here so a tier change cannot
+# write a title the rest of the app has never heard of.
+IO_ROLE_CODES = {
+    "Agent", "inTraining", "Builder", "SA", "GA", "MGA", "RGA",
+    "Partner", "Senior Partner",
+}
+
+
+class TeamSetTierIn(BaseModel):
+    agent_id: str
+    role: str  # level_1..level_4 — always strictly below the requester's own
+    # The producer title moves with the tier when one is sent. Optional so a
+    # caller may change access alone, but the app pre-fills it: a promotion
+    # that leaves the old title on the card is how someone ends up a "GA"
+    # displayed as "Agent" until an admin notices.
+    io_role: Optional[str] = None
+
+
+@api_router.post("/team/set-tier")
+async def team_set_tier(payload: TeamSetTierIn, user: Dict[str, Any] = Depends(get_current_user)):
+    """Change a downline member's access tier from the Team tab — the promotion
+    an upline actually performs, without routing every one through an admin.
+
+    Owner's decision tree (2026-09-14):
+      * Any upline level_2+ may change the tier of someone in their OWN
+        downline, and only to a tier strictly below their own — an MGA can make
+        someone a GA, never another MGA. Nobody can mint a peer who would then
+        read their book, and nobody can raise anyone above themselves.
+      * Both directions: the same control lowers a tier as well as raises it,
+        within that same ceiling.
+      * is_admin and finance_admin get the same control agency-wide, capped the
+        same way at level_3 — level_4 and the Financial Admin role itself stay
+        in the Admin Panel, where granting them already lives.
+
+    Deliberately not here: creating or removing finance_admin (that route also
+    has to move upline_id, see admin_set_role), and touching level_4.
+    """
+    is_admin = user_is_admin(user)
+    is_fa = user_is_finance_admin(user)
+    my_level = role_level(user.get("role"))
+    if not is_admin and not is_fa:
+        if my_level < 2 or not user.get("agent_id"):
+            raise HTTPException(status_code=403, detail="Changing someone's tier requires SA level or above")
+
+    if payload.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    new_level = role_level(payload.role)
+    # An admin or finance_admin acts as though standing at level_4: everything
+    # below it is theirs to set, level_4 itself is not.
+    ceiling = 4 if (is_admin or is_fa) else my_level
+    if new_level >= ceiling:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only set a tier below your own — RGA and Financial Admin are set in the Admin Panel")
+
+    if payload.io_role is not None:
+        title = payload.io_role.strip()
+        if title and title not in IO_ROLE_CODES:
+            raise HTTPException(status_code=400, detail="Unknown title")
+    else:
+        title = None
+
+    target = await db.agent_profiles.find_one({"agent_id": payload.agent_id, **ACTIVE_AGENT}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if target["agent_id"] == user.get("agent_id"):
+        raise HTTPException(status_code=400, detail="You can't change your own tier")
+    current_role = target.get("role")
+    if current_role == FINANCE_ADMIN_ROLE:
+        raise HTTPException(
+            status_code=400,
+            detail="Financial Admin is changed in the Admin Panel — it has no place in the upline ladder")
+    if current_role == "level_4":
+        # Nobody demotes an RGA from a roster row, admin included. It is the
+        # one tier whose change cascades through every agency-wide view, so it
+        # stays where granting it lives.
+        raise HTTPException(status_code=403, detail="An RGA's tier is changed in the Admin Panel")
+
+    if not is_admin and not is_fa:
+        if role_level(current_role) >= my_level:
+            raise HTTPException(status_code=403, detail="You can only change someone below your own level")
+        # level_4 is agency-wide (no subtree restriction), matching
+        # visible_agent_ids, can_enter_for and team_reassign.
+        if my_level < 4:
+            if target["agent_id"] not in await downline_agent_ids(user["agent_id"]):
+                raise HTTPException(status_code=403, detail="You can only change someone in your own downline")
+
+    if new_level == role_level(current_role) and (title is None or title == (target.get("io_role") or "")):
+        raise HTTPException(status_code=400, detail="That is already their tier and title")
+
+    # Raising someone above their own upline would invert the chain: their
+    # rollup would then flow up through a lower tier, and downline_agent_ids
+    # would hand a GA an MGA's numbers. Same rule team_reassign enforces from
+    # the other side ("the new upline must be at or above their level").
+    upline_id = target.get("upline_id")
+    if upline_id:
+        upline = await db.agent_profiles.find_one({"agent_id": upline_id}, {"_id": 0, "role": 1, "name": 1})
+        if upline and role_level(upline.get("role")) < new_level:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Move them under someone at or above that tier first — they currently report to "
+                       f"{upline.get('name') or 'someone at a lower tier'}")
+
+    # Lowering a tier does not move anyone: their reports keep pointing at them,
+    # and a level_1 reads only themselves, so the whole branch would go dark to
+    # the person still nominally running it. Reassign first, deliberately.
+    if new_level < role_level(current_role):
+        reports = await db.agent_profiles.count_documents({"upline_id": target["agent_id"], **ACTIVE_AGENT})
+        if reports > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{target.get('name', 'This person')} has {reports} direct report"
+                       f"{'' if reports == 1 else 's'} — move them to another upline before lowering this tier")
+
+    now = now_utc()
+    update: Dict[str, Any] = {"role": payload.role, "updated_at": now}
+    if title is not None:
+        update["io_role"] = title or None
+    await db.agent_profiles.update_one({"agent_id": target["agent_id"]}, {"$set": update})
+    # Sync any linked login so the new tier applies without a re-login — same
+    # as admin_set_role, and the reason a promotion takes effect immediately.
+    email = str(target.get("email", "")).lower()
+    if email:
+        await db.users.update_many({"email": email}, {"$set": {"role": payload.role, "agent_id": target["agent_id"]}})
+
+    entry: Dict[str, Any] = {
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now,
+        "action": "set_role",
+        "agent_id": target["agent_id"],
+        "agent_name": target.get("name"),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "original_value": current_role,
+        "new_value": payload.role,
+    }
+    if title is not None and title != (target.get("io_role") or ""):
+        entry["old_io_role"] = target.get("io_role")
+        entry["new_io_role"] = title or None
+    await db.audit_log.insert_one(entry)
+    return {"ok": True, "agent_id": target["agent_id"], "role": payload.role,
+            "io_role": update.get("io_role", target.get("io_role"))}
+
+
 @api_router.post("/admin/unarchive-person")
 async def admin_unarchive_person(payload: AdminUnarchivePersonIn, user: Dict[str, Any] = Depends(require_admin)):
     """Restore a removed person to the active roster. The upline is chosen at

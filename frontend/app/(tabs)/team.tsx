@@ -4,8 +4,9 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, A
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS, useAuth, levelNum, roleTitle, Role } from '../../src/lib/auth';
+import { api, COLORS, useAuth, levelNum, roleTitle, isFinanceAdmin, Role } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
+import { ChangeTierSheet } from '../../src/components/ChangeTierSheet';
 import { QuickEntryForm, QuickEntryTarget } from '../../src/components/QuickEntryForm';
 import { AddTeamMemberSheet } from '../../src/components/AddTeamMemberSheet';
 import { MoveMemberSheet } from '../../src/components/MoveMemberSheet';
@@ -46,6 +47,7 @@ export default function TeamScreen() {
   // downline, so an upline's board opens on the people they are responsible
   // for rather than every name in the building.
   const [scope, setScope] = useState<'mine' | 'office'>('mine');
+  const [tierTarget, setTierTarget] = useState<TeamRow | null>(null);
   const [upline, setUpline] = useState<AgentContact | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [sortKey, setSortKey] = useState<keyof TeamRow>('gross_alp');
@@ -131,6 +133,15 @@ export default function TeamScreen() {
   // Proxy entry is downline-only server-side (can_enter_for), so an office
   // peer's card must not offer it.
   const canEnterForRow = (r: TeamRow) => canEnter && mine(r) && !r.archived;
+  // Tier changes (owner, 2026-09-14): the same "in your downline, strictly
+  // below you" rule as remove — canRemoveRow now carries the downline test, so
+  // an office peer's card offers nothing an upline could not actually do.
+  // is_admin and finance_admin act agency-wide at the same cap, which is why
+  // they bypass it. Only ever a hint: /api/team/set-tier re-checks every part.
+  const agencyWide = !!user?.is_admin || isFinanceAdmin(user?.role);
+  const canChangeTierRow = (r: TeamRow) =>
+    !r.archived && r.agent_id !== user?.agent_id && r.role !== 'level_4' &&
+    (agencyWide || canRemoveRow(r));
 
   const removeMember = async (row: TeamRow) => {
     setSelected(null);
@@ -440,6 +451,16 @@ export default function TeamScreen() {
         onEnterNumbers={selected && canEnterForRow(selected) ? () => openQuickEntry(selected) : undefined}
         onMove={selected && canMoveRow(selected) ? () => { const t = selected; setSelected(null); setMoveTarget(t); } : undefined}
         onRemove={selected && canRemoveRow(selected) ? () => removeMember(selected) : undefined}
+        onChangeTier={selected && canChangeTierRow(selected)
+          ? () => { const t = selected; setSelected(null); setTierTarget(t); }
+          : undefined}
+      />
+      <ChangeTierSheet
+        target={tierTarget}
+        myRole={user?.role}
+        agencyWide={agencyWide}
+        onClose={() => setTierTarget(null)}
+        onChanged={fetchAll}
       />
       <MoveMemberSheet
         target={moveTarget}
