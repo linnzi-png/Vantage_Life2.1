@@ -21,6 +21,11 @@ interface TeamRow {
   upline_id?: string | null;
   archived: boolean; // removed from the team; production shown for history only
   gross_alp: number; net_alp: number; sits: number; sales: number; close_ratio: number; avg_deal: number; alerts: string[];
+  // Server-computed: is this person in MY downline, as opposed to elsewhere in
+  // my office? The office is visible to everyone in it, but every write path
+  // (enter numbers, move, remove, tier) is downline-scoped server-side, so this
+  // is what decides which rows may offer those actions at all.
+  in_my_downline?: boolean;
 }
 
 const ALERT_LABELS: Record<string, { label: string; color: string }> = {
@@ -37,6 +42,10 @@ export default function TeamScreen() {
   const { user, agent, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<TeamRow[]>([]);
   const [moveTarget, setMoveTarget] = useState<TeamRow | null>(null);
+  // MY TEAM vs the whole office. Defaults to MY TEAM for anyone who has a
+  // downline, so an upline's board opens on the people they are responsible
+  // for rather than every name in the building.
+  const [scope, setScope] = useState<'mine' | 'office'>('mine');
   const [upline, setUpline] = useState<AgentContact | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [sortKey, setSortKey] = useState<keyof TeamRow>('gross_alp');
@@ -107,16 +116,21 @@ export default function TeamScreen() {
   // Any upline (SA/GA and above, level 2+) may enter Nightly Numbers on a
   // downline teammate's behalf, matching can_enter_for on the backend.
   const canEnter = levelNum(user?.role) >= 2;
-  const missingTonight = rows.filter((r) => r.alerts?.includes('no_pulse'));
+  // Only my own downline: this card opens proxy entry, which is downline-only.
+  const missingTonight = rows.filter((r) => r.alerts?.includes('no_pulse') && r.in_my_downline !== false);
 
-  // Owner's decision tree: remove anyone in your downline strictly below your
-  // tier (level 2+); reassign is GA/MGA/RGA — the SA display title, the only
-  // thing separating SA from GA at tier 2, is excluded. Backend re-checks all.
+  // Owner's decision tree: remove or reassign anyone in your downline strictly
+  // below your tier (level 2+). SA is not a special case (per owner,
+  // 2026-09-15) — the tier decides, never the title. Backend re-checks all.
   const myLevel = levelNum(user?.role);
-  const saTitle = (agent?.io_role || '').trim().toUpperCase() === 'SA';
+  const mine = (r: TeamRow) => r.in_my_downline !== false;
   const canRemoveRow = (r: TeamRow) =>
-    myLevel >= 2 && !r.archived && r.agent_id !== user?.agent_id && levelNum(r.role) < myLevel;
-  const canMoveRow = (r: TeamRow) => canRemoveRow(r) && (myLevel >= 3 || !saTitle);
+    myLevel >= 2 && mine(r) && !r.archived && r.agent_id !== user?.agent_id &&
+    levelNum(r.role) < myLevel;
+  const canMoveRow = canRemoveRow;
+  // Proxy entry is downline-only server-side (can_enter_for), so an office
+  // peer's card must not offer it.
+  const canEnterForRow = (r: TeamRow) => canEnter && mine(r) && !r.archived;
 
   const removeMember = async (row: TeamRow) => {
     setSelected(null);
@@ -171,9 +185,13 @@ export default function TeamScreen() {
       return rest;
     });
   };
-  const visible = q
-    ? sorted.filter((r) => `${r.name} ${r.office} ${roleTitle(r.io_role, r.role)}`.toLowerCase().includes(q))
+  const hasDownline = rows.some((r) => r.in_my_downline === true && r.agent_id !== user?.agent_id);
+  const scoped = scope === 'mine' && hasDownline
+    ? sorted.filter((r) => r.in_my_downline !== false || r.agent_id === user?.agent_id)
     : sorted;
+  const visible = q
+    ? scoped.filter((r) => `${r.name} ${r.office} ${roleTitle(r.io_role, r.role)}`.toLowerCase().includes(q))
+    : scoped;
 
   // `user` is null while AuthProvider restores the session, and
   // levelNum(undefined) is 0 — so without this every GA and above was shown
@@ -271,6 +289,24 @@ export default function TeamScreen() {
 
       <View style={styles.periodBar}>
         <PeriodSelector value={period} onChange={changePeriod} testID="team-period" />
+        {hasDownline ? (
+          <View style={styles.scopeRow}>
+            <TouchableOpacity
+              onPress={() => setScope('mine')}
+              style={[styles.weekChip, scope === 'mine' && styles.weekChipOn]}
+              testID="team-scope-mine"
+            >
+              <Text style={[styles.weekChipTxt, scope === 'mine' && styles.weekChipTxtOn]}>MY TEAM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setScope('office')}
+              style={[styles.weekChip, scope === 'office' && styles.weekChipOn]}
+              testID="team-scope-office"
+            >
+              <Text style={[styles.weekChipTxt, scope === 'office' && styles.weekChipTxtOn]}>MY OFFICE</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
         {weekOptions.length > 0 ? (
           <TourAnchor id="team-weeks">
           <ScrollView
@@ -367,6 +403,9 @@ export default function TeamScreen() {
                 <Text style={styles.name} numberOfLines={1}>{r.name}</Text>
                 {r.is_rookie ? <View style={styles.rookie}><Text style={styles.rookieTxt}>R</Text></View> : null}
                 {r.archived ? <View style={styles.removed}><Text style={styles.removedTxt}>REMOVED</Text></View> : null}
+                {r.in_my_downline === false && r.agent_id !== user?.agent_id ? (
+                  <View style={styles.officeBadge}><Text style={styles.officeBadgeTxt}>OFFICE</Text></View>
+                ) : null}
                 <Ionicons name="chevron-forward" size={12} color={COLORS.textDim} style={{ marginLeft: 'auto' }} />
               </View>
               <Text style={styles.meta}>
@@ -398,7 +437,7 @@ export default function TeamScreen() {
       <AgentContactSheet
         agent={selected}
         onClose={() => setSelected(null)}
-        onEnterNumbers={canEnter && selected && !selected.archived ? () => openQuickEntry(selected) : undefined}
+        onEnterNumbers={selected && canEnterForRow(selected) ? () => openQuickEntry(selected) : undefined}
         onMove={selected && canMoveRow(selected) ? () => { const t = selected; setSelected(null); setMoveTarget(t); } : undefined}
         onRemove={selected && canRemoveRow(selected) ? () => removeMember(selected) : undefined}
       />
@@ -431,6 +470,12 @@ export default function TeamScreen() {
 
 const styles = StyleSheet.create({
   weekPicker: { gap: 6, paddingVertical: 8 },
+  scopeRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  officeBadge: {
+    paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  officeBadgeTxt: { color: COLORS.textMuted, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
   weekChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
   weekChipOn: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
   weekChipTxt: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },

@@ -4,8 +4,8 @@ admin restore — the owner's decision tree:
   - remove: anyone in your own downline strictly below your tier (so GA cannot
     remove SA, RGA cannot remove RGA); admin removes anyone but themselves
   - cascade: the removed leader's direct reports go to their former upline
-  - reassign afterwards: GA, MGA, RGA (not SA — a title-only distinction at
-    tier 2); admin anywhere
+  - reassign afterwards: any level_2+ within their own downline (SA included
+    since 2026-09-15); admin anywhere
   - nothing is deleted: history keeps aggregating, login drops to pending
 """
 import pytest
@@ -207,10 +207,27 @@ async def test_add_person_with_archived_email_says_restore(client, seeded_db):
 
 # ---------------- reassign ----------------
 
-async def test_sa_title_cannot_reassign(client, seeded_db):
+async def test_an_sa_may_reassign_like_any_other_level_2(client, seeded_db):
+    """Per owner, 2026-09-15: every SA reassigns. The SA title was refused here
+    until then — the last place in the app where an io_role title decided
+    access rather than the tier."""
+    token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "AG_3", "name": "Agent Three", "email": "ag3@test.dev",
+        "role": "level_1", "upline_id": "AG_1", "office": "MCM",
+    })
+    r = await client.post("/api/team/reassign", headers=auth(token),
+                          json={"agent_id": "AG_3", "new_upline_agent_id": "SA_1"})
+    assert r.status_code == 200, r.text
+    assert (await profile(seeded_db, "AG_3"))["upline_id"] == "SA_1"
+
+
+async def test_an_sa_still_cannot_reassign_outside_their_downline(client, seeded_db):
+    """Widening the title rule did not widen the scope rule: AG_2 is in another
+    branch entirely."""
     token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
     r = await client.post("/api/team/reassign", headers=auth(token),
-                          json={"agent_id": "AG_1", "new_upline_agent_id": "SA_1"})
+                          json={"agent_id": "AG_2", "new_upline_agent_id": "SA_1"})
     assert r.status_code == 403
 
 

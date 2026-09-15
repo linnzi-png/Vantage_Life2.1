@@ -290,9 +290,12 @@ async def test_nobody_sees_their_own_coaching_card(client, seeded_db):
 
 
 async def test_downline_never_sees_an_uplines_coaching_card(client, seeded_db):
-    """SA_1 cannot even read GA_1's history, let alone their coaching card."""
+    """SA_1 may read GA_1's numbers — they share an office, and since
+    2026-09-15 the office's production is open to everyone in it. What they
+    never get is their own upline's coaching card: that runs on is_upline_of,
+    not on read scope, which is the whole reason the two are separate."""
     token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
-    assert (await client.get("/api/agents/GA_1/history", headers=auth(token))).status_code == 403
+    assert await coaching(client, token, "GA_1") is False
 
 
 async def test_rga_does_not_see_another_rgas_coaching_card(client, seeded_db):
