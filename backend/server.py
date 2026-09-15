@@ -836,19 +836,32 @@ async def office_agent_ids(user: Dict[str, Any]) -> List[str]:
 async def team_scope_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
     """Read scope for the Team tab and the agent card opened from it.
 
-    Identical to visible_agent_ids for every tier except level_1, who has no
-    downline and reads their own office instead (office_agent_ids). Per owner
-    (2026-09-14) an agent may see any teammate's production numbers for a day,
-    week or month, and their basic ALP and close ratio on the contact card —
-    so /api/team, /api/team/weeks, /api/agents/{id}/history and
+    Everyone in the caller's home office, plus their own downline wherever it
+    reaches. Per owner (2026-09-14, extended 2026-09-15) any agent at any tier
+    may see general team stats, their office's sales numbers, any teammate's
+    day/week/month production, and that teammate's basic ALP and close ratio on
+    the contact card. /api/team, /api/team/weeks, /api/agents/{id}/history and
     /api/agents/{id}/day all share this one definition rather than each
-    re-deriving it. Everything else keeps visible_agent_ids' stricter scope,
-    and can_enter_for (write) is untouched: an agent still enters only their
-    own numbers.
+    re-deriving it.
+
+    This is READ scope only. Every write path — can_enter_for, remove-person,
+    reassign, set-tier — stays on downline_agent_ids and is unchanged, which is
+    why team_view marks each row with in_my_downline: the office is visible,
+    but only your own downline is actionable.
     """
-    if user.get("role") == "level_1":
+    role = user.get("role", "level_1")
+    if role == "level_4" or role == FINANCE_ADMIN_ROLE:
+        return None  # full agency, same as visible_agent_ids
+    if role == "level_1":
         return await office_agent_ids(user)
-    return await visible_agent_ids(user)
+    # level_2 / level_3: their own downline PLUS their home office. An upline
+    # must never see less of the board than the agents under them do (per
+    # owner, 2026-09-15) — before this, an agent read the whole office while
+    # their own SA read only their downline. The union matters because an MGA's
+    # downline can reach past their home office, and neither half may be lost.
+    own = await visible_agent_ids(user)
+    office = await office_agent_ids(user)
+    return list({*(own or []), *office})
 
 
 async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
@@ -1982,11 +1995,25 @@ async def team_view(
                 "gross_alp": 0, "net_alp": 0, "sits": 0, "sales": 0,
                 "close_ratio": 0, "avg_deal": 0, "alerts": no_entry_alerts,
             })
-    # See UPLINE_ONLY_ALERTS: the numbers are open to the whole office, the
-    # performance judgements are not. Applied here, after both row-building
-    # paths, so neither can forget it.
-    if user.get("role") == "level_1":
-        for row in out:
+    # The office is visible; only your own downline is yours to judge or act on.
+    # Both halves of that are decided here, after both row-building paths, so
+    # neither can forget it:
+    #   * in_my_downline tells the client which rows may offer ENTER NUMBERS,
+    #     MOVE, REMOVE and the tier change — every one of those routes is
+    #     downline-scoped server-side, so an office-peer button would only ever
+    #     produce a 403.
+    #   * UPLINE_ONLY_ALERTS (low close ratio, low average deal, no pulse) are a
+    #     judgement about how someone is performing, and belong to that person's
+    #     uplines (per owner, 2026-09-14). A level_1 has no downline, so this
+    #     strips every one of them for an agent, as it always did.
+    my_downline: Optional[set] = None  # None = everyone (level_4 / admin reach)
+    if role_level(user.get("role")) < 4 and not user_is_admin(user) \
+            and not user_is_finance_admin(user) and user.get("agent_id"):
+        my_downline = set(await downline_agent_ids(user["agent_id"])) - {user["agent_id"]}
+    for row in out:
+        mine = my_downline is None or row["agent_id"] in my_downline
+        row["in_my_downline"] = mine
+        if not mine:
             row["alerts"] = [a for a in row["alerts"] if a not in UPLINE_ONLY_ALERTS]
 
     return {
@@ -3931,10 +3958,15 @@ async def team_remove_person(payload: TeamRemovePersonIn, user: Dict[str, Any] =
 
 @api_router.post("/team/reassign")
 async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(get_current_user)):
-    """Move a downline member under a different upline. Owner's decision tree:
-    GA, MGA, and RGA may reassign (not SA — same tier as GA, so the SA display
-    title is the only thing that separates them); scope is the mover's own
-    downline on both ends. Admins may reassign anyone anywhere."""
+    """Move a downline member under a different upline. Any upline level_2+ may
+    reassign within their own downline on both ends; admins may reassign anyone
+    anywhere.
+
+    SA is not a special case (per owner, 2026-09-15: every SA reassigns). It
+    was excluded here until then — the one capability SA and GA did not share,
+    and the only thing in the app that read the io_role title to decide access.
+    Removing it puts the tier back in sole charge, as CLAUDE.md has always said.
+    """
     is_admin = user_is_admin(user)
     my_level = role_level(user.get("role"))
     my_subtree: Optional[List[str]] = None
@@ -3944,8 +3976,6 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
         me = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
         if not me:
             raise HTTPException(status_code=404, detail="Your agent profile was not found")
-        if my_level == 2 and str(me.get("io_role") or "").strip().upper() == "SA":
-            raise HTTPException(status_code=403, detail="Reassigning is for GA level and above — ask your GA")
         # level_4 is agency-wide (None = no subtree restriction), matching
         # visible_agent_ids and can_enter_for.
         my_subtree = None if my_level >= 4 else await downline_agent_ids(user["agent_id"])

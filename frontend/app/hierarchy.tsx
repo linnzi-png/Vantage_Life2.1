@@ -23,10 +23,9 @@ interface TeamRow {
 export default function HierarchyScreen() {
   const { user, agent } = useAuth();
   const myLevel = levelNum(user?.role);
-  const saTitle = (agent?.io_role || '').trim().toUpperCase() === 'SA';
-  // Same "who may reassign" rule as the Team tab (owner's decision tree):
-  // GA and above, never SA (SA is a level_2 title with no reassign rights).
-  const canMoveAtAll = myLevel >= 2 && !(myLevel === 2 && saTitle);
+  // Same "who may reassign" rule as the Team tab: level_2 and above, with no
+  // SA exception (per owner, 2026-09-15 — every SA reassigns).
+  const canMoveAtAll = myLevel >= 2;
 
   const [agents, setAgents] = useState<HierarchyAgent[]>([]);
   const [teamRows, setTeamRows] = useState<TeamRow[]>([]);

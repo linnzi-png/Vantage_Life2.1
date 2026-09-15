@@ -30,24 +30,28 @@ change (`com.aopremiere.vantagelife` bundle ID, `@aopremiere.com` demo emails).
 3. `level_3` MGA (Master General Agent) — sees GA-level rollups — displays as "Executive Producer"
 4. `level_4` RGA (Regional General Agent) — sees all MGA rollups — displays as "Chief Executive Producer"
 
-**Team tab exception for level_1 (per owner, 2026-09-13, extended
-2026-09-14):** an Agent's Team tab is scoped to their own **office**
-(`office_agent_ids()`), not their downline — an Agent has no downline. The
-office is the whole office, uplines included: any agent may see general team
-stats, their home office's sales numbers, any teammate's day/week/month
-production, and that teammate's basic ALP and close ratio on the contact card.
-The scope is shared by `GET /api/team`, `/api/team/weeks`,
-`/api/agents/{id}/history` and `/api/agents/{id}/day` through one helper,
-`team_scope_agent_ids()` — never re-derived per route.
+**Office read scope (per owner, 2026-09-13, extended 2026-09-14 and
+2026-09-15):** the Team tab shows everyone in the caller's own **office**, at
+every tier, plus their own downline wherever it reaches — one helper,
+`team_scope_agent_ids()`, shared by `GET /api/team`, `/api/team/weeks`,
+`/api/agents/{id}/history` and `/api/agents/{id}/day`, never re-derived per
+route. Any agent may see general team stats, their office's sales numbers, any
+teammate's day/week/month production, and that teammate's basic ALP and close
+ratio on the contact card. The union matters: an MGA's downline can reach past
+their home office, and an upline must never see less of the board than the
+agents under them do, which is what the 2026-09-15 extension fixed.
 
-Two things are deliberately NOT widened with it. Coaching cards stay
-upline-only (`is_upline_of`), and the judgement alert chips
-(`UPLINE_ONLY_ALERTS`: low close ratio, low average deal, no pulse) are
-stripped from the rollup for a level_1 caller — the numbers are the office's,
-the assessment is the upline's. Neutral flags such as the rookie badge stay.
-Write actions are unchanged and still require level_2+ (`canEnter`
-client-side; `require_level(2)` / `can_enter_for` server-side); every other
-route's level_1 scope (`visible_agent_ids` → `[agent_id]` only) is untouched.
+Three things are deliberately NOT widened with it:
+
+- **Coaching cards** stay upline-only (`is_upline_of`).
+- **Judgement alerts** (`UPLINE_ONLY_ALERTS`: low close ratio, low average
+  deal, no pulse) are stripped from any row outside the caller's own downline —
+  the numbers are the office's, the assessment is the upline's. Neutral flags
+  such as the rookie badge stay.
+- **Every write path** — `can_enter_for`, remove-person, reassign, set-tier —
+  stays on `downline_agent_ids`. `team_view` marks each row with
+  `in_my_downline` so the client only offers those actions where they would
+  succeed; the Team tab also uses it for the MY TEAM / MY OFFICE filter.
 
 Display titles (producer track) are separate from access tiers. `io_role`
 titles map via `roleTitle()` in `frontend/src/lib/auth.tsx`: SA → Regional
@@ -57,8 +61,11 @@ level_3/level_4 holders (no exclusive access tier); Agent, Builder, and
 In Training are unchanged. RBAC is always enforced by `role`, never by title.
 
 SA is a level_2 title: SAs and GAs have identical permissions across the
-app (per owner, 2026-07-09; the prod roster carries every SA at level_2).
-Never model SA as a special case in code — the tier does the work.
+app (per owner, 2026-07-09, reaffirmed 2026-09-15 — every SA reassigns and
+promotes, and SA and GA read the same way). Never model SA as a special case
+in code; the tier does the work. Reassigning was the last exception and was
+removed on 2026-09-15, so no access decision anywhere reads an `io_role`
+title.
 
 Enforced server-side in `backend/server.py`: `require_agent()` / `require_level()`
 dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.

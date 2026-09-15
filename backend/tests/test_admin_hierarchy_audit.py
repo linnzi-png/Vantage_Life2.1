@@ -87,7 +87,11 @@ async def test_fix_relinks_and_restores_team_view(client, seeded_db):
         seeded_db, role="level_2", agent_id="SNOOR", email="snoor.qaradaghi@gmail.com")
 
     r = await client.get("/api/team", headers=auth(snoor_token))
-    assert "SHIKO" not in {t["agent_id"] for t in r.json()["team"]}
+    # Orphans in the same office still list as office rows (the Team tab lists
+    # the whole office since 2026-09-15); in_my_downline is what says they are
+    # not on his team yet.
+    before = {t["agent_id"]: t for t in r.json()["team"]}
+    assert before.get("SHIKO", {}).get("in_my_downline") is not True
 
     token = await admin_token(seeded_db)
     r = await client.post("/api/admin/hierarchy-audit/fix", headers=auth(token))
@@ -99,6 +103,7 @@ async def test_fix_relinks_and_restores_team_view(client, seeded_db):
     r = await client.get("/api/team", headers=auth(snoor_token))
     team = {t["agent_id"]: t for t in r.json()["team"]}
     assert "SHIKO" in team
+    assert team["SHIKO"]["in_my_downline"] is True
     assert team["SHIKO"]["gross_alp"] == 800.0
 
     audit = await seeded_db.audit_log.find_one({"action": "hierarchy_bulk_relink"})
