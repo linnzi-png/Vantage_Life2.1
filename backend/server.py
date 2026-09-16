@@ -118,6 +118,19 @@ LOW_AVG_DEAL_USD = 1200
 # production numbers and the rookie flag, never these. Stripped server-side in
 # team_view so the client cannot be the thing that decides it.
 UPLINE_ONLY_ALERTS = {"low_close_ratio", "low_avg_deal", "no_pulse"}
+
+
+def _leaderboard_group(row: Dict[str, Any]) -> str:
+    """Which board a Team tab row is ranked on: "leader" for level_2+ (they
+    rank among themselves, never against the agents they run), otherwise the
+    tenure group — "rookie", "veteran", or "unset" for the people nobody has
+    recorded a tenure for. Per owner (2026-09-16)."""
+    if role_level(row.get("role")) >= 2 and row.get("role") != FINANCE_ADMIN_ROLE:
+        return "leader"
+    tenure = row.get("is_rookie")
+    if tenure is None:
+        return "unset"
+    return "rookie" if tenure else "veteran"
 MIN_SALES_FOR_DEAL_ALERT = 3
 
 # Browser origins allowed to make credentialed calls. Both the Vercel-hosted
@@ -1967,7 +1980,13 @@ async def team_view(
             "io_role": a.get("io_role") or "",
             "phone": a.get("phone") or "",
             "email": a.get("email") or "",
-            "is_rookie": a.get("is_rookie", False),
+            # Tri-state, matching the Platinum Wall: True rookie, False veteran,
+            # None when nobody has recorded it. This used to coerce a missing
+            # value to False, which quietly ranked 48 of the 217 active roster
+            # as veterans on one screen while the wall called them unknown on
+            # another. The leaderboard gives them their own group instead (per
+            # owner, 2026-09-16), so the gap is visible and gets fixed.
+            "is_rookie": a.get("is_rookie"),
             "upline_id": a.get("upline_id"),
             # A removed member's already-logged production stays on the board
             # for its window ("history is history") — flagged so the UI can
@@ -1991,7 +2010,7 @@ async def team_view(
             out.append({
                 "agent_id": aid, "name": a["name"], "office": a["office"], "role": a["role"],
                 "io_role": a.get("io_role") or "", "phone": a.get("phone") or "", "email": a.get("email") or "",
-                "is_rookie": a.get("is_rookie", False), "upline_id": a.get("upline_id"), "archived": False,
+                "is_rookie": a.get("is_rookie"), "upline_id": a.get("upline_id"), "archived": False,
                 "gross_alp": 0, "net_alp": 0, "sits": 0, "sales": 0,
                 "close_ratio": 0, "avg_deal": 0, "alerts": no_entry_alerts,
             })
@@ -2006,6 +2025,71 @@ async def team_view(
     #     judgement about how someone is performing, and belong to that person's
     #     uplines (per owner, 2026-09-14). A level_1 has no downline, so this
     #     strips every one of them for an agent, as it always did.
+    # Leaders' team rollups, and the leaderboard rank on every row.
+    #
+    # Per owner (2026-09-16): a team IS an office — MJ's team, Rust's team,
+    # Alwatan's, Gojcaj's — and the Team tab reads as a leaderboard of it.
+    # Agents rank inside their tenure group (rookies, veterans, and a third
+    # group for tenure nobody has set), leaders rank among leaders, and a
+    # leader's row carries their own production and their team's rollup side by
+    # side, ranked on their own. A leader who entered nothing keeps their
+    # rollup and takes no rank, which is the usual case.
+    #
+    # The rollup is computed from one roster read and one extra aggregation
+    # over the union of the leaders' subtrees, never a BFS per leader: an MGA's
+    # downline reaches past their office, so the rows already fetched are not
+    # enough to sum it.
+    leaders = [r for r in out if role_level(r["role"]) >= 2 and r["role"] != FINANCE_ADMIN_ROLE]
+    if leaders:
+        children: Dict[str, List[str]] = {}
+        async for a in db.agent_profiles.find(ACTIVE_AGENT, {"_id": 0, "agent_id": 1, "upline_id": 1}):
+            children.setdefault(a.get("upline_id") or "", []).append(a["agent_id"])
+
+        def subtree(root: str) -> List[str]:
+            seen, queue = set(), [root]
+            while queue:
+                node = queue.pop()
+                for kid in children.get(node, []):
+                    if kid not in seen:
+                        seen.add(kid)
+                        queue.append(kid)
+            return list(seen)
+
+        subtrees = {r["agent_id"]: subtree(r["agent_id"]) for r in leaders}
+        every_id = sorted({aid for ids_ in subtrees.values() for aid in ids_})
+        totals: Dict[str, Dict[str, float]] = {}
+        if every_id:
+            roll_q = dict(q)
+            roll_q["agent_id"] = {"$in": every_id}
+            async for d in db.production_entries.aggregate([
+                {"$match": roll_q},
+                {"$group": {"_id": "$agent_id",
+                            "gross_alp": {"$sum": "$gross_alp"},
+                            "sales": {"$sum": "$sales"}}},
+            ]):
+                totals[d["_id"]] = d
+        for r in leaders:
+            r["team_gross_alp"] = round(sum(
+                float(totals.get(aid, {}).get("gross_alp") or 0) for aid in subtrees[r["agent_id"]]), 2)
+            r["team_sales"] = sum(
+                int(totals.get(aid, {}).get("sales") or 0) for aid in subtrees[r["agent_id"]])
+            r["team_size"] = len(subtrees[r["agent_id"]])
+
+    # Rank runs on Gross ALP, the same measure the Platinum Wall ranks on, so a
+    # position means the same thing on both screens whatever column the list is
+    # sorted by. Nobody with nothing produced is ranked at all — a board where
+    # nine people tie for 4th at $0 says nothing to anyone.
+    for group in ("leader", "rookie", "veteran", "unset"):
+        members = [r for r in out if _leaderboard_group(r) == group and r["gross_alp"] > 0]
+        members.sort(key=lambda r: r["gross_alp"], reverse=True)
+        for i, r in enumerate(members, start=1):
+            r["rank"] = i
+            r["rank_of"] = len(members)
+    for r in out:
+        r["leaderboard_group"] = _leaderboard_group(r)
+        r.setdefault("rank", None)
+        r.setdefault("rank_of", None)
+
     my_downline: Optional[set] = None  # None = everyone (level_4 / admin reach)
     if role_level(user.get("role")) < 4 and not user_is_admin(user) \
             and not user_is_finance_admin(user) and user.get("agent_id"):
