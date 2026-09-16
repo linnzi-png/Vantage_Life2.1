@@ -136,3 +136,43 @@ async def test_rank_is_gross_alp_and_ignores_sales_count(client, seeded_db):
     rows = await board(client, token)
     assert rows["PREMIUM"]["rank"] == 1
     assert rows["VOLUME"]["rank"] == 2
+
+
+# ---------------- what the two Codex findings were about ----------------
+
+async def test_rank_is_per_office_so_a_standing_means_one_thing(client, seeded_db):
+    """A team is an office, and this list is not always one office: an MGA's
+    downline reaches past theirs and an RGA reads the agency. Pooling them
+    would race an MCM veteran against an AMP one, and would give the same
+    person a different rank depending on who was looking."""
+    await add_agent(seeded_db, "MCM_VET", upline="SA_1", tenure=False, office="MCM")
+    await add_agent(seeded_db, "AMP_VET", upline="GA_2", tenure=False, office="AMP")
+    await entry(seeded_db, agent_id="MCM_VET", gross_alp=500, office="MCM")
+    await entry(seeded_db, agent_id="AMP_VET", gross_alp=9000, office="AMP")
+
+    # The RGA sees both offices at once — and each is ranked on its own.
+    rga = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    rows = await board(client, rga)
+    assert rows["MCM_VET"]["rank"] == 1
+    assert rows["AMP_VET"]["rank"] == 1
+
+    # And the office teammate sees the same number the RGA sees.
+    mate = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    assert (await board(client, mate))["MCM_VET"]["rank"] == 1
+
+
+async def test_a_removed_members_production_still_rolls_up(client, seeded_db):
+    """Removing someone archives them and keeps their production and upline_id
+    on purpose — their row still shows those numbers, so the leader's total
+    printed above them has to include them."""
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    await add_agent(seeded_db, "GONE", upline="SA_1", tenure=False)
+    await seeded_db.agent_profiles.update_one({"agent_id": "GONE"}, {"$set": {"archived": True}})
+    await entry(seeded_db, agent_id="GONE", gross_alp=600)
+
+    rows = await board(client, token)
+    assert rows["GONE"]["archived"] is True
+    assert rows["GONE"]["gross_alp"] == 600.0        # the row shows it …
+    assert rows["SA_1"]["team_gross_alp"] == 600.0   # … so the rollup counts it
+    # Head count is who is on the team today: AG_1 alone, not the archived row.
+    assert rows["SA_1"]["team_size"] == 1

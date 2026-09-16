@@ -2041,9 +2041,19 @@ async def team_view(
     # enough to sum it.
     leaders = [r for r in out if role_level(r["role"]) >= 2 and r["role"] != FINANCE_ADMIN_ROLE]
     if leaders:
+        # Every profile, archived included. Removing someone archives them and
+        # deliberately keeps their upline_id and their production ("history is
+        # history" — see team_remove_person), and their row still shows those
+        # numbers on this board. Walking only the active roster would drop them
+        # from every ancestor's rollup, so a leader's team total would disagree
+        # with the rows printed underneath it.
         children: Dict[str, List[str]] = {}
-        async for a in db.agent_profiles.find(ACTIVE_AGENT, {"_id": 0, "agent_id": 1, "upline_id": 1}):
+        archived_ids: set = set()
+        async for a in db.agent_profiles.find(
+                {}, {"_id": 0, "agent_id": 1, "upline_id": 1, "archived": 1}):
             children.setdefault(a.get("upline_id") or "", []).append(a["agent_id"])
+            if a.get("archived"):
+                archived_ids.add(a["agent_id"])
 
         def subtree(root: str) -> List[str]:
             seen, queue = set(), [root]
@@ -2073,14 +2083,26 @@ async def team_view(
                 float(totals.get(aid, {}).get("gross_alp") or 0) for aid in subtrees[r["agent_id"]]), 2)
             r["team_sales"] = sum(
                 int(totals.get(aid, {}).get("sales") or 0) for aid in subtrees[r["agent_id"]])
-            r["team_size"] = len(subtrees[r["agent_id"]])
+            # Production counts everyone who ever produced under them; head
+            # count is who is actually on the team today.
+            r["team_size"] = len([aid for aid in subtrees[r["agent_id"]] if aid not in archived_ids])
 
     # Rank runs on Gross ALP, the same measure the Platinum Wall ranks on, so a
     # position means the same thing on both screens whatever column the list is
     # sorted by. Nobody with nothing produced is ranked at all — a board where
     # nine people tie for 4th at $0 says nothing to anyone.
-    for group in ("leader", "rookie", "veteran", "unset"):
-        members = [r for r in out if _leaderboard_group(r) == group and r["gross_alp"] > 0]
+    #
+    # Ranking is per OFFICE as well as per group, because a team is an office.
+    # This list is not always one office: an MGA's downline can reach past
+    # theirs, and level_4 reads the whole agency. Pooling them would put an MCM
+    # veteran in a race with an AMP one, and would give the same person a
+    # different rank depending on who was looking — which is the one thing a
+    # standing cannot do.
+    pools: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    for r in out:
+        if r["gross_alp"] > 0:
+            pools.setdefault((r.get("office") or "", _leaderboard_group(r)), []).append(r)
+    for members in pools.values():
         members.sort(key=lambda r: r["gross_alp"], reverse=True)
         for i, r in enumerate(members, start=1):
             r["rank"] = i

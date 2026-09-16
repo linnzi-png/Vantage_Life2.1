@@ -209,6 +209,11 @@ export default function TeamScreen() {
     });
   };
   const hasDownline = rows.some((r) => r.in_my_downline === true && r.agent_id !== user?.agent_id);
+  // The viewer's own team leads; anyone else's follows alphabetically. Most
+  // people only ever see one.
+  const myOffice = rows.find((r) => r.agent_id === user?.agent_id)?.office || agent?.office || '';
+  const offices = Array.from(new Set(rows.map((r) => r.office || '')))
+    .sort((a, b) => (a === myOffice ? -1 : b === myOffice ? 1 : a.localeCompare(b)));
   const scoped = scope === 'mine' && hasDownline
     ? sorted.filter((r) => r.in_my_downline !== false || r.agent_id === user?.agent_id)
     : sorted;
@@ -479,19 +484,34 @@ export default function TeamScreen() {
           loadingText="Loading your team…"
           testID="team"
         >
-          {BOARDS.map(({ key, label }) => {
-            const group = visible.filter((r) => (r.leaderboard_group || 'unset') === key);
-            if (group.length === 0) return null;
-            const ranked = group.filter((r) => r.rank).length;
+          {offices.map((office) => {
+            const inOffice = visible.filter((r) => (r.office || '') === office);
+            if (inOffice.length === 0) return null;
             return (
-              <View key={key} style={styles.board}>
-                <View style={styles.boardHead}>
-                  <Text style={styles.boardLabel}>{label}</Text>
-                  <Text style={styles.boardCount}>
-                    {ranked > 0 ? `${ranked} RANKED · ` : ''}{group.length}
-                  </Text>
-                </View>
-                {group.map(renderRow)}
+              <View key={office || 'unassigned'}>
+                {/* One team per office, and the rank is per office too, so a
+                    viewer who reaches more than one — an MGA whose downline
+                    crosses offices, an RGA reading the agency — sees each
+                    team's own standings rather than four teams in one race. */}
+                {offices.length > 1 ? (
+                  <Text style={styles.officeHead}>{office || 'UNASSIGNED'}</Text>
+                ) : null}
+                {BOARDS.map(({ key, label }) => {
+                  const group = inOffice.filter((r) => (r.leaderboard_group || 'unset') === key);
+                  if (group.length === 0) return null;
+                  const ranked = group.filter((r) => r.rank).length;
+                  return (
+                    <View key={key} style={styles.board}>
+                      <View style={styles.boardHead}>
+                        <Text style={styles.boardLabel}>{label}</Text>
+                        <Text style={styles.boardCount}>
+                          {ranked > 0 ? `${ranked} RANKED · ` : ''}{group.length}
+                        </Text>
+                      </View>
+                      {group.map(renderRow)}
+                    </View>
+                  );
+                })}
               </View>
             );
           })}
@@ -545,6 +565,10 @@ export default function TeamScreen() {
 const styles = StyleSheet.create({
   weekPicker: { gap: 6, paddingVertical: 8 },
   scopeRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  officeHead: {
+    color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 1.2,
+    marginTop: 8, marginBottom: 10,
+  },
   board: { marginBottom: 18 },
   boardHead: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
