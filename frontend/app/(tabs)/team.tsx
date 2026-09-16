@@ -18,7 +18,7 @@ import { confirmAsync, notify } from '../../src/lib/dialog';
 
 interface TeamRow {
   agent_id: string; name: string; office: string; role: Role; io_role: string;
-  phone: string; email: string; is_rookie: boolean;
+  phone: string; email: string; is_rookie: boolean | null;
   upline_id?: string | null;
   archived: boolean; // removed from the team; production shown for history only
   gross_alp: number; net_alp: number; sits: number; sales: number; close_ratio: number; avg_deal: number; alerts: string[];
@@ -27,6 +27,16 @@ interface TeamRow {
   // (enter numbers, move, remove, tier) is downline-scoped server-side, so this
   // is what decides which rows may offer those actions at all.
   in_my_downline?: boolean;
+  // Leaderboard (owner, 2026-09-16), all server-computed so the board reads
+  // the same for everyone: rank runs on Gross ALP inside leaderboard_group,
+  // and rank is null for anyone who produced nothing in the window. A leader's
+  // row also carries their team's rollup alongside their own numbers.
+  leaderboard_group?: 'leader' | 'rookie' | 'veteran' | 'unset';
+  rank?: number | null;
+  rank_of?: number | null;
+  team_gross_alp?: number;
+  team_sales?: number;
+  team_size?: number;
 }
 
 const ALERT_LABELS: Record<string, { label: string; color: string }> = {
@@ -43,10 +53,12 @@ export default function TeamScreen() {
   const { user, agent, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<TeamRow[]>([]);
   const [moveTarget, setMoveTarget] = useState<TeamRow | null>(null);
-  // MY TEAM vs the whole office. Defaults to MY TEAM for anyone who has a
-  // downline, so an upline's board opens on the people they are responsible
-  // for rather than every name in the building.
-  const [scope, setScope] = useState<'mine' | 'office'>('mine');
+  // A team IS an office (owner, 2026-09-16) — MJ's team, Rust's, Alwatan's,
+  // Gojcaj's — and seeing the whole one is the point: it is a motivation and
+  // healthy-competition tactic, not an oversight. So the board opens on the
+  // team, and the narrower filter is "the people who report to me", which is
+  // what an upline wants when entering numbers rather than when competing.
+  const [scope, setScope] = useState<'team' | 'mine'>('team');
   const [tierTarget, setTierTarget] = useState<TeamRow | null>(null);
   const [upline, setUpline] = useState<AgentContact | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -197,6 +209,11 @@ export default function TeamScreen() {
     });
   };
   const hasDownline = rows.some((r) => r.in_my_downline === true && r.agent_id !== user?.agent_id);
+  // The viewer's own team leads; anyone else's follows alphabetically. Most
+  // people only ever see one.
+  const myOffice = rows.find((r) => r.agent_id === user?.agent_id)?.office || agent?.office || '';
+  const offices = Array.from(new Set(rows.map((r) => r.office || '')))
+    .sort((a, b) => (a === myOffice ? -1 : b === myOffice ? 1 : a.localeCompare(b)));
   const scoped = scope === 'mine' && hasDownline
     ? sorted.filter((r) => r.in_my_downline !== false || r.agent_id === user?.agent_id)
     : sorted;
@@ -208,6 +225,72 @@ export default function TeamScreen() {
   // levelNum(undefined) is 0 — so without this every GA and above was shown
   // the lock screen for a beat on every cold start. With the level_1 Team tab
   // it matters more, not less: that beat would now hit every tier.
+  // One row, rendered under whichever board the server put this person on.
+  const renderRow = (r: TeamRow) => (
+          <TouchableOpacity
+            key={r.agent_id}
+            style={styles.row}
+            testID={`team-row-${r.agent_id}`}
+            onPress={() => setSelected(r)}
+            activeOpacity={0.75}
+          >
+            <View style={styles.rankWrap}>
+              <Text style={[styles.rankTxt, r.rank === 1 && styles.rankTxtTop]}>
+                {r.rank ? `${r.rank}` : '—'}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.name} numberOfLines={1}>{r.name}</Text>
+                {r.is_rookie ? <View style={styles.rookie}><Text style={styles.rookieTxt}>R</Text></View> : null}
+                {r.archived ? <View style={styles.removed}><Text style={styles.removedTxt}>REMOVED</Text></View> : null}
+                {r.in_my_downline === false && r.agent_id !== user?.agent_id ? (
+                  <View style={styles.officeBadge}><Text style={styles.officeBadgeTxt}>OFFICE</Text></View>
+                ) : null}
+                <Ionicons name="chevron-forward" size={12} color={COLORS.textDim} style={{ marginLeft: 'auto' }} />
+              </View>
+              <Text style={styles.meta}>
+                {r.office} · {roleTitle(r.io_role, r.role)}
+                {r.phone ? ` · ${formatPhone(r.phone)}` : ''}
+              </Text>
+              {r.alerts?.length ? (
+                <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                  {r.alerts.map((a) => (
+                    <View key={a} style={[styles.alert, { borderColor: ALERT_LABELS[a]?.color || COLORS.textDim }]}>
+                      <Text style={[styles.alertTxt, { color: ALERT_LABELS[a]?.color || COLORS.textDim }]}>{ALERT_LABELS[a]?.label || a}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.alp}>${Math.round(r.gross_alp).toLocaleString()}</Text>
+              <Text style={styles.metric}>{r.sales} sales · {r.close_ratio}%</Text>
+              {Math.abs(r.gross_alp - r.net_alp) > 0.01 ? (
+                <Text style={styles.netAlp}>NET ${Math.round(r.net_alp).toLocaleString()}</Text>
+              ) : null}
+              {/* A leader is ranked on what they sold themselves, which is
+                  usually nothing — the rollup is what they are actually
+                  accountable for, so both sit on the row. */}
+              {r.leaderboard_group === 'leader' && r.team_size ? (
+                <Text style={styles.teamRollup}>
+                  TEAM ${Math.round(r.team_gross_alp || 0).toLocaleString()} · {r.team_sales || 0} sales · {r.team_size}
+                </Text>
+              ) : null}
+            </View>
+          </TouchableOpacity>
+  );
+
+  // The four boards, in the order they read best: the leaders first, then the
+  // people they run. TENURE NOT SET only appears when someone is in it, which
+  // is the nudge to go set it.
+  const BOARDS: { key: NonNullable<TeamRow['leaderboard_group']>; label: string }[] = [
+    { key: 'leader', label: 'LEADERS' },
+    { key: 'rookie', label: 'ROOKIES' },
+    { key: 'veteran', label: 'VETERANS' },
+    { key: 'unset', label: 'TENURE NOT SET' },
+  ];
+
   if (authLoading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -303,18 +386,18 @@ export default function TeamScreen() {
         {hasDownline ? (
           <View style={styles.scopeRow}>
             <TouchableOpacity
+              onPress={() => setScope('team')}
+              style={[styles.weekChip, scope === 'team' && styles.weekChipOn]}
+              testID="team-scope-team"
+            >
+              <Text style={[styles.weekChipTxt, scope === 'team' && styles.weekChipTxtOn]}>MY TEAM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               onPress={() => setScope('mine')}
               style={[styles.weekChip, scope === 'mine' && styles.weekChipOn]}
               testID="team-scope-mine"
             >
-              <Text style={[styles.weekChipTxt, scope === 'mine' && styles.weekChipTxtOn]}>MY TEAM</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setScope('office')}
-              style={[styles.weekChip, scope === 'office' && styles.weekChipOn]}
-              testID="team-scope-office"
-            >
-              <Text style={[styles.weekChipTxt, scope === 'office' && styles.weekChipTxtOn]}>MY OFFICE</Text>
+              <Text style={[styles.weekChipTxt, scope === 'mine' && styles.weekChipTxtOn]}>REPORTS TO ME</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -401,47 +484,37 @@ export default function TeamScreen() {
           loadingText="Loading your team…"
           testID="team"
         >
-          {visible.map((r) => (
-          <TouchableOpacity
-            key={r.agent_id}
-            style={styles.row}
-            testID={`team-row-${r.agent_id}`}
-            onPress={() => setSelected(r)}
-            activeOpacity={0.75}
-          >
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={styles.name} numberOfLines={1}>{r.name}</Text>
-                {r.is_rookie ? <View style={styles.rookie}><Text style={styles.rookieTxt}>R</Text></View> : null}
-                {r.archived ? <View style={styles.removed}><Text style={styles.removedTxt}>REMOVED</Text></View> : null}
-                {r.in_my_downline === false && r.agent_id !== user?.agent_id ? (
-                  <View style={styles.officeBadge}><Text style={styles.officeBadgeTxt}>OFFICE</Text></View>
+          {offices.map((office) => {
+            const inOffice = visible.filter((r) => (r.office || '') === office);
+            if (inOffice.length === 0) return null;
+            return (
+              <View key={office || 'unassigned'}>
+                {/* One team per office, and the rank is per office too, so a
+                    viewer who reaches more than one — an MGA whose downline
+                    crosses offices, an RGA reading the agency — sees each
+                    team's own standings rather than four teams in one race. */}
+                {offices.length > 1 ? (
+                  <Text style={styles.officeHead}>{office || 'UNASSIGNED'}</Text>
                 ) : null}
-                <Ionicons name="chevron-forward" size={12} color={COLORS.textDim} style={{ marginLeft: 'auto' }} />
-              </View>
-              <Text style={styles.meta}>
-                {r.office} · {roleTitle(r.io_role, r.role)}
-                {r.phone ? ` · ${formatPhone(r.phone)}` : ''}
-              </Text>
-              {r.alerts?.length ? (
-                <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                  {r.alerts.map((a) => (
-                    <View key={a} style={[styles.alert, { borderColor: ALERT_LABELS[a]?.color || COLORS.textDim }]}>
-                      <Text style={[styles.alertTxt, { color: ALERT_LABELS[a]?.color || COLORS.textDim }]}>{ALERT_LABELS[a]?.label || a}</Text>
+                {BOARDS.map(({ key, label }) => {
+                  const group = inOffice.filter((r) => (r.leaderboard_group || 'unset') === key);
+                  if (group.length === 0) return null;
+                  const ranked = group.filter((r) => r.rank).length;
+                  return (
+                    <View key={key} style={styles.board}>
+                      <View style={styles.boardHead}>
+                        <Text style={styles.boardLabel}>{label}</Text>
+                        <Text style={styles.boardCount}>
+                          {ranked > 0 ? `${ranked} RANKED · ` : ''}{group.length}
+                        </Text>
+                      </View>
+                      {group.map(renderRow)}
                     </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.alp}>${Math.round(r.gross_alp).toLocaleString()}</Text>
-              <Text style={styles.metric}>{r.sales} sales · {r.close_ratio}%</Text>
-              {Math.abs(r.gross_alp - r.net_alp) > 0.01 ? (
-                <Text style={styles.netAlp}>NET ${Math.round(r.net_alp).toLocaleString()}</Text>
-              ) : null}
-            </View>
-          </TouchableOpacity>
-          ))}
+                  );
+                })}
+              </View>
+            );
+          })}
         </LoadState>
       </ScrollView>
 
@@ -492,6 +565,21 @@ export default function TeamScreen() {
 const styles = StyleSheet.create({
   weekPicker: { gap: 6, paddingVertical: 8 },
   scopeRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  officeHead: {
+    color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 1.2,
+    marginTop: 8, marginBottom: 10,
+  },
+  board: { marginBottom: 18 },
+  boardHead: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 6, paddingHorizontal: 2,
+  },
+  boardLabel: { color: COLORS.primary, fontWeight: '900', fontSize: 11, letterSpacing: 1.6 },
+  boardCount: { color: COLORS.textMuted, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  rankWrap: { width: 26, alignItems: 'center', justifyContent: 'center' },
+  rankTxt: { color: COLORS.textDim, fontSize: 13, fontWeight: '900' },
+  rankTxtTop: { color: COLORS.gold, fontSize: 16 },
+  teamRollup: { color: COLORS.textMuted, fontSize: 10, fontWeight: '800', marginTop: 2 },
   officeBadge: {
     paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4,
     borderWidth: 1, borderColor: COLORS.border,

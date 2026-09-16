@@ -30,6 +30,19 @@ change (`com.aopremiere.vantagelife` bundle ID, `@aopremiere.com` demo emails).
 3. `level_3` MGA (Master General Agent) — sees GA-level rollups — displays as "Executive Producer"
 4. `level_4` RGA (Regional General Agent) — sees all MGA rollups — displays as "Chief Executive Producer"
 
+**A team IS an office (per owner, 2026-09-16).** MJ's team, Rust's team,
+Alwatan's, Gojcaj's — the four offices are the four teams, and "my team" in
+product language means the whole office, not the caller's downline. Seeing
+every person on it is deliberate: motivation, team building and healthy
+competition. Do not narrow it back to downline-only. The Team tab opens on the
+team and reads as a leaderboard — agents ranked inside their tenure group
+(ROOKIES, VETERANS, and TENURE NOT SET for the people nobody has recorded one
+for), leaders ranked among leaders with their own production and their team's
+rollup side by side. Rank always runs on Gross ALP, the same measure the
+Platinum Wall ranks on, and nobody who produced nothing in the window is
+ranked. The secondary filter, REPORTS TO ME, is the caller's downline — what an
+upline wants for entry, not for competing.
+
 **Office read scope (per owner, 2026-09-13, extended 2026-09-14 and
 2026-09-15):** the Team tab shows everyone in the caller's own **office**, at
 every tier, plus their own downline wherever it reaches — one helper,
