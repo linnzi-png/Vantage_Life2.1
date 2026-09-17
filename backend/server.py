@@ -2945,10 +2945,26 @@ async def vault_export(
             wanted = [UNASSIGNED_OFFICE]
             by_office[UNASSIGNED_OFFICE] = []
 
-        names = {a["agent_id"]: a.get("name", a["agent_id"]) async for a in
-                 db.agent_profiles.find({}, {"_id": 0, "agent_id": 1, "name": 1})}
-        roles = {a["agent_id"]: (a.get("role"), a.get("io_role")) async for a in
-                 db.agent_profiles.find({}, {"_id": 0, "agent_id": 1, "role": 1, "io_role": 1})}
+        # `agents` (every profile, fetched once above) already carries name,
+        # role, io_role and upline_id for the whole roster, so the upline walk
+        # below runs in memory. It used to call _ancestor_chain() per agent —
+        # one find_one per hop, serially — which is hundreds of Atlas round
+        # trips for a full roster and timed the export out.
+        names = {aid: a.get("name", aid) for aid, a in agents.items()}
+        roles = {aid: (a.get("role"), a.get("io_role")) for aid, a in agents.items()}
+
+        def _chain(agent_id: str) -> List[str]:
+            # Same walk as _ancestor_chain(), against the in-memory map.
+            chain: List[str] = []
+            current, seen = agent_id, {agent_id}
+            for _ in range(10):
+                up = (agents.get(current) or {}).get("upline_id")
+                if not up or up in seen:
+                    break
+                chain.append(up)
+                seen.add(up)
+                current = up
+            return chain
 
         # Every agent in the office, listed on every tab whether or not they
         # produced — real reports carry the whole roster, and a name vanishing
@@ -2957,7 +2973,7 @@ async def vault_export(
         for office_name in wanted:
             roster = []
             for a in sorted(by_office[office_name], key=lambda x: x.get("name") or ""):
-                chain = await _ancestor_chain(a["agent_id"])
+                chain = _chain(a["agent_id"])
                 person = {"name": a.get("name", a["agent_id"]), "state": a.get("state"),
                           "mga": None, "ga": None, "sa": None}
                 for up in chain:

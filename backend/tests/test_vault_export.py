@@ -294,6 +294,27 @@ async def test_rates_are_live_formulas_not_frozen_numbers(client, seeded_db):
     assert ws["C2"].value.startswith("=SUM(T"), "office ALP sums the data range"
 
 
+async def test_xlsx_resolves_uplines_without_a_query_per_agent(client, seeded_db, monkeypatch):
+    """The upline columns used to come from _ancestor_chain() — one find_one
+    per hop, serially, for every agent on the roster. On the real roster that
+    is hundreds of Atlas round trips and the export timed out in the app. The
+    profiles are already in memory by then, so the walk must not touch the DB."""
+    import server
+
+    async def _boom(agent_id):
+        raise AssertionError(f"_ancestor_chain hit the database for {agent_id}")
+    monkeypatch.setattr(server, "_ancestor_chain", _boom)
+
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", sales=1, gross_alp=100.0)
+    ws = (await _workbook(client, seeded_db))["Wed"]
+    first = _data_start(ws)
+    row = next(r for r in range(first, ws.max_row + 1)
+               if ws.cell(r, 6).value == "Agent One")
+    # The upline still lands in the leader columns, from the in-memory map.
+    assert ws.cell(row, 1).value or ws.cell(row, 2).value, \
+        "Agent One's upline should appear in the MGA/GA columns"
+
+
 async def test_one_summary_block_per_leader(client, seeded_db):
     """MGAs first, then GAs — and each rolls up off the column its own name
     appears in, A for an MGA and B for a GA."""
