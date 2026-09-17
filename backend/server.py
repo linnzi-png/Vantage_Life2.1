@@ -24,6 +24,7 @@ import pytz
 
 import metrics
 import war_import
+import secret_sauce
 import war_export
 import audit_roster_emails as roster_audit
 import import_roster as roster_2026_07
@@ -2159,9 +2160,19 @@ async def team_weeks(user: Dict[str, Any] = Depends(require_level(1))):
     return {"weeks": sorted(weeks, reverse=True)}
 
 
+async def require_agent_or_admin_or_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Hierarchy Map readers: any linked agent, plus the two back-office
+    identities that may carry no agent link — is_admin and finance_admin.
+    Directory data only; never use this for production data or a write."""
+    if user_is_admin(user) or user_is_finance_admin(user):
+        return user
+    return await require_agent(user)
+
+
 @api_router.get("/hierarchy")
-async def hierarchy_directory(user: Dict[str, Any] = Depends(require_agent)):
-    """Company-wide org-chart directory for the Hierarchy Map (More tab).
+async def hierarchy_directory(user: Dict[str, Any] = Depends(require_agent_or_admin_or_finance_admin)):
+    """Company-wide org-chart directory for the Hierarchy Map (More tab, and
+    the Admin Panel for finance_admin, which has no tab bar).
 
     Deliberately open to every linked agent (level_1+), not scoped by
     visible_agent_ids like /team — this is a company directory (who reports
@@ -3032,6 +3043,75 @@ async def vault_export(
         },
         "weekly_tabs": weekly_tabs,
     }
+
+
+@api_router.get("/vault/secret-sauce")
+async def vault_secret_sauce(
+    week_start: str,
+    user: Dict[str, Any] = Depends(require_level4_or_finance_admin),
+):
+    """Morgans Secret Sauce — the one-sheet weekly recognition report (per
+    owner, 2026-09-17). Four ranked blocks over one Wed-to-Tue reporting week,
+    every office, agents and leaders together. See secret_sauce.py for the
+    layout; this route only gathers the per-person weekly totals.
+
+    Same readers as the rest of Company Health: RGA, is_admin, finance_admin."""
+    from_iso, to_iso = week_day_range(week_start)
+    ws = date.fromisoformat(from_iso)
+
+    ids = await visible_agent_ids(user)
+    q: Dict[str, Any] = {"sales_day": {"$gte": from_iso, "$lte": to_iso}}
+    if ids is not None:
+        q["agent_id"] = {"$in": ids}
+    pipeline = [
+        {"$match": q},
+        {"$group": {
+            "_id": "$agent_id",
+            "gross_alp": {"$sum": "$gross_alp"},
+            "ref_sales": {"$sum": "$ref_sales"},
+            "refs_obtained": {"$sum": "$refs_obtained"},
+        }},
+    ]
+    totals = {d["_id"]: d async for d in db.production_entries.aggregate(pipeline)}
+
+    # Every profile once; the upline walk below runs against this map, never
+    # the database (see the WAR export for why that matters on a full roster).
+    agents = {a["agent_id"]: a async for a in db.agent_profiles.find({}, {"_id": 0})}
+
+    def _mga_of(agent_id: str) -> Optional[str]:
+        current, seen = agent_id, {agent_id}
+        for _ in range(10):
+            up = (agents.get(current) or {}).get("upline_id")
+            if not up or up in seen:
+                return None
+            if agents.get(up, {}).get("role") == "level_3":
+                return agents[up].get("name")
+            seen.add(up)
+            current = up
+        return None
+
+    rows = []
+    for aid, t in totals.items():
+        a = agents.get(aid)
+        if not a or a.get("archived") is True:
+            continue
+        rows.append({
+            "name": a.get("name", aid),
+            "mga": _mga_of(aid),
+            "is_rookie": a.get("is_rookie"),
+            "gross_alp": float(t.get("gross_alp") or 0),
+            "ref_sales": int(t.get("ref_sales") or 0),
+            "refs_obtained": int(t.get("refs_obtained") or 0),
+        })
+
+    content = await asyncio.to_thread(
+        lambda: secret_sauce.build_workbook(ws, rows).getvalue())
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition":
+                 f'attachment; filename="{from_iso}_Morgans_Secret_Sauce.xlsx"'},
+    )
 
 
 @api_router.post("/admin/wednesday-reset")
@@ -4092,9 +4172,15 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
     Removing it puts the tier back in sole charge, as CLAUDE.md has always said.
     """
     is_admin = user_is_admin(user)
+    # finance_admin (per owner, 2026-09-17) reassigns agency-wide like an admin,
+    # within its usual range: the person being moved must be level_1..level_3.
+    # RGA and other Financial Admins stay RGA-only to touch, mirroring
+    # remove-person and set-role. The new upline may be anyone active —
+    # putting a GA under an RGA is a normal move.
+    is_finance_admin_actor = user_is_finance_admin(user)
     my_level = role_level(user.get("role"))
     my_subtree: Optional[List[str]] = None
-    if not is_admin:
+    if not is_admin and not is_finance_admin_actor:
         if my_level < 2 or not user.get("agent_id"):
             raise HTTPException(status_code=403, detail="Reassigning requires GA level or above")
         me = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
@@ -4115,7 +4201,14 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
         raise HTTPException(status_code=404, detail="New upline not found or is archived")
     if new_upline["agent_id"] == target["agent_id"]:
         raise HTTPException(status_code=400, detail="An agent cannot be their own upline")
-    if not is_admin:
+    if is_finance_admin_actor:
+        if target.get("role") == "level_4":
+            raise HTTPException(status_code=403, detail="Only an RGA or admin can move an RGA")
+        if target.get("role") == FINANCE_ADMIN_ROLE:
+            raise HTTPException(status_code=403, detail="A Financial Admin has no upline to move")
+        if role_level(new_upline.get("role")) < role_level(target.get("role")):
+            raise HTTPException(status_code=400, detail="The new upline must be at or above their level")
+    elif not is_admin:
         if role_level(target.get("role")) >= my_level:
             raise HTTPException(status_code=403, detail="You can only move team members below your own level")
         if my_subtree is not None and target["agent_id"] not in my_subtree:

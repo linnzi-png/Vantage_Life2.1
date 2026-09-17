@@ -138,6 +138,43 @@ async def test_finance_admin_session_advertises_can_export(client, seeded_db):
     assert r.json()["user"]["can_export"] is True
 
 
+# ---------------- Hierarchy Map + reassign (per owner, 2026-09-17) ----------------
+
+async def test_finance_admin_reads_the_hierarchy_directory(client, seeded_db):
+    token = await finance_admin_session(seeded_db)
+    r = await client.get("/api/hierarchy", headers=auth(token))
+    assert r.status_code == 200
+    assert any(a["agent_id"] == "AG_1" for a in r.json()["agents"])
+
+
+async def _reassign(client, token, agent_id, new_upline):
+    return await client.post("/api/team/reassign", headers=auth(token),
+                             json={"agent_id": agent_id, "new_upline_agent_id": new_upline})
+
+
+async def test_finance_admin_reassigns_agency_wide(client, seeded_db):
+    token = await finance_admin_session(seeded_db)
+    # AG_1 (MCM, under SA_1) moves under GA_2 (AMP) — no downline scope at all.
+    r = await _reassign(client, token, "AG_1", "GA_2")
+    assert r.status_code == 200, r.text
+    doc = await seeded_db.agent_profiles.find_one({"agent_id": "AG_1"})
+    assert doc["upline_id"] == "GA_2"
+    # A leader too: MGA_1 may be moved (level_3 is inside the range).
+    assert (await _reassign(client, token, "GA_1", "RGA_1")).status_code == 200
+
+
+async def test_finance_admin_cannot_move_an_rga_or_a_finance_admin(client, seeded_db):
+    token = await finance_admin_session(seeded_db)
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "FA_2", "name": "Finance Two", "email": "fa2@test.dev",
+        "role": "finance_admin", "upline_id": None, "office": "",
+    })
+    assert (await _reassign(client, token, "RGA_1", "MGA_1")).status_code == 403
+    assert (await _reassign(client, token, "FA_2", "MGA_1")).status_code == 403
+    # Shape guard shared with uplines: the new upline sits at or above them.
+    assert (await _reassign(client, token, "MGA_1", "AG_1")).status_code == 400
+
+
 # ---------------- roster mutations: level_1..level_3 only ----------------
 
 async def test_finance_admin_can_add_level_1_person(client, seeded_db):
