@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import { api, apiText, apiBlob, COLORS, useAuth } from '../src/lib/auth';
+import { api, apiText, apiBlob, COLORS, useAuth, isFinanceAdmin } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { notify } from '../src/lib/dialog';
 import { LineChart, BarChart, Point } from '../src/components/Charts';
@@ -87,8 +87,10 @@ export default function VaultScreen() {
   // Two different grants, deliberately. The workbook is the report the office
   // has always read, so any admin gets it; the flat CSV is a wider dump and is
   // narrower. Offering a button the server refuses is worse than hiding it, and
-  // the backend enforces both independently.
-  const canExportWorkbook = user?.is_admin === true;
+  // the backend enforces both independently. finance_admin holds both (per
+  // owner, 2026-09-17): `can_export` already folds it in server-side
+  // (user_may_export), and the workbook mirrors user_may_export_workbook.
+  const canExportWorkbook = user?.is_admin === true || isFinanceAdmin(user?.role);
   const canExportCsv = user?.can_export === true;
   const [exportingXlsx, setExportingXlsx] = useState<string | null>(null);
 

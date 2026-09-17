@@ -83,6 +83,61 @@ async def test_plain_agent_still_rejected_from_vault(client, seeded_db):
     assert r.status_code == 403
 
 
+# ---------------- Company Health exports: all three formats ----------------
+# Per owner (2026-09-17): finance_admin gets the full downloadable content from
+# Company Health — the JSON backup, the per-agent CSV (otherwise EXPORT_EMAILS
+# only) and the rebuilt WAR workbooks (otherwise is_admin only). FINANCE_EMAIL
+# is deliberately NOT on EXPORT_EMAILS or ADMIN_EMAILS, so these grants come
+# from the role alone.
+
+async def _one_entry(db):
+    await db.production_entries.insert_one({
+        "entry_id": "pe_AG_1_2026-07-01", "agent_id": "AG_1", "office": "MCM",
+        "sales_day": "2026-07-01", "sets": 3, "sits": 2, "sales": 1, "ots_sits": 0,
+        "ots_sales": 0, "n1": 0, "refs_obtained": 0, "ref_sits": 0, "ref_sales": 0,
+        "pos_sits": 0, "pos_sales": 0, "vet_sits": 0, "vet_sales": 0,
+        "gross_alp": 500.0, "net_alp": 500.0,
+    })
+
+
+async def test_finance_admin_exports_json(client, seeded_db):
+    await _one_entry(seeded_db)
+    token = await finance_admin_session(seeded_db)
+    r = await client.get("/api/vault/export?week_start=2026-07-01", headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert "weekly_tabs" in r.json()
+
+
+async def test_finance_admin_exports_csv(client, seeded_db):
+    assert FINANCE_EMAIL not in server.EXPORT_EMAILS
+    await _one_entry(seeded_db)
+    token = await finance_admin_session(seeded_db)
+    r = await client.get("/api/vault/export?week_start=2026-07-01&format=csv", headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert r.text.startswith("date,agent,office")
+    assert "2026-07-01" in r.text
+
+
+async def test_finance_admin_exports_war_workbook(client, seeded_db):
+    assert FINANCE_EMAIL not in server.ADMIN_EMAILS
+    await _one_entry(seeded_db)
+    token = await finance_admin_session(seeded_db)
+    r = await client.get("/api/vault/export?week_start=2026-07-01&format=xlsx&office=MCM",
+                         headers=auth(token))
+    assert r.status_code == 200, r.text
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    assert len(wb.sheetnames) > 0
+
+
+async def test_finance_admin_session_advertises_can_export(client, seeded_db):
+    """The UI hides the CSV button unless /auth/me says can_export — the
+    server's answer must fold the role in, or the grant is invisible."""
+    token = await finance_admin_session(seeded_db)
+    r = await client.get("/api/auth/me", headers=auth(token))
+    assert r.status_code == 200
+    assert r.json()["user"]["can_export"] is True
+
+
 # ---------------- roster mutations: level_1..level_3 only ----------------
 
 async def test_finance_admin_can_add_level_1_person(client, seeded_db):
