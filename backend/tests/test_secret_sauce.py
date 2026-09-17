@@ -137,6 +137,16 @@ async def test_a_tie_in_the_upper_pair_moves_the_lower_pair(client, seeded_db):
     assert _anchor(ws, PLUS_REFS) == (9, 5)
 
 
+async def test_archived_producers_stay_in_past_weeks(client, seeded_db):
+    """Codex on #142: entries are kept as the historical record when someone
+    is removed, so a past week's ranking must not change because they left."""
+    await _add(seeded_db, "AG_1", "MCM", "2026-07-01", gross_alp=900.0)
+    await _add(seeded_db, "AG_2", "AMP", "2026-07-01", gross_alp=100.0)
+    await seeded_db.agent_profiles.update_one({"agent_id": "AG_1"}, {"$set": {"archived": True}})
+    ws = await _sheet(client, seeded_db)
+    assert [v[1] for v in _block(ws, VETS)[:2]] == ["Agent One", "Agent Two"]
+
+
 # ---------------- access ----------------
 
 async def test_finance_admin_and_admin_can_pull_it(client, seeded_db):

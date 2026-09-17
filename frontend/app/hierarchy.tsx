@@ -28,7 +28,9 @@ export default function HierarchyScreen() {
   // downline, and neither may have an agent link, so /api/team (require_level
   // 2, downline-shaped) is the wrong roster for them. They pick from the
   // hierarchy directory itself. The backend re-checks every rule.
-  const isFA = isFinanceAdmin(user?.role);
+  // An account with both is an admin first — the finance_admin limits only
+  // apply without full admin control. Mirrors /api/team/reassign.
+  const isFA = isFinanceAdmin(user?.role) && user?.is_admin !== true;
   const agencyWide = isFA || user?.is_admin === true;
   // Same "who may reassign" rule as the Team tab: level_2 and above, with no
   // SA exception (per owner, 2026-09-15 — every SA reassigns).

@@ -3094,7 +3094,10 @@ async def vault_secret_sauce(
     rows = []
     for aid, t in totals.items():
         a = agents.get(aid)
-        if not a or a.get("archived") is True:
+        # Archived profiles stay in: their entries are kept as the historical
+        # record, so a past week's ranking must not change because someone
+        # left later. Only an entry with no profile at all is unrankable.
+        if not a:
             continue
         # Rookie as of the week being reported, from the code date when there
         # is one (12-month rolling rule, code_dates.rookie_on); the stored flag
@@ -4182,7 +4185,9 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
     # RGA and other Financial Admins stay RGA-only to touch, mirroring
     # remove-person and set-role. The new upline may be anyone active —
     # putting a GA under an RGA is a normal move.
-    is_finance_admin_actor = user_is_finance_admin(user)
+    # An account holding both is an admin first: the finance_admin limits only
+    # apply to a Financial Admin without full admin control.
+    is_finance_admin_actor = user_is_finance_admin(user) and not is_admin
     my_level = role_level(user.get("role"))
     my_subtree: Optional[List[str]] = None
     if not is_admin and not is_finance_admin_actor:
@@ -4206,6 +4211,11 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
         raise HTTPException(status_code=404, detail="New upline not found or is archived")
     if new_upline["agent_id"] == target["agent_id"]:
         raise HTTPException(status_code=400, detail="An agent cannot be their own upline")
+    # A Financial Admin sits outside the ladder — it can be nobody's upline,
+    # whoever is asking. Without this, role_level("finance_admin") falls back
+    # to 1 and a level_1 agent would slip under it.
+    if new_upline.get("role") == FINANCE_ADMIN_ROLE:
+        raise HTTPException(status_code=400, detail="A Financial Admin cannot be an upline")
     if is_finance_admin_actor:
         if target.get("role") == "level_4":
             raise HTTPException(status_code=403, detail="Only an RGA or admin can move an RGA")

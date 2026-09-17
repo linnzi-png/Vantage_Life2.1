@@ -173,6 +173,25 @@ async def test_finance_admin_cannot_move_an_rga_or_a_finance_admin(client, seede
     assert (await _reassign(client, token, "FA_2", "MGA_1")).status_code == 403
     # Shape guard shared with uplines: the new upline sits at or above them.
     assert (await _reassign(client, token, "MGA_1", "AG_1")).status_code == 400
+    # Codex on #142: a Financial Admin can be nobody's upline — role_level()
+    # falls back to 1 for it, so without an explicit check a level_1 agent
+    # would slip under one. Server-side, whoever asks.
+    assert (await _reassign(client, token, "AG_1", "FA_2")).status_code == 400
+    rga = await rga_session(seeded_db)
+    assert (await _reassign(client, rga, "AG_1", "FA_2")).status_code == 400
+
+
+async def test_finance_admin_who_is_also_admin_keeps_full_control(client, seeded_db):
+    """Codex on #142: is_admin is an independent flag, so an account can hold
+    both. Admin wins — the finance_admin limits apply only without it."""
+    token = await finance_admin_session(seeded_db)
+    await seeded_db.users.update_one({"email": FINANCE_EMAIL}, {"$set": {"is_admin": True}})
+    # Moving an RGA is admin-only; a finance_admin+admin may.
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "RGA_2", "name": "Rga Two", "email": "rga2@test.dev",
+        "role": "level_4", "upline_id": None, "office": "AMP",
+    })
+    assert (await _reassign(client, token, "RGA_2", "RGA_1")).status_code == 200
 
 
 # ---------------- roster mutations: level_1..level_3 only ----------------
