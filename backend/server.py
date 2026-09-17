@@ -24,6 +24,8 @@ import pytz
 
 import metrics
 import war_import
+import code_dates
+import secret_sauce
 import war_export
 import audit_roster_emails as roster_audit
 import import_roster as roster_2026_07
@@ -2159,9 +2161,19 @@ async def team_weeks(user: Dict[str, Any] = Depends(require_level(1))):
     return {"weeks": sorted(weeks, reverse=True)}
 
 
+async def require_agent_or_admin_or_finance_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Hierarchy Map readers: any linked agent, plus the two back-office
+    identities that may carry no agent link — is_admin and finance_admin.
+    Directory data only; never use this for production data or a write."""
+    if user_is_admin(user) or user_is_finance_admin(user):
+        return user
+    return await require_agent(user)
+
+
 @api_router.get("/hierarchy")
-async def hierarchy_directory(user: Dict[str, Any] = Depends(require_agent)):
-    """Company-wide org-chart directory for the Hierarchy Map (More tab).
+async def hierarchy_directory(user: Dict[str, Any] = Depends(require_agent_or_admin_or_finance_admin)):
+    """Company-wide org-chart directory for the Hierarchy Map (More tab, and
+    the Admin Panel for finance_admin, which has no tab bar).
 
     Deliberately open to every linked agent (level_1+), not scoped by
     visible_agent_ids like /team — this is a company directory (who reports
@@ -3048,6 +3060,82 @@ async def vault_export(
         },
         "weekly_tabs": weekly_tabs,
     }
+
+
+@api_router.get("/vault/secret-sauce")
+async def vault_secret_sauce(
+    week_start: str,
+    user: Dict[str, Any] = Depends(require_level4_or_finance_admin),
+):
+    """Morgans Secret Sauce — the one-sheet weekly recognition report (per
+    owner, 2026-09-17). Four ranked blocks over one Wed-to-Tue reporting week,
+    every office, agents and leaders together. See secret_sauce.py for the
+    layout; this route only gathers the per-person weekly totals.
+
+    Same readers as the rest of Company Health: RGA, is_admin, finance_admin."""
+    from_iso, to_iso = week_day_range(week_start)
+    ws = date.fromisoformat(from_iso)
+
+    ids = await visible_agent_ids(user)
+    q: Dict[str, Any] = {"sales_day": {"$gte": from_iso, "$lte": to_iso}}
+    if ids is not None:
+        q["agent_id"] = {"$in": ids}
+    pipeline = [
+        {"$match": q},
+        {"$group": {
+            "_id": "$agent_id",
+            "gross_alp": {"$sum": "$gross_alp"},
+            "ref_sales": {"$sum": "$ref_sales"},
+            "refs_obtained": {"$sum": "$refs_obtained"},
+        }},
+    ]
+    totals = {d["_id"]: d async for d in db.production_entries.aggregate(pipeline)}
+
+    # Every profile once; the upline walk below runs against this map, never
+    # the database (see the WAR export for why that matters on a full roster).
+    agents = {a["agent_id"]: a async for a in db.agent_profiles.find({}, {"_id": 0})}
+
+    def _mga_of(agent_id: str) -> Optional[str]:
+        current, seen = agent_id, {agent_id}
+        for _ in range(10):
+            up = (agents.get(current) or {}).get("upline_id")
+            if not up or up in seen:
+                return None
+            if agents.get(up, {}).get("role") == "level_3":
+                return agents[up].get("name")
+            seen.add(up)
+            current = up
+        return None
+
+    rows = []
+    for aid, t in totals.items():
+        a = agents.get(aid)
+        # Archived profiles stay in: their entries are kept as the historical
+        # record, so a past week's ranking must not change because someone
+        # left later. Only an entry with no profile at all is unrankable.
+        if not a:
+            continue
+        # Rookie as of the week being reported, from the code date when there
+        # is one (12-month rolling rule, code_dates.rookie_on); the stored flag
+        # only covers people whose code date hasn't been imported yet.
+        derived = code_dates.rookie_on(a.get("code_date"), ws)
+        rows.append({
+            "name": a.get("name", aid),
+            "mga": _mga_of(aid),
+            "is_rookie": a.get("is_rookie") if derived is None else derived,
+            "gross_alp": float(t.get("gross_alp") or 0),
+            "ref_sales": int(t.get("ref_sales") or 0),
+            "refs_obtained": int(t.get("refs_obtained") or 0),
+        })
+
+    content = await asyncio.to_thread(
+        lambda: secret_sauce.build_workbook(ws, rows).getvalue())
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition":
+                 f'attachment; filename="{from_iso}_Morgans_Secret_Sauce.xlsx"'},
+    )
 
 
 @api_router.post("/admin/wednesday-reset")
@@ -4108,9 +4196,17 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
     Removing it puts the tier back in sole charge, as CLAUDE.md has always said.
     """
     is_admin = user_is_admin(user)
+    # finance_admin (per owner, 2026-09-17) reassigns agency-wide like an admin,
+    # within its usual range: the person being moved must be level_1..level_3.
+    # RGA and other Financial Admins stay RGA-only to touch, mirroring
+    # remove-person and set-role. The new upline may be anyone active —
+    # putting a GA under an RGA is a normal move.
+    # An account holding both is an admin first: the finance_admin limits only
+    # apply to a Financial Admin without full admin control.
+    is_finance_admin_actor = user_is_finance_admin(user) and not is_admin
     my_level = role_level(user.get("role"))
     my_subtree: Optional[List[str]] = None
-    if not is_admin:
+    if not is_admin and not is_finance_admin_actor:
         if my_level < 2 or not user.get("agent_id"):
             raise HTTPException(status_code=403, detail="Reassigning requires GA level or above")
         me = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
@@ -4131,7 +4227,19 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
         raise HTTPException(status_code=404, detail="New upline not found or is archived")
     if new_upline["agent_id"] == target["agent_id"]:
         raise HTTPException(status_code=400, detail="An agent cannot be their own upline")
-    if not is_admin:
+    # A Financial Admin sits outside the ladder — it can be nobody's upline,
+    # whoever is asking. Without this, role_level("finance_admin") falls back
+    # to 1 and a level_1 agent would slip under it.
+    if new_upline.get("role") == FINANCE_ADMIN_ROLE:
+        raise HTTPException(status_code=400, detail="A Financial Admin cannot be an upline")
+    if is_finance_admin_actor:
+        if target.get("role") == "level_4":
+            raise HTTPException(status_code=403, detail="Only an RGA or admin can move an RGA")
+        if target.get("role") == FINANCE_ADMIN_ROLE:
+            raise HTTPException(status_code=403, detail="A Financial Admin has no upline to move")
+        if role_level(new_upline.get("role")) < role_level(target.get("role")):
+            raise HTTPException(status_code=400, detail="The new upline must be at or above their level")
+    elif not is_admin:
         if role_level(target.get("role")) >= my_level:
             raise HTTPException(status_code=403, detail="You can only move team members below your own level")
         if my_subtree is not None and target["agent_id"] not in my_subtree:
@@ -5331,6 +5439,104 @@ def _foreign_offices(roster_offices: Dict[str, int]) -> List[Dict[str, Any]]:
         for off, n in sorted(roster_offices.items(), key=lambda kv: -kv[1])
         if off != dominant
     ]
+
+
+@api_router.post("/admin/import-code-dates")
+async def admin_import_code_dates(
+    file: UploadFile = File(...),
+    dry_run: bool = Form(False),
+    user: Dict[str, Any] = Depends(require_admin_or_finance_admin),
+):
+    """Load code dates from the RGA's roster workbook and set rookie/veteran.
+
+    Per owner (2026-09-17): rookie = coded within the last 12 months, rolling.
+    Stores `code_date` on each matched agent_profiles doc and refreshes
+    `is_rookie` from it as of today. Names match the same way every roster
+    tool does (_person_name_key: order/case/punctuation-insensitive); rows
+    that match nobody are reported, never created. Re-running is safe — it
+    overwrites the code date with the sheet's value and re-derives the flag,
+    which is also how a rookie becomes a veteran on their anniversary.
+    """
+    filename = file.filename or ""
+    if not filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Upload a .xlsx roster")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    try:
+        rows = await asyncio.to_thread(code_dates.parse_workbook, io.BytesIO(raw))
+    except Exception as e:
+        logger.exception("code-date import failed to parse %s", filename)
+        raise HTTPException(status_code=400, detail=f"Could not read the spreadsheet: {e}")
+    if not rows:
+        raise HTTPException(
+            status_code=400,
+            detail="No 'Code Date' column found — expected a sheet with an Agent (or MGA) column and a Code Date column.")
+
+    by_key: Dict[frozenset, List[Dict[str, Any]]] = {}
+    async for a in db.agent_profiles.find(ACTIVE_AGENT, {"_id": 0, "agent_id": 1, "name": 1, "is_rookie": 1, "code_date": 1}):
+        by_key.setdefault(_person_name_key(a.get("name", "")), []).append(a)
+
+    today = now_detroit().date()
+    matched: List[Dict[str, Any]] = []
+    unmatched: List[str] = []
+    ambiguous: List[str] = []
+    no_date: List[str] = []
+    seen_ids: set = set()
+    for r in rows:
+        if not r["code_date"]:
+            no_date.append(r["name"])
+            continue
+        hits = by_key.get(_person_name_key(r["name"]), [])
+        if not hits:
+            unmatched.append(r["name"])
+            continue
+        if len(hits) > 1:
+            ambiguous.append(r["name"])
+            continue
+        a = hits[0]
+        if a["agent_id"] in seen_ids:
+            continue  # same person on two tabs: first row wins
+        seen_ids.add(a["agent_id"])
+        matched.append({
+            "agent_id": a["agent_id"], "name": a.get("name"),
+            "code_date": r["code_date"],
+            "is_rookie": bool(code_dates.rookie_on(r["code_date"], today)),
+            "was_rookie": a.get("is_rookie"),
+        })
+
+    if not dry_run:
+        now = now_utc()
+        for m in matched:
+            await db.agent_profiles.update_one(
+                {"agent_id": m["agent_id"]},
+                {"$set": {"code_date": m["code_date"], "is_rookie": m["is_rookie"], "updated_at": now}})
+        await db.audit_log.insert_one({
+            "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+            "ts": now,
+            "action": "import_code_dates",
+            "changed_by": user["user_id"],
+            "changed_by_name": user.get("name"),
+            "file": filename,
+            "matched": len(matched),
+            "unmatched": len(unmatched),
+        })
+
+    rookies = sum(1 for m in matched if m["is_rookie"])
+    return {
+        "ok": True,
+        "dry_run": dry_run,
+        "file": filename,
+        "as_of": today.isoformat(),
+        "rows": len(rows),
+        "matched": len(matched),
+        "rookies": rookies,
+        "veterans": len(matched) - rookies,
+        "changed": sum(1 for m in matched if m["was_rookie"] is not m["is_rookie"]),
+        "unmatched": sorted(set(unmatched)),
+        "ambiguous": sorted(set(ambiguous)),
+        "no_date": sorted(set(no_date)),
+    }
 
 
 @api_router.post("/admin/import-war-report")

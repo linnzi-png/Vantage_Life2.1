@@ -15,6 +15,7 @@ import { useTour } from '../src/lib/tour';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { AgentContactSheet } from '../src/components/AgentContactSheet';
 import { WarReportImport } from '../src/components/WarReportImport';
+import { CodeDatesImport } from '../src/components/CodeDatesImport';
 import { OfficeMerge } from '../src/components/OfficeMerge';
 import { OrphanRepair } from '../src/components/OrphanRepair';
 import { DuplicateMerge } from '../src/components/DuplicateMerge';
@@ -404,12 +405,19 @@ export default function AdminScreen() {
               <Ionicons name="stats-chart" size={16} color="#000" />
               <Text style={styles.addBtnTxt}>Company Health / Vault</Text>
             </TouchableOpacity>
+            {/* Same reason: the Hierarchy Map lives on More. finance_admin may
+                reassign anyone level_1..level_3 from it (per owner, 2026-09-17). */}
+            <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/hierarchy')} testID="admin-open-hierarchy">
+              <Ionicons name="git-network" size={16} color="#000" />
+              <Text style={styles.addBtnTxt}>Hierarchy Map</Text>
+            </TouchableOpacity>
           </TourAnchor>
         ) : null}
 
         <TourAnchor id="admin-war-import">
           <WarReportImport />
         </TourAnchor>
+        <CodeDatesImport />
 
         {/* Hierarchy-repair tools stay is_admin-only — finance_admin's roster
             write scope is level_1..level_3 add/remove/role-change and the WAR

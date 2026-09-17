@@ -9,7 +9,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
-import { api, COLORS, useAuth, levelNum, Role } from '../src/lib/auth';
+import { api, COLORS, useAuth, levelNum, isFinanceAdmin, Role } from '../src/lib/auth';
 import { HierarchyTree, HierarchyAgent } from '../src/components/HierarchyTree';
 import { AgentContactSheet } from '../src/components/AgentContactSheet';
 import { LoadState } from '../src/components/LoadState';
@@ -23,9 +23,18 @@ interface TeamRow {
 export default function HierarchyScreen() {
   const { user, agent } = useAuth();
   const myLevel = levelNum(user?.role);
+  // Agency-wide movers (per owner, 2026-09-17): is_admin moves anyone, and
+  // finance_admin moves anyone level_1..level_3 — neither is scoped to a
+  // downline, and neither may have an agent link, so /api/team (require_level
+  // 2, downline-shaped) is the wrong roster for them. They pick from the
+  // hierarchy directory itself. The backend re-checks every rule.
+  // An account with both is an admin first — the finance_admin limits only
+  // apply without full admin control. Mirrors /api/team/reassign.
+  const isFA = isFinanceAdmin(user?.role) && user?.is_admin !== true;
+  const agencyWide = isFA || user?.is_admin === true;
   // Same "who may reassign" rule as the Team tab: level_2 and above, with no
   // SA exception (per owner, 2026-09-15 — every SA reassigns).
-  const canMoveAtAll = myLevel >= 2;
+  const canMoveAtAll = agencyWide || myLevel >= 2;
 
   const [agents, setAgents] = useState<HierarchyAgent[]>([]);
   const [teamRows, setTeamRows] = useState<TeamRow[]>([]);
@@ -39,17 +48,20 @@ export default function HierarchyScreen() {
     try {
       const [h, t] = await Promise.all([
         api<{ agents: HierarchyAgent[] }>('/api/hierarchy'),
-        canMoveAtAll ? api<{ team: TeamRow[] }>('/api/team') : Promise.resolve({ team: [] }),
+        canMoveAtAll && !agencyWide ? api<{ team: TeamRow[] }>('/api/team') : Promise.resolve({ team: [] }),
       ]);
       setAgents(h.agents);
-      setTeamRows(t.team);
+      // /api/hierarchy only lists active people, so archived is always false.
+      setTeamRows(agencyWide
+        ? h.agents.map((a) => ({ agent_id: a.agent_id, name: a.name, office: a.office, role: a.role, io_role: a.io_role ?? '', archived: false }))
+        : t.team);
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'The hierarchy could not be loaded.');
     } finally {
       setLoading(false);
     }
-  }, [canMoveAtAll]);
+  }, [canMoveAtAll, agencyWide]);
 
   useEffect(() => {
     // Fetching an external API on mount, not deriving local state.
@@ -84,14 +96,17 @@ export default function HierarchyScreen() {
     if (!canMoveAtAll || a.agent_id === user?.agent_id) return false;
     const row = teamById.get(a.agent_id);
     if (!row || row.archived) return false;
+    if (row.role === 'finance_admin') return false; // no upline to move
+    if (isFA) return row.role !== 'level_4';         // RGA is RGA-only to touch
+    if (user?.is_admin) return true;
     return levelNum(row.role) < myLevel;
   };
 
   const moveCandidates: MoveCandidate[] = moveTarget
     ? teamRows
         .filter((c) =>
-          !c.archived && c.agent_id !== moveTarget.agent_id &&
-          levelNum(c.role) >= levelNum(moveTarget.role) && levelNum(c.role) <= myLevel)
+          !c.archived && c.agent_id !== moveTarget.agent_id && c.role !== 'finance_admin' &&
+          levelNum(c.role) >= levelNum(moveTarget.role) && (agencyWide || levelNum(c.role) <= myLevel))
         .map((c) => ({ agent_id: c.agent_id, name: c.name, role: c.role, io_role: c.io_role, office: c.office }))
     : [];
 
