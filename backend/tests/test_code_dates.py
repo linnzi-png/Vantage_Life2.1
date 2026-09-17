@@ -133,5 +133,5 @@ async def test_secret_sauce_derives_rookie_from_code_date(client, seeded_db):
     # whatever the stored flag says.
     r = await client.get("/api/vault/secret-sauce?week_start=2026-07-15", headers=auth(token))
     ws = openpyxl.load_workbook(io.BytesIO(r.content)).active
-    assert ws["B3"].value == "Agent One", "ranked as a veteran"
-    assert ws["F3"].value is None, "not in the rookie block"
+    assert ws["B3"].value == "Agent One", "ranked as a veteran (A-C is the veterans block)"
+    assert ws["F3"].value is None, "not in the rookie block (E-G)"

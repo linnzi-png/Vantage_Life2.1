@@ -48,14 +48,17 @@ BLOCKS: List[Block] = [
     ("Top Plus Leads Collected", "Refs", "refs_obtained", None, "0"),
 ]
 
-# Where each block starts: (row, column) — two across, two down, with a gap
-# column D between them and a blank row 7 between the pairs.
-_ANCHORS = [(1, 1), (1, 5), (8, 1), (8, 5)]
+# Blocks sit two across (columns A-C and E-G, gap column D) and two down. A
+# block is at least TOP_N rows tall and grows with ties, so the lower pair
+# starts one blank row below the taller of the upper pair.
+_LEFT_COL, _RIGHT_COL = 1, 5
 
 
 def rank(rows: List[Dict[str, Any]], metric: str, tenure: Optional[str]) -> List[Dict[str, Any]]:
-    """Top N by `metric`, descending, ties broken by name. Zero producers are
-    never ranked — an empty slot is more honest than a name with a 0 beside it."""
+    """Everyone on one of the top N *values* of `metric`, descending, names
+    A-Z within a tie. Ties are never cut (per owner, 2026-09-17): 16, 12, 12,
+    10 is a top-3 list of four people. Zero producers are never ranked — an
+    empty slot is more honest than a name with a 0 beside it."""
     pool = rows
     if tenure == "rookie":
         pool = [r for r in rows if r.get("is_rookie") is True]
@@ -63,10 +66,13 @@ def rank(rows: List[Dict[str, Any]], metric: str, tenure: Optional[str]) -> List
         pool = [r for r in rows if r.get("is_rookie") is not True]
     pool = [r for r in pool if float(r.get(metric) or 0) > 0]
     pool.sort(key=lambda r: (-float(r.get(metric) or 0), (r.get("name") or "").lower()))
-    return pool[:TOP_N]
+    top_values = sorted({float(r.get(metric) or 0) for r in pool}, reverse=True)[:TOP_N]
+    cutoff = top_values[-1] if top_values else None
+    return [r for r in pool if cutoff is not None and float(r.get(metric) or 0) >= cutoff]
 
 
-def _write_block(ws, row: int, col: int, block: Block, rows: List[Dict[str, Any]]) -> None:
+def _write_block(ws, row: int, col: int, block: Block, rows: List[Dict[str, Any]]) -> int:
+    """Write one block; return the number of data rows it occupies (>= TOP_N)."""
     title, value_head, metric, tenure, fmt = block
     c1, c3 = get_column_letter(col), get_column_letter(col + 2)
 
@@ -82,7 +88,8 @@ def _write_block(ws, row: int, col: int, block: Block, rows: List[Dict[str, Any]
         h.fill, h.font, h.border = HEAD_FILL, SUB_FONT, BOX
 
     ranked = rank(rows, metric, tenure)
-    for n in range(TOP_N):
+    height = max(TOP_N, len(ranked))
+    for n in range(height):
         r = row + 2 + n
         person = ranked[n] if n < len(ranked) else None
         cells = [
@@ -94,6 +101,7 @@ def _write_block(ws, row: int, col: int, block: Block, rows: List[Dict[str, Any]
             c.font, c.border = BODY_FONT, BOX
         cells[2].number_format = fmt
         cells[2].alignment = Alignment(horizontal="right")
+    return height
 
 
 def build_workbook(week_start: date, rows: List[Dict[str, Any]]) -> io.BytesIO:
@@ -103,8 +111,11 @@ def build_workbook(week_start: date, rows: List[Dict[str, Any]]) -> io.BytesIO:
     ws = wb.active
     ws.title = f"Week of {week_start.month}.{week_start.day}.{week_start.year % 100}"
 
-    for block, (row, col) in zip(BLOCKS, _ANCHORS):
-        _write_block(ws, row, col, block, rows)
+    row = 1
+    for upper, lower in ((BLOCKS[0], BLOCKS[1]), (BLOCKS[2], BLOCKS[3])):
+        left = _write_block(ws, row, _LEFT_COL, upper, rows)
+        right = _write_block(ws, row, _RIGHT_COL, lower, rows)
+        row += 2 + max(left, right) + 1  # title + header + data + one blank row
 
     for letter, width in (("A", 24), ("B", 22), ("C", 11), ("D", 4),
                           ("E", 24), ("F", 22), ("G", 11)):
