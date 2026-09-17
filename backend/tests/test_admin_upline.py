@@ -66,21 +66,24 @@ async def test_root_rga_is_not_an_orphan(client, seeded_db):
 # ---------------- repair ----------------
 
 async def test_set_upline_makes_an_orphan_visible_again(client, seeded_db):
-    """The whole point: an orphan is invisible to its upline's rollup until the
-    link is repaired."""
+    """The whole point: an orphan is not part of its upline's team until the
+    link is repaired. Since 2026-09-15 the Team tab also lists the caller's
+    whole office, so an orphan in the same office still appears as a row — what
+    changes is in_my_downline, the flag that decides whose team they are on and
+    which rows offer entry, move, remove and tier changes."""
     token = await admin_token(seeded_db)
     ga = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
     await seeded_db.agent_profiles.update_one({"agent_id": "AG_1"}, {"$set": {"upline_id": None}})
 
-    before = {t["agent_id"] for t in (await client.get("/api/team", headers=auth(ga))).json()["team"]}
-    assert "AG_1" not in before
+    before = {t["agent_id"]: t for t in (await client.get("/api/team", headers=auth(ga))).json()["team"]}
+    assert before["AG_1"]["in_my_downline"] is False
 
     r = await client.post("/api/admin/set-upline", headers=auth(token),
                           json={"agent_id": "AG_1", "upline_agent_id": "GA_1"})
     assert r.status_code == 200
 
-    after = {t["agent_id"] for t in (await client.get("/api/team", headers=auth(ga))).json()["team"]}
-    assert "AG_1" in after
+    after = {t["agent_id"]: t for t in (await client.get("/api/team", headers=auth(ga))).json()["team"]}
+    assert after["AG_1"]["in_my_downline"] is True
 
 
 async def test_set_upline_rejects_a_cycle(client, seeded_db):

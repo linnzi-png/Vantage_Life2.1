@@ -112,6 +112,25 @@ UNASSIGNED_OFFICE = "Unassigned"
 LOW_CLOSE_RATIO_PCT = 50
 MIN_SITS_FOR_RATIO_ALERT = 5
 LOW_AVG_DEAL_USD = 1200
+# Alert chips that are a judgement about how someone is performing, as opposed
+# to a neutral fact about them. Per owner (2026-09-14) these are for that
+# agent's uplines only: a level_1 reading their office's Team tab sees the
+# production numbers and the rookie flag, never these. Stripped server-side in
+# team_view so the client cannot be the thing that decides it.
+UPLINE_ONLY_ALERTS = {"low_close_ratio", "low_avg_deal", "no_pulse"}
+
+
+def _leaderboard_group(row: Dict[str, Any]) -> str:
+    """Which board a Team tab row is ranked on: "leader" for level_2+ (they
+    rank among themselves, never against the agents they run), otherwise the
+    tenure group — "rookie", "veteran", or "unset" for the people nobody has
+    recorded a tenure for. Per owner (2026-09-16)."""
+    if role_level(row.get("role")) >= 2 and row.get("role") != FINANCE_ADMIN_ROLE:
+        return "leader"
+    tenure = row.get("is_rookie")
+    if tenure is None:
+        return "unset"
+    return "rookie" if tenure else "veteran"
 MIN_SALES_FOR_DEAL_ALERT = 3
 
 # Browser origins allowed to make credentialed calls. Both the Vercel-hosted
@@ -818,6 +837,57 @@ async def downline_agent_ids(agent_id: str) -> List[str]:
     return list(visible)
 
 
+async def office_agent_ids(user: Dict[str, Any]) -> List[str]:
+    """Agent ids sharing the caller's office. A level_1 Agent has no downline,
+    so visible_agent_ids collapses their read scope to themselves alone —
+    correct for every other route, but not for a lateral "my team" view.
+    (Per owner, 2026-09-13): the Team tab's read-only rollup uses office as
+    the level_1 team boundary instead, matching the same office scoping
+    Platinum Wall already uses for level_1 (see dashboard_wall). This does
+    NOT touch visible_agent_ids or can_enter_for — an Agent still enters only
+    their own numbers, and every other route's level_1 scope is unchanged."""
+    agent_id = user.get("agent_id")
+    if not agent_id:
+        return []
+    me = await db.agent_profiles.find_one({"agent_id": agent_id}, {"_id": 0, "office": 1})
+    office = (me or {}).get("office")
+    if not office:
+        return []
+    return [a["agent_id"] async for a in db.agent_profiles.find(
+        {"office": office}, {"_id": 0, "agent_id": 1})]
+
+
+async def team_scope_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
+    """Read scope for the Team tab and the agent card opened from it.
+
+    Everyone in the caller's home office, plus their own downline wherever it
+    reaches. Per owner (2026-09-14, extended 2026-09-15) any agent at any tier
+    may see general team stats, their office's sales numbers, any teammate's
+    day/week/month production, and that teammate's basic ALP and close ratio on
+    the contact card. /api/team, /api/team/weeks, /api/agents/{id}/history and
+    /api/agents/{id}/day all share this one definition rather than each
+    re-deriving it.
+
+    This is READ scope only. Every write path — can_enter_for, remove-person,
+    reassign, set-tier — stays on downline_agent_ids and is unchanged, which is
+    why team_view marks each row with in_my_downline: the office is visible,
+    but only your own downline is actionable.
+    """
+    role = user.get("role", "level_1")
+    if role == "level_4" or role == FINANCE_ADMIN_ROLE:
+        return None  # full agency, same as visible_agent_ids
+    if role == "level_1":
+        return await office_agent_ids(user)
+    # level_2 / level_3: their own downline PLUS their home office. An upline
+    # must never see less of the board than the agents under them do (per
+    # owner, 2026-09-15) — before this, an agent read the whole office while
+    # their own SA read only their downline. The union matters because an MGA's
+    # downline can reach past their home office, and neither half may be lost.
+    own = await visible_agent_ids(user)
+    office = await office_agent_ids(user)
+    return list({*(own or []), *office})
+
+
 async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
     """Return list of agent_ids visible to this user, or None for full access (level_4)."""
     role = user.get("role", "level_1")
@@ -829,6 +899,38 @@ async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
     if role == "level_1":
         return [agent_id]
     return await downline_agent_ids(agent_id)
+
+
+async def is_upline_of(
+    user: Dict[str, Any], target_agent_id: str, target_role: Optional[str] = None
+) -> bool:
+    """True when this user sits strictly ABOVE target_agent_id in the hierarchy.
+
+    This is a relationship test, not a tier comparison. Per owner 2026-09-13:
+    everyone above an agent in their chain — SA, GA, MGA, RGA — may see that
+    agent's coaching card, and nobody at or below them may. Tier comparison
+    gets this wrong in both directions, which is why it is not used here:
+      * SA and GA are both level_2 (SA is a title, not a tier — see CLAUDE.md),
+        so a GA reading their own SA's card compares 2 > 2 and is denied,
+        exactly where the rule says access belongs.
+      * Conversely a higher tier in an unrelated branch outranks the agent
+        without being anywhere in their chain.
+    Walks the same downline_agent_ids() BFS as visible_agent_ids/can_enter_for,
+    so all three agree on what "upline" means.
+
+    finance_admin sits outside the ladder and is never anyone's upline, even
+    though it has full read scope. level_4 is above the whole agency (matching
+    visible_agent_ids' None), except over another level_4, who is a peer.
+    """
+    own_agent_id = user.get("agent_id")
+    if not own_agent_id or target_agent_id == own_agent_id:
+        return False
+    role = user.get("role", "level_1")
+    if role == FINANCE_ADMIN_ROLE or role == "level_1":
+        return False
+    if role == "level_4":
+        return target_role != "level_4"
+    return target_agent_id in await downline_agent_ids(own_agent_id)
 
 
 async def can_enter_for(user: Dict[str, Any], target_agent_id: str) -> bool:
@@ -1804,7 +1906,7 @@ def scoreboard_window(period: str, sales_day: Optional[str] = None) -> Tuple[Dic
 async def team_view(
     period: str = DEFAULT_SCOREBOARD_PERIOD,
     week_start: Optional[str] = None,
-    user: Dict[str, Any] = Depends(require_level(2)),
+    user: Dict[str, Any] = Depends(require_level(1)),
 ):
     """Team rollup. `week_start` (a Wednesday) pulls up a specific past week
     instead of a rolling window.
@@ -1814,8 +1916,15 @@ async def team_view(
     but a past week must be defined by the days the production belongs to —
     otherwise a backfilled entry, stamped when it was imported rather than when
     it was sold, would land in the wrong week.
+
+    Open to level_1+ (per owner, 2026-09-13): a level_1 Agent reads their own
+    office's full rollup here, same fields GA+ sees for their downline — see
+    office_agent_ids. Write actions below (add/move/remove a team member,
+    entering on someone else's behalf) all stay behind their own level_2+
+    checks (canEnter client-side; require_level(2)/can_enter_for server-side),
+    so this only ever widens read access, never write.
     """
-    ids = await visible_agent_ids(user)
+    ids = await team_scope_agent_ids(user)
     today = current_sales_day_str()
     if week_start:
         day_from, day_to = week_day_range(week_start)
@@ -1882,7 +1991,13 @@ async def team_view(
             "io_role": a.get("io_role") or "",
             "phone": a.get("phone") or "",
             "email": a.get("email") or "",
-            "is_rookie": a.get("is_rookie", False),
+            # Tri-state, matching the Platinum Wall: True rookie, False veteran,
+            # None when nobody has recorded it. This used to coerce a missing
+            # value to False, which quietly ranked 48 of the 217 active roster
+            # as veterans on one screen while the wall called them unknown on
+            # another. The leaderboard gives them their own group instead (per
+            # owner, 2026-09-16), so the gap is visible and gets fixed.
+            "is_rookie": a.get("is_rookie"),
             "upline_id": a.get("upline_id"),
             # A removed member's already-logged production stays on the board
             # for its window ("history is history") — flagged so the UI can
@@ -1906,10 +2021,118 @@ async def team_view(
             out.append({
                 "agent_id": aid, "name": a["name"], "office": a["office"], "role": a["role"],
                 "io_role": a.get("io_role") or "", "phone": a.get("phone") or "", "email": a.get("email") or "",
-                "is_rookie": a.get("is_rookie", False), "upline_id": a.get("upline_id"), "archived": False,
+                "is_rookie": a.get("is_rookie"), "upline_id": a.get("upline_id"), "archived": False,
                 "gross_alp": 0, "net_alp": 0, "sits": 0, "sales": 0,
                 "close_ratio": 0, "avg_deal": 0, "alerts": no_entry_alerts,
             })
+    # The office is visible; only your own downline is yours to judge or act on.
+    # Both halves of that are decided here, after both row-building paths, so
+    # neither can forget it:
+    #   * in_my_downline tells the client which rows may offer ENTER NUMBERS,
+    #     MOVE, REMOVE and the tier change — every one of those routes is
+    #     downline-scoped server-side, so an office-peer button would only ever
+    #     produce a 403.
+    #   * UPLINE_ONLY_ALERTS (low close ratio, low average deal, no pulse) are a
+    #     judgement about how someone is performing, and belong to that person's
+    #     uplines (per owner, 2026-09-14). A level_1 has no downline, so this
+    #     strips every one of them for an agent, as it always did.
+    # Leaders' team rollups, and the leaderboard rank on every row.
+    #
+    # Per owner (2026-09-16): a team IS an office — MJ's team, Rust's team,
+    # Alwatan's, Gojcaj's — and the Team tab reads as a leaderboard of it.
+    # Agents rank inside their tenure group (rookies, veterans, and a third
+    # group for tenure nobody has set), leaders rank among leaders, and a
+    # leader's row carries their own production and their team's rollup side by
+    # side, ranked on their own. A leader who entered nothing keeps their
+    # rollup and takes no rank, which is the usual case.
+    #
+    # The rollup is computed from one roster read and one extra aggregation
+    # over the union of the leaders' subtrees, never a BFS per leader: an MGA's
+    # downline reaches past their office, so the rows already fetched are not
+    # enough to sum it.
+    leaders = [r for r in out if role_level(r["role"]) >= 2 and r["role"] != FINANCE_ADMIN_ROLE]
+    if leaders:
+        # Every profile, archived included. Removing someone archives them and
+        # deliberately keeps their upline_id and their production ("history is
+        # history" — see team_remove_person), and their row still shows those
+        # numbers on this board. Walking only the active roster would drop them
+        # from every ancestor's rollup, so a leader's team total would disagree
+        # with the rows printed underneath it.
+        children: Dict[str, List[str]] = {}
+        archived_ids: set = set()
+        async for a in db.agent_profiles.find(
+                {}, {"_id": 0, "agent_id": 1, "upline_id": 1, "archived": 1}):
+            children.setdefault(a.get("upline_id") or "", []).append(a["agent_id"])
+            if a.get("archived"):
+                archived_ids.add(a["agent_id"])
+
+        def subtree(root: str) -> List[str]:
+            seen, queue = set(), [root]
+            while queue:
+                node = queue.pop()
+                for kid in children.get(node, []):
+                    if kid not in seen:
+                        seen.add(kid)
+                        queue.append(kid)
+            return list(seen)
+
+        subtrees = {r["agent_id"]: subtree(r["agent_id"]) for r in leaders}
+        every_id = sorted({aid for ids_ in subtrees.values() for aid in ids_})
+        totals: Dict[str, Dict[str, float]] = {}
+        if every_id:
+            roll_q = dict(q)
+            roll_q["agent_id"] = {"$in": every_id}
+            async for d in db.production_entries.aggregate([
+                {"$match": roll_q},
+                {"$group": {"_id": "$agent_id",
+                            "gross_alp": {"$sum": "$gross_alp"},
+                            "sales": {"$sum": "$sales"}}},
+            ]):
+                totals[d["_id"]] = d
+        for r in leaders:
+            r["team_gross_alp"] = round(sum(
+                float(totals.get(aid, {}).get("gross_alp") or 0) for aid in subtrees[r["agent_id"]]), 2)
+            r["team_sales"] = sum(
+                int(totals.get(aid, {}).get("sales") or 0) for aid in subtrees[r["agent_id"]])
+            # Production counts everyone who ever produced under them; head
+            # count is who is actually on the team today.
+            r["team_size"] = len([aid for aid in subtrees[r["agent_id"]] if aid not in archived_ids])
+
+    # Rank runs on Gross ALP, the same measure the Platinum Wall ranks on, so a
+    # position means the same thing on both screens whatever column the list is
+    # sorted by. Nobody with nothing produced is ranked at all — a board where
+    # nine people tie for 4th at $0 says nothing to anyone.
+    #
+    # Ranking is per OFFICE as well as per group, because a team is an office.
+    # This list is not always one office: an MGA's downline can reach past
+    # theirs, and level_4 reads the whole agency. Pooling them would put an MCM
+    # veteran in a race with an AMP one, and would give the same person a
+    # different rank depending on who was looking — which is the one thing a
+    # standing cannot do.
+    pools: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    for r in out:
+        if r["gross_alp"] > 0:
+            pools.setdefault((r.get("office") or "", _leaderboard_group(r)), []).append(r)
+    for members in pools.values():
+        members.sort(key=lambda r: r["gross_alp"], reverse=True)
+        for i, r in enumerate(members, start=1):
+            r["rank"] = i
+            r["rank_of"] = len(members)
+    for r in out:
+        r["leaderboard_group"] = _leaderboard_group(r)
+        r.setdefault("rank", None)
+        r.setdefault("rank_of", None)
+
+    my_downline: Optional[set] = None  # None = everyone (level_4 / admin reach)
+    if role_level(user.get("role")) < 4 and not user_is_admin(user) \
+            and not user_is_finance_admin(user) and user.get("agent_id"):
+        my_downline = set(await downline_agent_ids(user["agent_id"])) - {user["agent_id"]}
+    for row in out:
+        mine = my_downline is None or row["agent_id"] in my_downline
+        row["in_my_downline"] = mine
+        if not mine:
+            row["alerts"] = [a for a in row["alerts"] if a not in UPLINE_ONLY_ALERTS]
+
     return {
         "team": out,
         "sales_day": today,
@@ -1920,10 +2143,11 @@ async def team_view(
 
 
 @api_router.get("/team/weeks")
-async def team_weeks(user: Dict[str, Any] = Depends(require_level(2))):
+async def team_weeks(user: Dict[str, Any] = Depends(require_level(1))):
     """Reporting weeks that have production for the caller's visible team —
-    the options for the Team screen's week picker."""
-    ids = await visible_agent_ids(user)
+    the options for the Team screen's week picker. level_1 scope mirrors
+    /api/team: office, not downline (see office_agent_ids)."""
+    ids = await team_scope_agent_ids(user)
     q: Dict[str, Any] = {} if ids is None else {"agent_id": {"$in": ids}}
     days = await db.production_entries.distinct("sales_day", q)
     weeks = set()
@@ -2397,13 +2621,21 @@ async def weekly_series(
         sales = int(w["sales"])
         sits = int(w["sits"])
         sets_ = int(w["sets"])
+        n1 = int(w["n1"])
         series.append({
             "week_start": ws,
             **{m: (round(w[m], 2) if m.endswith("alp") else int(w[m])) for m in _TREND_SUMS},
             # Close Rate via metrics.py, never inline. N1 is already excluded
             # from Sits at entry, so it is not subtracted again.
             "close_rate": round(metrics.close_rate(sales, sits), 1),
-            "show_rate": round((sits / sets_ * 100) if sets_ > 0 else 0.0, 1),
+            # Show Rate ("Sit Rate") via metrics.py, never inline: (Sits + N1)
+            # / Sets. N1 people DID keep the appointment, so they are added
+            # back here even though close_rate above leaves them out. This used
+            # to be an inline sits / sets_, which disagreed with the agent card,
+            # the day drill-down and the WAR export, all of which use
+            # metrics.show_rate. (Per owner 2026-09-13: Sit Rate is always
+            # (Sits + N1) / Sets.)
+            "show_rate": round(metrics.show_rate(sits, n1, sets_), 1),
             "alp_per_sale": round(w["gross_alp"] / sales, 2) if sales else 0.0,
             "agent_count": len(w["agents"]),
             "office_count": len(w["offices"]),
@@ -2419,13 +2651,19 @@ async def agent_history(
 ):
     """Weekly production history for one agent.
 
-    Authorization mirrors every other business route: an agent may read their
-    own history, and an upline may read anyone in their downline — resolved by
-    visible_agent_ids(), never by tier label. RGAs get ids=None (full agency),
-    and so does finance_admin (read-only, same scope, enforced by the route
-    dependency rather than by visible_agent_ids letting it write anywhere).
+    Authorization is the Team tab's scope, team_scope_agent_ids(), never a tier
+    label: an agent may read their own history, an upline may read anyone in
+    their downline, and a level_1 may read anyone in their own office (per
+    owner, 2026-09-14 — the card they open from the office roster shows that
+    person's numbers). RGAs get ids=None (full agency), and so does
+    finance_admin (read-only, same scope, enforced by the route dependency
+    rather than by the scope helper letting it write anywhere).
+
+    `coaching_visible` below is deliberately NOT widened with it: coaching stays
+    upline-only, so a level_1 reading an office peer gets the numbers and no
+    coaching card.
     """
-    ids = await visible_agent_ids(user)
+    ids = await team_scope_agent_ids(user)
     if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
         raise HTTPException(status_code=403, detail="Not in your team")
 
@@ -2439,7 +2677,65 @@ async def agent_history(
     series, _ = await weekly_series({"agent_id": agent_id})
     if weeks and weeks > 0:
         series = series[-weeks:]
-    return {"agent": profile, "series": series}
+    # Coaching card visibility is decided here, server-side, and never by the
+    # client comparing tiers: read scope (visible_agent_ids) is wider than the
+    # coaching rule and is on track to get wider still, so the two must not be
+    # conflated. The payload carries no coaching content — the tips are static
+    # client text — but the flag keeps one authoritative definition of who is
+    # an upline, so widening read scope can never widen coaching access.
+    coaching_visible = await is_upline_of(user, agent_id, profile.get("role"))
+    return {"agent": profile, "series": series, "coaching_visible": coaching_visible}
+
+
+@api_router.get("/agents/{agent_id}/day")
+async def agent_day(
+    agent_id: str,
+    sales_day: Optional[str] = None,
+    user: Dict[str, Any] = Depends(require_agent_or_finance_admin),
+):
+    """What one agent submitted for one sales_day — read-only drill-down from
+    the agent card's date picker.
+
+    Same RBAC as agent_history (team_scope_agent_ids — downline for level_2+,
+    own office for level_1), and same day validation as
+    the self-correction screen (resolve_history_day: no future dates, defaults
+    to today). Unlike pulse_me_day, this is not self-only — an upline may look
+    at any downline agent's day, and a level_1 at any office teammate's, same
+    scope as agent_history. It is read-only:
+    no correction path lives here, that stays on pulse_correct (self) and the
+    Manager Eraser (upline), both unchanged by this endpoint.
+
+    Returns the day's summed 14-field totals (aggregate_full_pulse — the same
+    helper the correction screen uses, so the numbers are guaranteed to match
+    what a correction would start from) plus close_rate / show_rate /
+    alp_per_sale computed the canonical way, via metrics.py, never inline.
+    """
+    ids = await team_scope_agent_ids(user)
+    if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
+        raise HTTPException(status_code=403, detail="Not in your team")
+
+    profile = await db.agent_profiles.find_one(
+        {"agent_id": agent_id},
+        {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1},
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    sd = resolve_history_day(sales_day)
+    q = {"agent_id": agent_id, "sales_day": sd}
+    totals = await aggregate_full_pulse(q)
+    entry_count = await db.production_entries.count_documents(q)
+
+    return {
+        "agent": profile,
+        "sales_day": sd,
+        "totals": totals,
+        "close_rate": round(metrics.close_rate(totals["sales"], totals["sits"]), 1),
+        "show_rate": round(metrics.show_rate(totals["sits"], totals["n1"], totals["sets"]), 1),
+        "alp_per_sale": round(totals["gross_alp"] / totals["sales"], 2) if totals["sales"] else 0.0,
+        "has_entries": entry_count > 0,
+        "entry_count": entry_count,
+    }
 
 
 @api_router.get("/vault/trends")
@@ -3426,13 +3722,20 @@ async def team_add_person(payload: TeamAddPersonIn, user: Dict[str, Any] = Depen
 #     new person always rolls up into team views (never an orphan).
 #   - Per-IP rate limit + honeypot field keep drive-by junk out.
 
-# Field title → RBAC tier, mirroring AddTeamMemberSheet (Agent→L1, SA→L2,
-# GA→L3) and the MGA/RGA=level_3+ convention used across permissions.
+# Field title → RBAC tier, mirroring AddTeamMemberSheet (Agent→L1, SA and
+# GA→L2) and the MGA/RGA=level_3+ convention used across permissions.
+#
+# GA is level_2, not level_3 (CLAUDE.md: "SA is a level_2 title: SAs and GAs
+# have identical permissions", per owner 2026-07-09). This map said level_3
+# until 2026-09-15, so anyone self-registering as a GA was minted with MGA-tier
+# visibility over their whole branch — the same wrong tier AddTeamMemberSheet
+# handed out until it was corrected in 2026-09, and the comment above was still
+# describing that old behaviour as if it matched.
 JOIN_TITLE_TIERS = {
     "inTraining": "level_1",
     "Agent": "level_1",
     "SA": "level_2",
-    "GA": "level_3",
+    "GA": "level_2",
     "MGA": "level_3",
     "RGA": "level_3",  # capped — see note above; requested_title preserves the ask
 }
@@ -3779,10 +4082,15 @@ async def team_remove_person(payload: TeamRemovePersonIn, user: Dict[str, Any] =
 
 @api_router.post("/team/reassign")
 async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(get_current_user)):
-    """Move a downline member under a different upline. Owner's decision tree:
-    GA, MGA, and RGA may reassign (not SA — same tier as GA, so the SA display
-    title is the only thing that separates them); scope is the mover's own
-    downline on both ends. Admins may reassign anyone anywhere."""
+    """Move a downline member under a different upline. Any upline level_2+ may
+    reassign within their own downline on both ends; admins may reassign anyone
+    anywhere.
+
+    SA is not a special case (per owner, 2026-09-15: every SA reassigns). It
+    was excluded here until then — the one capability SA and GA did not share,
+    and the only thing in the app that read the io_role title to decide access.
+    Removing it puts the tier back in sole charge, as CLAUDE.md has always said.
+    """
     is_admin = user_is_admin(user)
     my_level = role_level(user.get("role"))
     my_subtree: Optional[List[str]] = None
@@ -3792,8 +4100,6 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
         me = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
         if not me:
             raise HTTPException(status_code=404, detail="Your agent profile was not found")
-        if my_level == 2 and str(me.get("io_role") or "").strip().upper() == "SA":
-            raise HTTPException(status_code=403, detail="Reassigning is for GA level and above — ask your GA")
         # level_4 is agency-wide (None = no subtree restriction), matching
         # visible_agent_ids and can_enter_for.
         my_subtree = None if my_level >= 4 else await downline_agent_ids(user["agent_id"])
@@ -3840,6 +4146,151 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
         "new_upline_id": new_upline["agent_id"],
     })
     return {"ok": True, "agent_id": target["agent_id"], "upline_id": new_upline["agent_id"]}
+
+
+# Field titles the roster uses. Mirrors IO_ROLES in frontend/app/admin.tsx and
+# the titles AddTeamMemberSheet hands out; kept here so a tier change cannot
+# write a title the rest of the app has never heard of.
+IO_ROLE_CODES = {
+    "Agent", "inTraining", "Builder", "SA", "GA", "MGA", "RGA",
+    "Partner", "Senior Partner",
+}
+
+
+class TeamSetTierIn(BaseModel):
+    agent_id: str
+    role: str  # level_1..level_4 — always strictly below the requester's own
+    # The producer title moves with the tier when one is sent. Optional so a
+    # caller may change access alone, but the app pre-fills it: a promotion
+    # that leaves the old title on the card is how someone ends up a "GA"
+    # displayed as "Agent" until an admin notices.
+    io_role: Optional[str] = None
+
+
+@api_router.post("/team/set-tier")
+async def team_set_tier(payload: TeamSetTierIn, user: Dict[str, Any] = Depends(get_current_user)):
+    """Change a downline member's access tier from the Team tab — the promotion
+    an upline actually performs, without routing every one through an admin.
+
+    Owner's decision tree (2026-09-14):
+      * Any upline level_2+ may change the tier of someone in their OWN
+        downline, and only to a tier strictly below their own — an MGA can make
+        someone a GA, never another MGA. Nobody can mint a peer who would then
+        read their book, and nobody can raise anyone above themselves.
+      * Both directions: the same control lowers a tier as well as raises it,
+        within that same ceiling.
+      * is_admin and finance_admin get the same control agency-wide, capped the
+        same way at level_3 — level_4 and the Financial Admin role itself stay
+        in the Admin Panel, where granting them already lives.
+
+    Deliberately not here: creating or removing finance_admin (that route also
+    has to move upline_id, see admin_set_role), and touching level_4.
+    """
+    is_admin = user_is_admin(user)
+    is_fa = user_is_finance_admin(user)
+    my_level = role_level(user.get("role"))
+    if not is_admin and not is_fa:
+        if my_level < 2 or not user.get("agent_id"):
+            raise HTTPException(status_code=403, detail="Changing someone's tier requires SA level or above")
+
+    if payload.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    new_level = role_level(payload.role)
+    # An admin or finance_admin acts as though standing at level_4: everything
+    # below it is theirs to set, level_4 itself is not.
+    ceiling = 4 if (is_admin or is_fa) else my_level
+    if new_level >= ceiling:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only set a tier below your own — RGA and Financial Admin are set in the Admin Panel")
+
+    if payload.io_role is not None:
+        title = payload.io_role.strip()
+        if title and title not in IO_ROLE_CODES:
+            raise HTTPException(status_code=400, detail="Unknown title")
+    else:
+        title = None
+
+    target = await db.agent_profiles.find_one({"agent_id": payload.agent_id, **ACTIVE_AGENT}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if target["agent_id"] == user.get("agent_id"):
+        raise HTTPException(status_code=400, detail="You can't change your own tier")
+    current_role = target.get("role")
+    if current_role == FINANCE_ADMIN_ROLE:
+        raise HTTPException(
+            status_code=400,
+            detail="Financial Admin is changed in the Admin Panel — it has no place in the upline ladder")
+    if current_role == "level_4":
+        # Nobody demotes an RGA from a roster row, admin included. It is the
+        # one tier whose change cascades through every agency-wide view, so it
+        # stays where granting it lives.
+        raise HTTPException(status_code=403, detail="An RGA's tier is changed in the Admin Panel")
+
+    if not is_admin and not is_fa:
+        if role_level(current_role) >= my_level:
+            raise HTTPException(status_code=403, detail="You can only change someone below your own level")
+        # level_4 is agency-wide (no subtree restriction), matching
+        # visible_agent_ids, can_enter_for and team_reassign.
+        if my_level < 4:
+            if target["agent_id"] not in await downline_agent_ids(user["agent_id"]):
+                raise HTTPException(status_code=403, detail="You can only change someone in your own downline")
+
+    if new_level == role_level(current_role) and (title is None or title == (target.get("io_role") or "")):
+        raise HTTPException(status_code=400, detail="That is already their tier and title")
+
+    # Raising someone above their own upline would invert the chain: their
+    # rollup would then flow up through a lower tier, and downline_agent_ids
+    # would hand a GA an MGA's numbers. Same rule team_reassign enforces from
+    # the other side ("the new upline must be at or above their level").
+    upline_id = target.get("upline_id")
+    if upline_id:
+        upline = await db.agent_profiles.find_one({"agent_id": upline_id}, {"_id": 0, "role": 1, "name": 1})
+        if upline and role_level(upline.get("role")) < new_level:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Move them under someone at or above that tier first — they currently report to "
+                       f"{upline.get('name') or 'someone at a lower tier'}")
+
+    # Lowering a tier does not move anyone: their reports keep pointing at them,
+    # and a level_1 reads only themselves, so the whole branch would go dark to
+    # the person still nominally running it. Reassign first, deliberately.
+    if new_level < role_level(current_role):
+        reports = await db.agent_profiles.count_documents({"upline_id": target["agent_id"], **ACTIVE_AGENT})
+        if reports > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{target.get('name', 'This person')} has {reports} direct report"
+                       f"{'' if reports == 1 else 's'} — move them to another upline before lowering this tier")
+
+    now = now_utc()
+    update: Dict[str, Any] = {"role": payload.role, "updated_at": now}
+    if title is not None:
+        update["io_role"] = title or None
+    await db.agent_profiles.update_one({"agent_id": target["agent_id"]}, {"$set": update})
+    # Sync any linked login so the new tier applies without a re-login — same
+    # as admin_set_role, and the reason a promotion takes effect immediately.
+    email = str(target.get("email", "")).lower()
+    if email:
+        await db.users.update_many({"email": email}, {"$set": {"role": payload.role, "agent_id": target["agent_id"]}})
+
+    entry: Dict[str, Any] = {
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now,
+        "action": "set_role",
+        "agent_id": target["agent_id"],
+        "agent_name": target.get("name"),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "original_value": current_role,
+        "new_value": payload.role,
+    }
+    if title is not None and title != (target.get("io_role") or ""):
+        entry["old_io_role"] = target.get("io_role")
+        entry["new_io_role"] = title or None
+    await db.audit_log.insert_one(entry)
+    return {"ok": True, "agent_id": target["agent_id"], "role": payload.role,
+            "io_role": update.get("io_role", target.get("io_role"))}
 
 
 @api_router.post("/admin/unarchive-person")

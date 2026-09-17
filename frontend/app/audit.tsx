@@ -1,9 +1,9 @@
 // Audit Log — Level 4 only
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import { api, COLORS } from '../src/lib/auth';
+import { api, COLORS, useAuth, hasFullControl } from '../src/lib/auth';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { LoadState } from '../src/components/LoadState';
 
@@ -37,6 +37,7 @@ function formatValue(v: Audit['original_value'], money: boolean): string {
 }
 
 export default function AuditScreen() {
+  const { user, loading: authLoading } = useAuth();
   const [items, setItems] = useState<Audit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +60,31 @@ export default function AuditScreen() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
+
+  // The header has said "Level 4 only" since this was written while the file
+  // imported no role helper at all. The backend enforces /api/manager/audit,
+  // so nothing leaked — but an agent who reached /audit saw the chrome and an
+  // empty ledger, which reads as broken rather than as not-for-them.
+  if (authLoading) {
+    return (
+      <View style={styles.gate}>
+        <ActivityIndicator color={COLORS.primary} accessibilityLabel="Checking your access" />
+      </View>
+    );
+  }
+  // hasFullControl, not a bare level check: /api/manager/audit is gated by
+  // require_level4_or_admin, and the More menu offers this screen to is_admin
+  // at any tier, so a `< 4` gate showed those accounts a link that then locked
+  // them out.
+  if (!hasFullControl(user)) {
+    return (
+      <View style={styles.gate}>
+        <Stack.Screen options={{ title: 'AUDIT LOG', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />
+        <Ionicons name="lock-closed" size={32} color={COLORS.textDim} />
+        <Text style={styles.gateTxt}>The audit log is limited to RGA and admin accounts.</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -121,6 +147,8 @@ export default function AuditScreen() {
 }
 
 const styles = StyleSheet.create({
+  gate: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bg, padding: 28, gap: 12 },
+  gateTxt: { color: COLORS.textDim, fontSize: 14, textAlign: 'center' },
   kicker: { color: COLORS.orange, fontWeight: '900', fontSize: 11, letterSpacing: 2 },
   intro: { color: COLORS.textDim, fontSize: 12, marginVertical: 8 },
   empty: { color: COLORS.textMuted, marginTop: 20, textAlign: 'center' },

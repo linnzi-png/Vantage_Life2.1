@@ -16,7 +16,13 @@ import { Role } from './auth';
 // tab, all tiers).
 // v4: Hierarchy Map mention in the outro (all tiers); brand-new Financial
 // Admin walkthrough (finance_admin previously had none at all).
-export const TOUR_VERSION = 4;
+// v5: team-roster no longer claims a blanket "tap a row to see their
+// production history" for every tier that gets that step (#133).
+// v6: Team tab for level_1 Agents (per owner, 2026-09-13) — a read-only
+// office rollup, new for that tier. A separate number from v5 on purpose:
+// v5 is already on main and may have reached devices, and a tour only
+// re-shows when the version it last recorded is older than this one.
+export const TOUR_VERSION = 6;
 
 export type TourAnchorId =
   | 'dash-header'
@@ -227,21 +233,25 @@ const basicsBrief = (welcomeBody: string, includeUpline: boolean): TourStep[] =>
   },
 ];
 
+// Shared verbatim across TEAM_STEPS and AGENT_TEAM_STEPS — the week picker
+// works identically for every tier, so the copy needs no manager framing.
+const teamWeeksStep: TourStep = {
+  id: 'team-weeks',
+  screen: '/team',
+  anchor: 'team-weeks',
+  title: 'REWIND THE WEEK',
+  body: 'These chips pin any past reporting week — LIVE is now; tap a date to see the board exactly as that week closed. A pinned week is a static snapshot; tap LIVE to come back.',
+};
+
 const TEAM_STEPS: TourStep[] = [
   {
     id: 'team-roster',
     screen: '/team',
     anchor: 'team-roster',
     title: 'YOUR TEAM, LIVE',
-    body: "Your full downline rolls up in the TEAM tab — Gross and Net ALP, sales, close rate, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row for a contact card with that agent's 13-week production history. Bringing someone new onto your team directly? Tap ADD, top right.",
+    body: "Your full downline rolls up in the TEAM tab — Gross and Net ALP, sales, close rate, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row to open their contact card and reach out — call, text, or email, straight from the app. Bringing someone new onto your team directly? Tap ADD, top right.",
   },
-  {
-    id: 'team-weeks',
-    screen: '/team',
-    anchor: 'team-weeks',
-    title: 'REWIND THE WEEK',
-    body: 'These chips pin any past reporting week — LIVE is now; tap a date to see the board exactly as that week closed. A pinned week is a static snapshot; tap LIVE to come back.',
-  },
+  teamWeeksStep,
   {
     id: 'missing-tonight',
     screen: '/team',
@@ -263,6 +273,24 @@ const TEAM_STEPS: TourStep[] = [
     title: 'ENDORSE THE WORTHY',
     body: 'Read each nomination and ENDORSE the ones that deserve the wall. Three leadership endorsements flag a nomination as ready.',
   },
+];
+
+// level_1 gets a slimmer Team tour than GA+ (per owner, 2026-09-13): a
+// read-only rollup for their own office (backend/server.py office_agent_ids)
+// — no ADD/ENTER, and the missing-tonight card never renders for them, so
+// TEAM_STEPS' manager-oriented copy doesn't apply. Reuses TEAM_STEPS' own
+// 'team-weeks' step verbatim since that one's accurate for every tier.
+// Skips a nominations-inbox stop: the NOMINATIONS button still shows, but
+// the inbox itself is level_2+, so it isn't worth a tour step here.
+const AGENT_TEAM_STEPS: TourStep[] = [
+  {
+    id: 'agent-office-team',
+    screen: '/team',
+    anchor: 'team-roster',
+    title: 'YOUR OFFICE, LIVE',
+    body: "Everyone in your office rolls up here — Gross and Net ALP, sales, and close rate, live. Sort by any column, search by name or title, and tap a row for a contact card with that person's 13-week production history and any single day's numbers. You still enter your own Nightly Numbers only, back on the PULSE tab.",
+  },
+  teamWeeksStep,
 ];
 
 const MGA_STEPS: TourStep[] = [
@@ -411,7 +439,7 @@ const FINANCE_ADMIN_STEPS: TourStep[] = [
 export function stepsForRole(role: Role): TourStep[] {
   switch (role) {
     case 'level_1':
-      return [...BASICS_FULL, OUTRO];
+      return [...BASICS_FULL, ...AGENT_TEAM_STEPS, OUTRO];
     case 'level_2':
       return [
         ...basicsBrief(

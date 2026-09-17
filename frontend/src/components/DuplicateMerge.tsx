@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
-import { confirmAsync, notify } from '../lib/dialog';
+import { notify } from '../lib/dialog';
+import { TypedConfirm } from './TypedConfirm';
 
 interface DupProfile {
   agent_id: string;
@@ -72,20 +73,18 @@ export function DuplicateMerge({ onMerged }: { onMerged: () => void }) {
     return () => { cancelled = true; };
   }, [open, load]);
 
-  const merge = async (group: DupGroup, keepId: string) => {
+  // The confirm is a typed one, not an ordinary yes/no. Removing a person from
+  // the roster archives them and is reversible; this deletes a profile outright.
+  // Duplicates share a name by definition, so the dialog leans on the kept
+  // profile's email to say which record survives.
+  const [pendingMerge, setPendingMerge] = useState<{ group: DupGroup; keepId: string } | null>(null);
+
+  const runMerge = async () => {
+    if (!pendingMerge) return;
+    const { group, keepId } = pendingMerge;
     const keep = group.profiles.find((p) => p.agent_id === keepId);
     const others = group.profiles.filter((p) => p.agent_id !== keepId);
-    if (!keep || others.length === 0) return;
-    const ok = await confirmAsync({
-      title: 'Merge Duplicate Profiles',
-      message:
-        `Fold ${others.map((o) => `"${o.name}"`).join(' and ')} into "${keep.name}"?\n\n` +
-        'Their direct reports, production entries, and login move to the kept ' +
-        'profile and the duplicate is deleted. This cannot be undone.',
-      confirmText: 'Merge',
-      destructive: true,
-    });
-    if (!ok) return;
+    if (!keep || others.length === 0) { setPendingMerge(null); return; }
     setBusy(true);
     try {
       let children = 0; let entries = 0;
@@ -97,6 +96,7 @@ export function DuplicateMerge({ onMerged }: { onMerged: () => void }) {
         children += r.children_repointed;
         entries += r.entries_moved;
       }
+      setPendingMerge(null);
       notify(
         'Profiles merged',
         `${keep.name} is one profile again — ${children} agent${children === 1 ? '' : 's'} ` +
@@ -105,11 +105,19 @@ export function DuplicateMerge({ onMerged }: { onMerged: () => void }) {
       await load();
       onMerged();
     } catch (e: unknown) {
+      setPendingMerge(null);
       notify('Merge failed', e instanceof Error ? e.message : 'Please try again.');
     } finally {
       setBusy(false);
     }
   };
+
+  const pendingKeep = pendingMerge
+    ? pendingMerge.group.profiles.find((p) => p.agent_id === pendingMerge.keepId)
+    : undefined;
+  const pendingOthers = pendingMerge
+    ? pendingMerge.group.profiles.filter((p) => p.agent_id !== pendingMerge.keepId)
+    : [];
 
   if (!open) {
     return (
@@ -183,7 +191,7 @@ export function DuplicateMerge({ onMerged }: { onMerged: () => void }) {
               })}
               <TouchableOpacity
                 style={[styles.mergeBtn, busy && { opacity: 0.5 }]}
-                onPress={() => merge(g, keepId)}
+                onPress={() => setPendingMerge({ group: g, keepId })}
                 disabled={busy}
                 testID={`dup-merge-${gi}`}
               >
@@ -195,6 +203,24 @@ export function DuplicateMerge({ onMerged }: { onMerged: () => void }) {
           );
         })
       )}
+
+      <TypedConfirm
+        visible={!!pendingMerge && !!pendingKeep}
+        title="MERGE DUPLICATE PROFILES"
+        message={
+          pendingKeep
+            ? `Fold ${pendingOthers.map((o) => `"${o.name}"`).join(' and ')} into ` +
+              `"${pendingKeep.name}" (${pendingKeep.email || 'no email'}).\n\n` +
+              'Their direct reports, production entries and login move to the kept ' +
+              'profile, and the duplicate is deleted. There is no undo.'
+            : ''
+        }
+        word="MERGE"
+        confirmText="MERGE"
+        busy={busy}
+        onCancel={() => setPendingMerge(null)}
+        onConfirm={runMerge}
+      />
     </View>
   );
 }

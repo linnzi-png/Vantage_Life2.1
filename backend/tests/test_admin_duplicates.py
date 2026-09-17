@@ -121,8 +121,11 @@ async def test_merge_reunites_team_view(client, seeded_db):
         seeded_db, role="level_2", agent_id="SNOOR_LOGIN", email="snoor.qaradaghi@gmail.com")
 
     r = await client.get("/api/team", headers=auth(snoor_token))
-    ids_before = {t["agent_id"] for t in r.json()["team"]}
-    assert "AG_OLD1" not in ids_before  # the bug: half the team invisible
+    before = {t["agent_id"]: t for t in r.json()["team"]}
+    # The bug: half his team is not on his team. They may still appear as
+    # office rows (the Team tab lists the whole office since 2026-09-15), but
+    # in_my_downline is what says whose rollup they belong to.
+    assert before.get("AG_OLD1", {}).get("in_my_downline") is not True
 
     token = await admin_token(seeded_db)
     r = await client.post("/api/admin/merge-agents", headers=auth(token),
@@ -134,6 +137,7 @@ async def test_merge_reunites_team_view(client, seeded_db):
     r = await client.get("/api/team", headers=auth(snoor_token))
     team = {t["agent_id"]: t for t in r.json()["team"]}
     assert {"SNOOR_LOGIN", "AG_NEW", "AG_OLD1", "AG_OLD2"} <= set(team)
+    assert team["AG_OLD1"]["in_my_downline"] is True  # back on his team
     assert team["AG_OLD1"]["gross_alp"] == 1200.0  # production visible again
 
     # The duplicate is gone; the keeper adopted the blank fields.

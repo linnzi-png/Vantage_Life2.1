@@ -3,7 +3,7 @@
 // In-app replacement for the terminal roster scripts: tier changes, onboarding,
 // and permission grants. Every write goes through /api/admin/* which updates
 // agent_profiles (source of truth) AND users, per the login re-derivation invariant.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
   ActivityIndicator, Switch,
@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api, useAuth, roleTitle, isFinanceAdmin, isSessionExpiredError, levelNum, COLORS, Role } from '../src/lib/auth';
 import { useTour } from '../src/lib/tour';
 import { TourAnchor } from '../src/components/TourAnchor';
+import { AgentContactSheet } from '../src/components/AgentContactSheet';
 import { WarReportImport } from '../src/components/WarReportImport';
 import { OfficeMerge } from '../src/components/OfficeMerge';
 import { OrphanRepair } from '../src/components/OrphanRepair';
@@ -111,6 +112,9 @@ export default function AdminScreen() {
   // upline pick (finance_admin carries none) — pending person + new tier.
   const [revokeFAFor, setRevokeFAFor] = useState<{ person: Person; role: Role } | null>(null);
   const [revokeFAQuery, setRevokeFAQuery] = useState('');
+  // Tapping a roster row's contact icon opens the same call/text/email sheet
+  // every other screen uses — independent of the tier-management expand.
+  const [contactFor, setContactFor] = useState<Person | ArchivedPerson | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [loginFilter, setLoginFilter] = useState<LoginFilter>('all');
@@ -130,6 +134,28 @@ export default function AdminScreen() {
   const [fUplineQuery, setFUplineQuery] = useState('');
   const [fUpline, setFUpline] = useState<Person | null>(null);
   const [saving, setSaving] = useState(false);
+  // In-flight guard for every roster write. Keyed by person + action, so one
+  // slow role change never freezes the whole panel.
+  //
+  // The ref is the guard; the state only drives the disabled styling. Two taps
+  // in the same tick both read the same stale state value, which is exactly
+  // how a double-tap fired two set-role calls, two removals, two restores —
+  // each landing its own audit entry, and in the remove case cascading a
+  // downline twice. A ref is written synchronously, so the second tap sees it.
+  const pendingRef = useRef<Set<string>>(new Set());
+  const [pending, setPending] = useState<string[]>([]);
+  const isPending = (key: string) => pending.includes(key);
+  const runOnce = async (key: string, fn: () => Promise<void>) => {
+    if (pendingRef.current.has(key)) return;
+    pendingRef.current.add(key);
+    setPending([...pendingRef.current]);
+    try {
+      await fn();
+    } finally {
+      pendingRef.current.delete(key);
+      setPending([...pendingRef.current]);
+    }
+  };
 
   const load = async () => {
     try {
@@ -170,7 +196,8 @@ export default function AdminScreen() {
     return people.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 5);
   }, [people, fUplineQuery]);
 
-  const applyRoleChange = async (p: Person, role: Role, uplineAgentId?: string) => {
+  const applyRoleChange = (p: Person, role: Role, uplineAgentId?: string) =>
+    runOnce(`${p.agent_id}:role`, async () => {
     setRevokeFAFor(null); setRevokeFAQuery('');
     try {
       await api('/api/admin/set-role', {
@@ -181,7 +208,7 @@ export default function AdminScreen() {
     } catch (e: unknown) {
       notifyError(e, 'Role change failed');
     }
-  };
+  });
 
   const setRole = async (p: Person, role: Role) => {
     if (p.role === role) return;
@@ -201,7 +228,8 @@ export default function AdminScreen() {
     await applyRoleChange(p, role);
   };
 
-  const setFlag = async (p: Person, flag: 'is_admin' | 'can_switch_role', value: boolean) => {
+  const setFlag = (p: Person, flag: 'is_admin' | 'can_switch_role', value: boolean) =>
+    runOnce(`${p.agent_id}:${flag}`, async () => {
     if (!p.email) return;
     try {
       await api('/api/admin/set-flags', { method: 'POST', body: JSON.stringify({ email: p.email, [flag]: value }) });
@@ -209,7 +237,7 @@ export default function AdminScreen() {
     } catch (e: unknown) {
       notifyError(e, 'Flag update failed');
     }
-  };
+  });
 
   const addPerson = async () => {
     setSaving(true);
@@ -237,7 +265,8 @@ export default function AdminScreen() {
     }
   };
 
-  const removePerson = async (p: Person, destinationId?: string) => {
+  const removePerson = (p: Person, destinationId?: string) =>
+    runOnce(`${p.agent_id}:remove`, async () => {
     setDestFor(null); setDestQuery('');
     const args = { agent_id: p.agent_id, destination_upline_agent_id: destinationId || null };
     try {
@@ -265,9 +294,10 @@ export default function AdminScreen() {
       }
       notifyError(e, 'Remove failed');
     }
-  };
+  });
 
-  const restorePerson = async (p: ArchivedPerson, uplineId?: string) => {
+  const restorePerson = (p: ArchivedPerson, uplineId?: string) =>
+    runOnce(`${p.agent_id}:restore`, async () => {
     setRestoreFor(null); setRestoreQuery('');
     try {
       const ok = await confirmAsync({
@@ -282,18 +312,20 @@ export default function AdminScreen() {
     } catch (e: unknown) {
       notifyError(e, 'Restore failed');
     }
-  };
+  });
 
-  const clearReview = async (p: Person) => {
+  const clearReview = (p: Person) =>
+    runOnce(`${p.agent_id}:review`, async () => {
     try {
       await api('/api/admin/clear-review', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id }) });
       setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, needs_review: false } : x)));
     } catch (e: unknown) {
       notifyError(e, 'Could not mark verified');
     }
-  };
+  });
 
-  const setTenure = async (p: Person, isRookie: boolean) => {
+  const setTenure = (p: Person, isRookie: boolean) =>
+    runOnce(`${p.agent_id}:tenure`, async () => {
     if (p.is_rookie === isRookie) return;
     try {
       await api('/api/admin/set-tenure', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id, is_rookie: isRookie }) });
@@ -301,7 +333,7 @@ export default function AdminScreen() {
     } catch (e: unknown) {
       notifyError(e, 'Tenure update failed');
     }
-  };
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -539,6 +571,13 @@ export default function AdminScreen() {
                   <Text style={styles.tierBadgeTxt}>{TIER_SHORT[p.role] || '—'}</Text>
                 </View>
                 {p.is_admin ? <Ionicons name="shield-checkmark" size={14} color={COLORS.gold} /> : null}
+                <TouchableOpacity
+                  style={styles.contactBtn}
+                  onPress={() => setContactFor(p)}
+                  testID={`admin-contact-${p.agent_id}`}
+                >
+                  <Ionicons name="call" size={16} color={COLORS.primary} />
+                </TouchableOpacity>
                 <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.textDim} />
               </TouchableOpacity>
 
@@ -557,7 +596,7 @@ export default function AdminScreen() {
                         Self-registered via the /join web form — check their tier, upline, and team.
                         {p.requested_title ? ` They said they're ${p.requested_title === 'RGA' ? 'an' : 'a'} ${p.requested_title}; the form capped them at L3 — bump the tier if that's right.` : ''}
                       </Text>
-                      <TouchableOpacity style={styles.reviewBtn} onPress={() => clearReview(p)} testID={`admin-verify-${p.agent_id}`}>
+                      <TouchableOpacity style={[styles.reviewBtn, isPending(`${p.agent_id}:review`) && styles.busyCtl]} disabled={isPending(`${p.agent_id}:review`)} onPress={() => clearReview(p)} testID={`admin-verify-${p.agent_id}`}>
                         <Ionicons name="checkmark-circle" size={14} color="#000" />
                         <Text style={styles.reviewBtnTxt}>MARK VERIFIED</Text>
                       </TouchableOpacity>
@@ -576,7 +615,7 @@ export default function AdminScreen() {
                       <Text style={styles.lab}>ACCESS TIER</Text>
                       <View style={styles.tierRow}>
                         {tiersForViewer.map((t) => (
-                          <TouchableOpacity key={t} style={[styles.tierBtn, p.role === t && styles.tierBtnOn]} onPress={() => setRole(p, t)} testID={`admin-tier-${p.agent_id}-${t}`}>
+                          <TouchableOpacity key={t} style={[styles.tierBtn, p.role === t && styles.tierBtnOn, isPending(`${p.agent_id}:role`) && styles.busyCtl]} disabled={isPending(`${p.agent_id}:role`)} onPress={() => setRole(p, t)} testID={`admin-tier-${p.agent_id}-${t}`}>
                             <Text style={[styles.tierTxt, p.role === t && styles.tierTxtOn]}>{TIER_SHORT[t]}</Text>
                           </TouchableOpacity>
                         ))}
@@ -621,6 +660,7 @@ export default function AdminScreen() {
                           <View style={styles.tierRow}>
                             <TouchableOpacity
                               style={[styles.tierBtn, p.is_rookie === false && styles.tierBtnOn]}
+                              disabled={isPending(`${p.agent_id}:tenure`)}
                               onPress={() => setTenure(p, false)}
                               testID={`admin-tenure-${p.agent_id}-vet`}
                             >
@@ -628,6 +668,7 @@ export default function AdminScreen() {
                             </TouchableOpacity>
                             <TouchableOpacity
                               style={[styles.tierBtn, p.is_rookie === true && styles.tierBtnOn]}
+                              disabled={isPending(`${p.agent_id}:tenure`)}
                               onPress={() => setTenure(p, true)}
                               testID={`admin-tenure-${p.agent_id}-rookie`}
                             >
@@ -645,7 +686,7 @@ export default function AdminScreen() {
                         <Text style={styles.flagLab}>Admin panel access</Text>
                         <Switch
                           value={p.is_admin}
-                          disabled={!p.has_login}
+                          disabled={!p.has_login || isPending(`${p.agent_id}:is_admin`)}
                           onValueChange={(v) => setFlag(p, 'is_admin', v)}
                           trackColor={{ true: COLORS.primary, false: COLORS.surface2 }}
                         />
@@ -654,7 +695,7 @@ export default function AdminScreen() {
                         <Text style={styles.flagLab}>Role switcher (break-test)</Text>
                         <Switch
                           value={p.can_switch_role}
-                          disabled={!p.has_login}
+                          disabled={!p.has_login || isPending(`${p.agent_id}:can_switch_role`)}
                           onValueChange={(v) => setFlag(p, 'can_switch_role', v)}
                           trackColor={{ true: COLORS.primary, false: COLORS.surface2 }}
                         />
@@ -667,7 +708,8 @@ export default function AdminScreen() {
 
                   {isFA && (p.role === 'level_4' || p.role === 'finance_admin') ? null : (
                     <TouchableOpacity
-                      style={styles.removeBtn}
+                      style={[styles.removeBtn, isPending(`${p.agent_id}:remove`) && styles.busyCtl]}
+                      disabled={isPending(`${p.agent_id}:remove`)}
                       onPress={() => removePerson(p)}
                       testID={`admin-remove-${p.agent_id}`}
                     >
@@ -725,7 +767,15 @@ export default function AdminScreen() {
                     </Text>
                   </View>
                   <TouchableOpacity
-                    style={styles.restoreBtn}
+                    style={styles.contactBtn}
+                    onPress={() => setContactFor(p)}
+                    testID={`admin-contact-${p.agent_id}`}
+                  >
+                    <Ionicons name="call" size={16} color={COLORS.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.restoreBtn, isPending(`${p.agent_id}:restore`) && styles.busyCtl]}
+                    disabled={isPending(`${p.agent_id}:restore`)}
                     onPress={() => (p.role === 'level_4' ? restorePerson(p) : setRestoreFor(restoreFor?.agent_id === p.agent_id ? null : p))}
                     testID={`admin-restore-${p.agent_id}`}
                   >
@@ -758,11 +808,15 @@ export default function AdminScreen() {
           </>
         ) : null}
       </ScrollView>
+      <AgentContactSheet agent={contactFor} onClose={() => setContactFor(null)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // Anything mid-write: visibly inert, so a second tap reads as "already
+  // going" rather than "did not register".
+  busyCtl: { opacity: 0.45 },
   kicker: { color: COLORS.gold, fontWeight: '900', fontSize: 11, letterSpacing: 2 },
   intro: { color: COLORS.textDim, fontSize: 12, marginVertical: 8 },
   walkthroughBtn: {
@@ -810,6 +864,7 @@ const styles = StyleSheet.create({
   personHead: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 },
   personName: { color: '#fff', fontWeight: '800', fontSize: 14 },
   personSub: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
+  contactBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surface2 },
   reviewBadge: { backgroundColor: 'rgba(255,215,0,0.16)', borderWidth: 1, borderColor: COLORS.gold, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   reviewBadgeTxt: { color: COLORS.gold, fontWeight: '900', fontSize: 9, letterSpacing: 1 },
   reviewCard: { backgroundColor: 'rgba(255,215,0,0.10)', borderWidth: 1, borderColor: 'rgba(255,215,0,0.45)', borderRadius: 8, padding: 10, marginTop: 10 },

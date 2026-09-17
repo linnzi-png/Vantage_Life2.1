@@ -107,6 +107,61 @@ export function recentSalesDays(count: number, now: Date = new Date()): string[]
 }
 
 /**
+ * The sales day, and the list of recent sales days, anchored on
+ * America/Detroit rather than the device clock.
+ *
+ * The backend defines a sales_day in Detroit time (`sales_day_for()`), so a
+ * picker built from the device clock disagrees with it for anyone outside that
+ * zone near the 6 AM boundary: a Pacific user between 3 and 6 AM is not
+ * offered the day the server already considers current, and a user east of
+ * Detroit can be offered a day the server rejects as being in the future.
+ *
+ * Intl with an explicit timeZone is the only way to get this right without
+ * shipping a tz database. If the runtime cannot do it (an engine built without
+ * full ICU), we fall back to the device-local helpers above rather than throw —
+ * the picker is then no worse than it was.
+ */
+const DETROIT_TZ = 'America/Detroit';
+
+function detroitNowParts(now: Date): { y: number; m: number; d: number; hour: number } | null {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: DETROIT_TZ,
+      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
+    }).formatToParts(now);
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    const y = get('year'), m = get('month'), d = get('day'), hour = get('hour');
+    if ([y, m, d, hour].some((n) => !Number.isFinite(n))) return null;
+    return { y, m, d, hour: hour % 24 }; // hourCycle h24 can report midnight as 24
+  } catch {
+    return null;
+  }
+}
+
+// Date arithmetic in UTC so stepping back a day can never be shortened or
+// lengthened by a DST transition — these are calendar labels, not instants.
+function stepBack(y: number, m: number, d: number, days: number): string {
+  const t = new Date(Date.UTC(y, m - 1, d));
+  t.setUTCDate(t.getUTCDate() - days);
+  return t.toISOString().slice(0, 10);
+}
+
+export function currentSalesDayDetroit(now: Date = new Date()): string {
+  const p = detroitNowParts(now);
+  if (!p) return currentSalesDay(now);
+  return stepBack(p.y, p.m, p.d, p.hour < CYCLE_OPEN_HOUR ? 1 : 0);
+}
+
+export function recentSalesDaysDetroit(count: number, now: Date = new Date()): string[] {
+  const p = detroitNowParts(now);
+  if (!p) return recentSalesDays(count, now);
+  const offset = p.hour < CYCLE_OPEN_HOUR ? 1 : 0;
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) out.push(stepBack(p.y, p.m, p.d, i + offset));
+  return out;
+}
+
+/**
  * True between midnight (00:00:00) and 5:59:59 AM local time — the Midnight
  * Miracle grace window for the still-open sales day. Used only to show an
  * urgency prompt; entries submitted in this window post immediately.

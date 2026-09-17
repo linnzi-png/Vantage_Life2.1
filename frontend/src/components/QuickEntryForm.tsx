@@ -70,11 +70,33 @@ export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext }
 
   const set = (key: PulseFieldKey, val: string) => setForm((f) => ({ ...f, [key]: val }));
 
+  // An untouched form builds fourteen zeros, and the backend takes them: the
+  // day lands as a real submission that reads $0 across the board and is
+  // indistinguishable from a genuinely empty night, except it is missing the
+  // NIF flag that says which one it was. Easy to trigger — open the sheet on
+  // the wrong person, tap submit out of habit — and there is no way for them
+  // to tell afterwards that it was a slip. So ask, and point at the button
+  // that records it properly.
   const submit = async () => {
+    const payload0 = buildPayload(form);
+    const allZero = PULSE_FIELDS.every((f) => !payload0[f.key]);
+    if (allZero) {
+      const first = target.name.split(' ')[0];
+      const ok = await confirmAsync({
+        title: 'Submit all zeros?',
+        message:
+          `Every field is blank, so this records a zero night for ${first} on the ` +
+          'selected sales day.\n\nIf they were not in the field, close this and use ' +
+          'MARK NIF instead — it records the same zeros and says why.',
+        confirmText: 'Submit zeros',
+        destructive: true,
+      });
+      if (!ok) return;
+    }
     setSubmitting(true);
     try {
       if (!pendingEntryId.current) pendingEntryId.current = makeClientEntryId();
-      const payload = { ...buildPayload(form), target_agent_id: target.agent_id, sales_day: salesDay, client_entry_id: pendingEntryId.current };
+      const payload = { ...payload0, target_agent_id: target.agent_id, sales_day: salesDay, client_entry_id: pendingEntryId.current };
       await api('/api/pulse', { method: 'POST', body: JSON.stringify(payload) });
       pendingEntryId.current = null;
       setForm(emptyForm);

@@ -55,7 +55,11 @@ export default function TabsLayout() {
           title: 'TEAM',
           headerShown: false,
           tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
-          href: lvl >= 2 ? undefined : null,
+          // level_1 (Agent) gets a read-only office rollup here too (per
+          // owner, 2026-09-13) — see office_agent_ids in backend/server.py.
+          // lvl is 0 for finance_admin/pending, so this still hides the tab
+          // for both of those.
+          href: lvl >= 1 ? undefined : null,
         }}
       />
       <Tabs.Screen

@@ -1,11 +1,12 @@
 // Team View — Level 2+
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS, useAuth, levelNum, roleTitle, Role } from '../../src/lib/auth';
+import { api, COLORS, useAuth, levelNum, roleTitle, isFinanceAdmin, Role } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
+import { ChangeTierSheet } from '../../src/components/ChangeTierSheet';
 import { QuickEntryForm, QuickEntryTarget } from '../../src/components/QuickEntryForm';
 import { AddTeamMemberSheet } from '../../src/components/AddTeamMemberSheet';
 import { MoveMemberSheet } from '../../src/components/MoveMemberSheet';
@@ -17,10 +18,25 @@ import { confirmAsync, notify } from '../../src/lib/dialog';
 
 interface TeamRow {
   agent_id: string; name: string; office: string; role: Role; io_role: string;
-  phone: string; email: string; is_rookie: boolean;
+  phone: string; email: string; is_rookie: boolean | null;
   upline_id?: string | null;
   archived: boolean; // removed from the team; production shown for history only
   gross_alp: number; net_alp: number; sits: number; sales: number; close_ratio: number; avg_deal: number; alerts: string[];
+  // Server-computed: is this person in MY downline, as opposed to elsewhere in
+  // my office? The office is visible to everyone in it, but every write path
+  // (enter numbers, move, remove, tier) is downline-scoped server-side, so this
+  // is what decides which rows may offer those actions at all.
+  in_my_downline?: boolean;
+  // Leaderboard (owner, 2026-09-16), all server-computed so the board reads
+  // the same for everyone: rank runs on Gross ALP inside leaderboard_group,
+  // and rank is null for anyone who produced nothing in the window. A leader's
+  // row also carries their team's rollup alongside their own numbers.
+  leaderboard_group?: 'leader' | 'rookie' | 'veteran' | 'unset';
+  rank?: number | null;
+  rank_of?: number | null;
+  team_gross_alp?: number;
+  team_sales?: number;
+  team_size?: number;
 }
 
 const ALERT_LABELS: Record<string, { label: string; color: string }> = {
@@ -34,9 +50,16 @@ const ALERT_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export default function TeamScreen() {
-  const { user, agent } = useAuth();
+  const { user, agent, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<TeamRow[]>([]);
   const [moveTarget, setMoveTarget] = useState<TeamRow | null>(null);
+  // A team IS an office (owner, 2026-09-16) — MJ's team, Rust's, Alwatan's,
+  // Gojcaj's — and seeing the whole one is the point: it is a motivation and
+  // healthy-competition tactic, not an oversight. So the board opens on the
+  // team, and the narrower filter is "the people who report to me", which is
+  // what an upline wants when entering numbers rather than when competing.
+  const [scope, setScope] = useState<'team' | 'mine'>('team');
+  const [tierTarget, setTierTarget] = useState<TeamRow | null>(null);
   const [upline, setUpline] = useState<AgentContact | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [sortKey, setSortKey] = useState<keyof TeamRow>('gross_alp');
@@ -107,16 +130,30 @@ export default function TeamScreen() {
   // Any upline (SA/GA and above, level 2+) may enter Nightly Numbers on a
   // downline teammate's behalf, matching can_enter_for on the backend.
   const canEnter = levelNum(user?.role) >= 2;
-  const missingTonight = rows.filter((r) => r.alerts?.includes('no_pulse'));
+  // Only my own downline: this card opens proxy entry, which is downline-only.
+  const missingTonight = rows.filter((r) => r.alerts?.includes('no_pulse') && r.in_my_downline !== false);
 
-  // Owner's decision tree: remove anyone in your downline strictly below your
-  // tier (level 2+); reassign is GA/MGA/RGA — the SA display title, the only
-  // thing separating SA from GA at tier 2, is excluded. Backend re-checks all.
+  // Owner's decision tree: remove or reassign anyone in your downline strictly
+  // below your tier (level 2+). SA is not a special case (per owner,
+  // 2026-09-15) — the tier decides, never the title. Backend re-checks all.
   const myLevel = levelNum(user?.role);
-  const saTitle = (agent?.io_role || '').trim().toUpperCase() === 'SA';
+  const mine = (r: TeamRow) => r.in_my_downline !== false;
   const canRemoveRow = (r: TeamRow) =>
-    myLevel >= 2 && !r.archived && r.agent_id !== user?.agent_id && levelNum(r.role) < myLevel;
-  const canMoveRow = (r: TeamRow) => canRemoveRow(r) && (myLevel >= 3 || !saTitle);
+    myLevel >= 2 && mine(r) && !r.archived && r.agent_id !== user?.agent_id &&
+    levelNum(r.role) < myLevel;
+  const canMoveRow = canRemoveRow;
+  // Proxy entry is downline-only server-side (can_enter_for), so an office
+  // peer's card must not offer it.
+  const canEnterForRow = (r: TeamRow) => canEnter && mine(r) && !r.archived;
+  // Tier changes (owner, 2026-09-14): the same "in your downline, strictly
+  // below you" rule as remove — canRemoveRow now carries the downline test, so
+  // an office peer's card offers nothing an upline could not actually do.
+  // is_admin and finance_admin act agency-wide at the same cap, which is why
+  // they bypass it. Only ever a hint: /api/team/set-tier re-checks every part.
+  const agencyWide = !!user?.is_admin || isFinanceAdmin(user?.role);
+  const canChangeTierRow = (r: TeamRow) =>
+    !r.archived && r.agent_id !== user?.agent_id && r.role !== 'level_4' &&
+    (agencyWide || canRemoveRow(r));
 
   const removeMember = async (row: TeamRow) => {
     setSelected(null);
@@ -171,16 +208,107 @@ export default function TeamScreen() {
       return rest;
     });
   };
-  const visible = q
-    ? sorted.filter((r) => `${r.name} ${r.office} ${roleTitle(r.io_role, r.role)}`.toLowerCase().includes(q))
+  const hasDownline = rows.some((r) => r.in_my_downline === true && r.agent_id !== user?.agent_id);
+  // The viewer's own team leads; anyone else's follows alphabetically. Most
+  // people only ever see one.
+  const myOffice = rows.find((r) => r.agent_id === user?.agent_id)?.office || agent?.office || '';
+  const offices = Array.from(new Set(rows.map((r) => r.office || '')))
+    .sort((a, b) => (a === myOffice ? -1 : b === myOffice ? 1 : a.localeCompare(b)));
+  const scoped = scope === 'mine' && hasDownline
+    ? sorted.filter((r) => r.in_my_downline !== false || r.agent_id === user?.agent_id)
     : sorted;
+  const visible = q
+    ? scoped.filter((r) => `${r.name} ${r.office} ${roleTitle(r.io_role, r.role)}`.toLowerCase().includes(q))
+    : scoped;
 
-  if (levelNum(user?.role) < 2) {
+  // `user` is null while AuthProvider restores the session, and
+  // levelNum(undefined) is 0 — so without this every GA and above was shown
+  // the lock screen for a beat on every cold start. With the level_1 Team tab
+  // it matters more, not less: that beat would now hit every tier.
+  // One row, rendered under whichever board the server put this person on.
+  const renderRow = (r: TeamRow) => (
+          <TouchableOpacity
+            key={r.agent_id}
+            style={styles.row}
+            testID={`team-row-${r.agent_id}`}
+            onPress={() => setSelected(r)}
+            activeOpacity={0.75}
+          >
+            <View style={styles.rankWrap}>
+              <Text style={[styles.rankTxt, r.rank === 1 && styles.rankTxtTop]}>
+                {r.rank ? `${r.rank}` : '—'}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.name} numberOfLines={1}>{r.name}</Text>
+                {r.is_rookie ? <View style={styles.rookie}><Text style={styles.rookieTxt}>R</Text></View> : null}
+                {r.archived ? <View style={styles.removed}><Text style={styles.removedTxt}>REMOVED</Text></View> : null}
+                {r.in_my_downline === false && r.agent_id !== user?.agent_id ? (
+                  <View style={styles.officeBadge}><Text style={styles.officeBadgeTxt}>OFFICE</Text></View>
+                ) : null}
+                <Ionicons name="chevron-forward" size={12} color={COLORS.textDim} style={{ marginLeft: 'auto' }} />
+              </View>
+              <Text style={styles.meta}>
+                {r.office} · {roleTitle(r.io_role, r.role)}
+                {r.phone ? ` · ${formatPhone(r.phone)}` : ''}
+              </Text>
+              {r.alerts?.length ? (
+                <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                  {r.alerts.map((a) => (
+                    <View key={a} style={[styles.alert, { borderColor: ALERT_LABELS[a]?.color || COLORS.textDim }]}>
+                      <Text style={[styles.alertTxt, { color: ALERT_LABELS[a]?.color || COLORS.textDim }]}>{ALERT_LABELS[a]?.label || a}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.alp}>${Math.round(r.gross_alp).toLocaleString()}</Text>
+              <Text style={styles.metric}>{r.sales} sales · {r.close_ratio}%</Text>
+              {Math.abs(r.gross_alp - r.net_alp) > 0.01 ? (
+                <Text style={styles.netAlp}>NET ${Math.round(r.net_alp).toLocaleString()}</Text>
+              ) : null}
+              {/* A leader is ranked on what they sold themselves, which is
+                  usually nothing — the rollup is what they are actually
+                  accountable for, so both sit on the row. */}
+              {r.leaderboard_group === 'leader' && r.team_size ? (
+                <Text style={styles.teamRollup}>
+                  TEAM ${Math.round(r.team_gross_alp || 0).toLocaleString()} · {r.team_sales || 0} sales · {r.team_size}
+                </Text>
+              ) : null}
+            </View>
+          </TouchableOpacity>
+  );
+
+  // The four boards, in the order they read best: the leaders first, then the
+  // people they run. TENURE NOT SET only appears when someone is in it, which
+  // is the nudge to go set it.
+  const BOARDS: { key: NonNullable<TeamRow['leaderboard_group']>; label: string }[] = [
+    { key: 'leader', label: 'LEADERS' },
+    { key: 'rookie', label: 'ROOKIES' },
+    { key: 'veteran', label: 'VETERANS' },
+    { key: 'unset', label: 'TENURE NOT SET' },
+  ];
+
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.empty}>
+          <ActivityIndicator color={COLORS.primary} accessibilityLabel="Checking your access" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // < 1 rather than < 2: level_1 reads their own office here (office_agent_ids).
+  // levelNum is 0 for finance_admin and pending, so both still get the lock.
+  if (levelNum(user?.role) < 1) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.empty}>
           <Ionicons name="lock-closed" size={32} color={COLORS.textDim} />
-          <Text style={styles.emptyTxt}>Team View is for GA, MGA, and RGA roles.</Text>
+          <Text style={styles.emptyTxt}>Team View is for Agent, GA, MGA, and RGA roles.</Text>
         </View>
       </SafeAreaView>
     );
@@ -255,6 +383,24 @@ export default function TeamScreen() {
 
       <View style={styles.periodBar}>
         <PeriodSelector value={period} onChange={changePeriod} testID="team-period" />
+        {hasDownline ? (
+          <View style={styles.scopeRow}>
+            <TouchableOpacity
+              onPress={() => setScope('team')}
+              style={[styles.weekChip, scope === 'team' && styles.weekChipOn]}
+              testID="team-scope-team"
+            >
+              <Text style={[styles.weekChipTxt, scope === 'team' && styles.weekChipTxtOn]}>MY TEAM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setScope('mine')}
+              style={[styles.weekChip, scope === 'mine' && styles.weekChipOn]}
+              testID="team-scope-mine"
+            >
+              <Text style={[styles.weekChipTxt, scope === 'mine' && styles.weekChipTxtOn]}>REPORTS TO ME</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
         {weekOptions.length > 0 ? (
           <TourAnchor id="team-weeks">
           <ScrollView
@@ -338,53 +484,56 @@ export default function TeamScreen() {
           loadingText="Loading your team…"
           testID="team"
         >
-          {visible.map((r) => (
-          <TouchableOpacity
-            key={r.agent_id}
-            style={styles.row}
-            testID={`team-row-${r.agent_id}`}
-            onPress={() => setSelected(r)}
-            activeOpacity={0.75}
-          >
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={styles.name} numberOfLines={1}>{r.name}</Text>
-                {r.is_rookie ? <View style={styles.rookie}><Text style={styles.rookieTxt}>R</Text></View> : null}
-                {r.archived ? <View style={styles.removed}><Text style={styles.removedTxt}>REMOVED</Text></View> : null}
-                <Ionicons name="chevron-forward" size={12} color={COLORS.textDim} style={{ marginLeft: 'auto' }} />
-              </View>
-              <Text style={styles.meta}>
-                {r.office} · {roleTitle(r.io_role, r.role)}
-                {r.phone ? ` · ${formatPhone(r.phone)}` : ''}
-              </Text>
-              {r.alerts?.length ? (
-                <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                  {r.alerts.map((a) => (
-                    <View key={a} style={[styles.alert, { borderColor: ALERT_LABELS[a]?.color || COLORS.textDim }]}>
-                      <Text style={[styles.alertTxt, { color: ALERT_LABELS[a]?.color || COLORS.textDim }]}>{ALERT_LABELS[a]?.label || a}</Text>
+          {offices.map((office) => {
+            const inOffice = visible.filter((r) => (r.office || '') === office);
+            if (inOffice.length === 0) return null;
+            return (
+              <View key={office || 'unassigned'}>
+                {/* One team per office, and the rank is per office too, so a
+                    viewer who reaches more than one — an MGA whose downline
+                    crosses offices, an RGA reading the agency — sees each
+                    team's own standings rather than four teams in one race. */}
+                {offices.length > 1 ? (
+                  <Text style={styles.officeHead}>{office || 'UNASSIGNED'}</Text>
+                ) : null}
+                {BOARDS.map(({ key, label }) => {
+                  const group = inOffice.filter((r) => (r.leaderboard_group || 'unset') === key);
+                  if (group.length === 0) return null;
+                  const ranked = group.filter((r) => r.rank).length;
+                  return (
+                    <View key={key} style={styles.board}>
+                      <View style={styles.boardHead}>
+                        <Text style={styles.boardLabel}>{label}</Text>
+                        <Text style={styles.boardCount}>
+                          {ranked > 0 ? `${ranked} RANKED · ` : ''}{group.length}
+                        </Text>
+                      </View>
+                      {group.map(renderRow)}
                     </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.alp}>${Math.round(r.gross_alp).toLocaleString()}</Text>
-              <Text style={styles.metric}>{r.sales} sales · {r.close_ratio}%</Text>
-              {Math.abs(r.gross_alp - r.net_alp) > 0.01 ? (
-                <Text style={styles.netAlp}>NET ${Math.round(r.net_alp).toLocaleString()}</Text>
-              ) : null}
-            </View>
-          </TouchableOpacity>
-          ))}
+                  );
+                })}
+              </View>
+            );
+          })}
         </LoadState>
       </ScrollView>
 
       <AgentContactSheet
         agent={selected}
         onClose={() => setSelected(null)}
-        onEnterNumbers={canEnter && selected && !selected.archived ? () => openQuickEntry(selected) : undefined}
+        onEnterNumbers={selected && canEnterForRow(selected) ? () => openQuickEntry(selected) : undefined}
         onMove={selected && canMoveRow(selected) ? () => { const t = selected; setSelected(null); setMoveTarget(t); } : undefined}
         onRemove={selected && canRemoveRow(selected) ? () => removeMember(selected) : undefined}
+        onChangeTier={selected && canChangeTierRow(selected)
+          ? () => { const t = selected; setSelected(null); setTierTarget(t); }
+          : undefined}
+      />
+      <ChangeTierSheet
+        target={tierTarget}
+        myRole={user?.role}
+        agencyWide={agencyWide}
+        onClose={() => setTierTarget(null)}
+        onChanged={fetchAll}
       />
       <MoveMemberSheet
         target={moveTarget}
@@ -415,6 +564,27 @@ export default function TeamScreen() {
 
 const styles = StyleSheet.create({
   weekPicker: { gap: 6, paddingVertical: 8 },
+  scopeRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  officeHead: {
+    color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 1.2,
+    marginTop: 8, marginBottom: 10,
+  },
+  board: { marginBottom: 18 },
+  boardHead: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 6, paddingHorizontal: 2,
+  },
+  boardLabel: { color: COLORS.primary, fontWeight: '900', fontSize: 11, letterSpacing: 1.6 },
+  boardCount: { color: COLORS.textMuted, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  rankWrap: { width: 26, alignItems: 'center', justifyContent: 'center' },
+  rankTxt: { color: COLORS.textDim, fontSize: 13, fontWeight: '900' },
+  rankTxtTop: { color: COLORS.gold, fontSize: 16 },
+  teamRollup: { color: COLORS.textMuted, fontSize: 10, fontWeight: '800', marginTop: 2 },
+  officeBadge: {
+    paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  officeBadgeTxt: { color: COLORS.textMuted, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
   weekChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
   weekChipOn: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
   weekChipTxt: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },

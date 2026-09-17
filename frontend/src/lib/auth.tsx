@@ -462,6 +462,29 @@ export function isFinanceAdmin(role?: Role | null): boolean {
   return role === 'finance_admin';
 }
 
+// Client-side twins of the backend's access predicates, so a screen gate can
+// never be stricter than the route it fronts. Both mirror backend/server.py
+// exactly — change them together.
+
+/** has_full_control(): level_4 OR the is_admin flag. Per owner (2026-09-01)
+ *  the is_admin account holds every capability the top tier has. `is_admin` on
+ *  the session payload is the server's own answer (it already folds in the
+ *  ADMIN_EMAILS list), not a client guess. Use this instead of
+ *  `levelNum(role) >= 4` for any screen fronting require_level4_or_admin —
+ *  levelNum('finance_admin') is 0 by design, and a bare level check also locks
+ *  out an is_admin account below level_4 that the server would admit. */
+export function hasFullControl(user?: AppUser | null): boolean {
+  return user?.is_admin === true || levelNum(user?.role) >= 4;
+}
+
+/** require_level4_or_finance_admin(): the read-only Historical Vault views
+ *  additionally admit finance_admin, which sits outside the level ladder.
+ *  Write paths there stay on hasFullControl alone — finance_admin never gets
+ *  restore or delete. */
+export function canViewVault(user?: AppUser | null): boolean {
+  return hasFullControl(user) || isFinanceAdmin(user?.role);
+}
+
 // Producer-track display titles for io_role codes. Titles are display-only:
 // Partner / Senior Partner holders keep their MGA- or RGA-tier access, and
 // RBAC is always enforced by `role` (level_1..4), never by title.
