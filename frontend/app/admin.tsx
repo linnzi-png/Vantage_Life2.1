@@ -15,6 +15,7 @@ import { useTour } from '../src/lib/tour';
 import { TourAnchor } from '../src/components/TourAnchor';
 import { AgentContactSheet } from '../src/components/AgentContactSheet';
 import { WarReportImport } from '../src/components/WarReportImport';
+import { CodeDatesImport } from '../src/components/CodeDatesImport';
 import { OfficeMerge } from '../src/components/OfficeMerge';
 import { OrphanRepair } from '../src/components/OrphanRepair';
 import { DuplicateMerge } from '../src/components/DuplicateMerge';
@@ -416,6 +417,7 @@ export default function AdminScreen() {
         <TourAnchor id="admin-war-import">
           <WarReportImport />
         </TourAnchor>
+        <CodeDatesImport />
 
         {/* Hierarchy-repair tools stay is_admin-only — finance_admin's roster
             write scope is level_1..level_3 add/remove/role-change and the WAR

@@ -24,6 +24,7 @@ import pytz
 
 import metrics
 import war_import
+import code_dates
 import secret_sauce
 import war_export
 import audit_roster_emails as roster_audit
@@ -3095,10 +3096,14 @@ async def vault_secret_sauce(
         a = agents.get(aid)
         if not a or a.get("archived") is True:
             continue
+        # Rookie as of the week being reported, from the code date when there
+        # is one (12-month rolling rule, code_dates.rookie_on); the stored flag
+        # only covers people whose code date hasn't been imported yet.
+        derived = code_dates.rookie_on(a.get("code_date"), ws)
         rows.append({
             "name": a.get("name", aid),
             "mga": _mga_of(aid),
-            "is_rookie": a.get("is_rookie"),
+            "is_rookie": a.get("is_rookie") if derived is None else derived,
             "gross_alp": float(t.get("gross_alp") or 0),
             "ref_sales": int(t.get("ref_sales") or 0),
             "refs_obtained": int(t.get("refs_obtained") or 0),
@@ -5408,6 +5413,104 @@ def _foreign_offices(roster_offices: Dict[str, int]) -> List[Dict[str, Any]]:
         for off, n in sorted(roster_offices.items(), key=lambda kv: -kv[1])
         if off != dominant
     ]
+
+
+@api_router.post("/admin/import-code-dates")
+async def admin_import_code_dates(
+    file: UploadFile = File(...),
+    dry_run: bool = Form(False),
+    user: Dict[str, Any] = Depends(require_admin_or_finance_admin),
+):
+    """Load code dates from the RGA's roster workbook and set rookie/veteran.
+
+    Per owner (2026-09-17): rookie = coded within the last 12 months, rolling.
+    Stores `code_date` on each matched agent_profiles doc and refreshes
+    `is_rookie` from it as of today. Names match the same way every roster
+    tool does (_person_name_key: order/case/punctuation-insensitive); rows
+    that match nobody are reported, never created. Re-running is safe — it
+    overwrites the code date with the sheet's value and re-derives the flag,
+    which is also how a rookie becomes a veteran on their anniversary.
+    """
+    filename = file.filename or ""
+    if not filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Upload a .xlsx roster")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    try:
+        rows = await asyncio.to_thread(code_dates.parse_workbook, io.BytesIO(raw))
+    except Exception as e:
+        logger.exception("code-date import failed to parse %s", filename)
+        raise HTTPException(status_code=400, detail=f"Could not read the spreadsheet: {e}")
+    if not rows:
+        raise HTTPException(
+            status_code=400,
+            detail="No 'Code Date' column found — expected a sheet with an Agent (or MGA) column and a Code Date column.")
+
+    by_key: Dict[frozenset, List[Dict[str, Any]]] = {}
+    async for a in db.agent_profiles.find(ACTIVE_AGENT, {"_id": 0, "agent_id": 1, "name": 1, "is_rookie": 1, "code_date": 1}):
+        by_key.setdefault(_person_name_key(a.get("name", "")), []).append(a)
+
+    today = now_detroit().date()
+    matched: List[Dict[str, Any]] = []
+    unmatched: List[str] = []
+    ambiguous: List[str] = []
+    no_date: List[str] = []
+    seen_ids: set = set()
+    for r in rows:
+        if not r["code_date"]:
+            no_date.append(r["name"])
+            continue
+        hits = by_key.get(_person_name_key(r["name"]), [])
+        if not hits:
+            unmatched.append(r["name"])
+            continue
+        if len(hits) > 1:
+            ambiguous.append(r["name"])
+            continue
+        a = hits[0]
+        if a["agent_id"] in seen_ids:
+            continue  # same person on two tabs: first row wins
+        seen_ids.add(a["agent_id"])
+        matched.append({
+            "agent_id": a["agent_id"], "name": a.get("name"),
+            "code_date": r["code_date"],
+            "is_rookie": bool(code_dates.rookie_on(r["code_date"], today)),
+            "was_rookie": a.get("is_rookie"),
+        })
+
+    if not dry_run:
+        now = now_utc()
+        for m in matched:
+            await db.agent_profiles.update_one(
+                {"agent_id": m["agent_id"]},
+                {"$set": {"code_date": m["code_date"], "is_rookie": m["is_rookie"], "updated_at": now}})
+        await db.audit_log.insert_one({
+            "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+            "ts": now,
+            "action": "import_code_dates",
+            "changed_by": user["user_id"],
+            "changed_by_name": user.get("name"),
+            "file": filename,
+            "matched": len(matched),
+            "unmatched": len(unmatched),
+        })
+
+    rookies = sum(1 for m in matched if m["is_rookie"])
+    return {
+        "ok": True,
+        "dry_run": dry_run,
+        "file": filename,
+        "as_of": today.isoformat(),
+        "rows": len(rows),
+        "matched": len(matched),
+        "rookies": rookies,
+        "veterans": len(matched) - rookies,
+        "changed": sum(1 for m in matched if m["was_rookie"] is not m["is_rookie"]),
+        "unmatched": sorted(set(unmatched)),
+        "ambiguous": sorted(set(ambiguous)),
+        "no_date": sorted(set(no_date)),
+    }
 
 
 @api_router.post("/admin/import-war-report")
