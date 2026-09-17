@@ -44,6 +44,11 @@ export default function MoreScreen() {
     { id: 'audit', icon: 'list', label: 'Audit Log', onPress: () => router.push('/audit'), show: lvl >= 4 || !!user?.is_admin },
     { id: 'vault', icon: 'stats-chart', label: 'Company Health', onPress: () => router.push('/vault'), show: lvl >= 4 || !!user?.is_admin },
     { id: 'push-log', icon: 'notifications-off', label: 'Push Delivery Log', onPress: () => router.push('/push-log'), show: lvl >= 4 || !!user?.is_admin },
+    // The Easter egg (per owner, 2026-09-17): a straight shot to the weekly
+    // top-producer sheet for the accounts on SECRET_SAUCE_EMAILS. The server
+    // decides who sees it (`secret_sauce` on the session) and still gates
+    // the download itself.
+    { id: 'secret-sauce', icon: 'flame', label: 'Morgans Secret Sauce', onPress: () => router.push('/secret-sauce'), show: user?.secret_sauce === true },
   ];
 
   const onSwitch = async (role: Role) => {

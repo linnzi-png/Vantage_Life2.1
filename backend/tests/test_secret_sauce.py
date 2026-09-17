@@ -147,6 +147,19 @@ async def test_archived_producers_stay_in_past_weeks(client, seeded_db):
     assert [v[1] for v in _block(ws, VETS)[:2]] == ["Agent One", "Agent Two"]
 
 
+# ---------------- the More-tab Easter egg ----------------
+
+async def test_secret_sauce_emails_get_the_menu_flag(client, seeded_db):
+    """Per owner (2026-09-17): MJ and Joe get a "Morgans Secret Sauce" entry
+    on More. It is menu visibility only — the route keeps its own gate."""
+    import server
+    assert {"mj@aopremier.com", "joseph@aopremier.com"} <= server.SECRET_SAUCE_EMAILS
+    mj = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="mj@aopremier.com")
+    assert (await client.get("/api/auth/me", headers=auth(mj))).json()["user"]["secret_sauce"] is True
+    other = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
+    assert (await client.get("/api/auth/me", headers=auth(other))).json()["user"]["secret_sauce"] is False
+
+
 # ---------------- access ----------------
 
 async def test_finance_admin_and_admin_can_pull_it(client, seeded_db):
