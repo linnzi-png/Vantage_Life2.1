@@ -79,6 +79,16 @@ EXPORT_EMAILS = {
     for e in os.environ.get("EXPORT_EMAILS", "linnzi@aoluxor.com").split(",")
     if e.strip()
 }
+# The Easter egg (per owner, 2026-09-17): these accounts get a "Morgans Secret
+# Sauce" entry on their More tab, straight to the weekly top-producer sheet.
+# It is a shortcut, not a grant — the sheet's own route keeps its normal gate
+# (RGA / admin / finance_admin), so the list only decides who sees the menu
+# item. Comma-separated emails.
+SECRET_SAUCE_EMAILS = {
+    e.strip().lower()
+    for e in os.environ.get("SECRET_SAUCE_EMAILS", "mj@aopremier.com,joseph@aopremier.com").split(",")
+    if e.strip()
+}
 # Bootstrap admins: always admins even without an is_admin flag on their users doc.
 # Additional admins are granted the is_admin flag from the in-app Admin screen.
 ADMIN_EMAILS = {
@@ -356,6 +366,11 @@ def user_may_export(user: Dict[str, Any]) -> bool:
         str(user.get("email", "")).lower() in EXPORT_EMAILS
         or user.get("role") == FINANCE_ADMIN_ROLE
     )
+
+
+def user_has_secret_sauce(user: Dict[str, Any]) -> bool:
+    """Shows the More-tab Easter egg. Menu visibility only — see SECRET_SAUCE_EMAILS."""
+    return str(user.get("email", "")).lower() in SECRET_SAUCE_EMAILS
 
 
 def user_may_export_workbook(user: Dict[str, Any]) -> bool:
@@ -757,6 +772,7 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
     # narrower grant than the admin panel, so the UI must not infer one from
     # the other and offer a button the server will refuse.
     user["can_export"] = user_may_export(user)
+    user["secret_sauce"] = user_has_secret_sauce(user)
     user["can_switch_role"] = bool(user.get("can_switch_role"))
     # A non-producing team member (app developer, office support) keeps their
     # real RBAC tier for access, but must not be LABELLED as a producer tier

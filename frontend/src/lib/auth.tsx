@@ -53,6 +53,9 @@ export interface AppUser {
   is_admin?: boolean;
   /** May pull the reconciliation exports. Narrower than is_admin. */
   can_export?: boolean;
+  /** Shows the "Morgans Secret Sauce" Easter egg on the More tab. Menu
+   *  visibility only — the sheet's route keeps its own gate. */
+  secret_sauce?: boolean;
   can_switch_role?: boolean;
 }
 
