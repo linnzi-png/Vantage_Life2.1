@@ -347,8 +347,19 @@ def user_is_admin(user: Dict[str, Any]) -> bool:
 
 def user_may_export(user: Dict[str, Any]) -> bool:
     """Reconciliation exports are restricted to EXPORT_EMAILS, not to admins
-    generally — see the constant for why."""
-    return str(user.get("email", "")).lower() in EXPORT_EMAILS
+    generally — see the constant for why. finance_admin is the one role that
+    holds this by definition (per owner, 2026-09-17): printing/exporting WAR
+    copies is in its permission matrix, so it gets the per-agent CSV too."""
+    return (
+        str(user.get("email", "")).lower() in EXPORT_EMAILS
+        or user.get("role") == FINANCE_ADMIN_ROLE
+    )
+
+
+def user_may_export_workbook(user: Dict[str, Any]) -> bool:
+    """The rebuilt WAR workbooks (format=xlsx): any admin, or finance_admin —
+    the back-office role whose job is the WAR report itself."""
+    return user_is_admin(user) or user.get("role") == FINANCE_ADMIN_ROLE
 
 
 async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -2809,7 +2820,7 @@ async def vault_export(
     `format=xlsx` rebuilds the WAR workbook itself — same tabs, same columns,
     same header — from the app's own data, so it can be read beside an old
     report or re-imported unchanged. This is the report the office has always
-    worked from, so any admin may pull it.
+    worked from, so any admin — and finance_admin — may pull it.
 
     A WAR workbook covers one office. `office=NAME` returns that office's
     workbook; leaving it off returns a zip holding one workbook per office on
@@ -2817,12 +2828,12 @@ async def vault_export(
     one download. The response shape follows the parameter, not the data.
 
     `format=csv` is a flat per-agent-per-day dump, a different thing from the
-    report, and is restricted to EXPORT_EMAILS."""
+    report, and is restricted to EXPORT_EMAILS plus finance_admin."""
     if format not in ("json", "csv", "xlsx"):
         raise HTTPException(status_code=400, detail="format must be json, csv or xlsx")
-    if format == "xlsx" and not user_is_admin(user):
+    if format == "xlsx" and not user_may_export_workbook(user):
         raise HTTPException(status_code=403,
-                            detail="The WAR workbook export is admin-only")
+                            detail="The WAR workbook export is limited to admin and finance accounts")
     if format == "csv" and not user_may_export(user):
         raise HTTPException(status_code=403,
                             detail="The per-agent CSV export is restricted")
