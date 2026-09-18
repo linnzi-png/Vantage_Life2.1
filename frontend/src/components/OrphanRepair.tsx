@@ -95,8 +95,19 @@ export function OrphanRepair({ candidates, onRepaired }: {
     setConfirming(false);
     setBusy(true);
     try {
+      // Send back the exact plan this list was drawn from. The server
+      // recomputes at apply time — it has to, since each merge changes the
+      // tree — so without this, an import or another admin's repair between
+      // the review and the tap could delete a profile that was never on the
+      // list. A mismatch comes back 409 with nothing written.
       const r = await api<{ applied: HierarchyProposal[]; merged: HierarchyMerge[] }>(
-        '/api/admin/hierarchy-audit/fix', { method: 'POST' });
+        '/api/admin/hierarchy-audit/fix', {
+          method: 'POST',
+          body: JSON.stringify({
+            expected_merges: (plan?.merges ?? []).map((m) => `${m.remove_agent_id}>${m.keep_agent_id}`),
+            expected_links: (plan?.proposals ?? []).map((pr) => `${pr.agent_id}>${pr.upline_agent_id ?? ''}`),
+          }),
+        });
       setReviewing(false);
       notify(
         'Agents repaired',
@@ -106,7 +117,16 @@ export function OrphanRepair({ candidates, onRepaired }: {
       await load();
       onRepaired();
     } catch (e: unknown) {
-      notify('Auto-fix failed', e instanceof Error ? e.message : 'Please try again.');
+      const msg = e instanceof Error ? e.message : 'Please try again.';
+      // A stale plan is not a failure to retry blindly — reload it so the
+      // list on screen is the one that would run next, and leave it open.
+      if (/changed since you reviewed/i.test(msg)) {
+        await load();
+        setReviewing(true);
+        notify('Plan out of date', msg);
+      } else {
+        notify('Auto-fix failed', msg);
+      }
     } finally {
       setBusy(false);
     }

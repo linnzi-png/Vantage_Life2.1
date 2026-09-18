@@ -427,18 +427,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // state alone would miss the double-tap this exists for. Without it, two
   // taps on Sign Out fire two logouts, and two on the tier switcher race —
   // last response wins and the app can settle on a tier nobody chose.
-  const accountOpRef = useRef(false);
+  //
+  // The ref holds the running promise and the second caller gets that same
+  // promise back, rather than one that resolves immediately. Resolving early
+  // would be a lie with teeth: `await signOut(); router.replace('/login')`
+  // would navigate while the first logout was still unregistering push and
+  // clearing storage, and if the person signed straight back in, the original
+  // operation's setToken(null) would land on their new session and wipe it.
+  const accountOpRef = useRef<Promise<void> | null>(null);
   const [accountBusy, setAccountBusy] = useState(false);
-  const runAccountOp = async (fn: () => Promise<void>) => {
-    if (accountOpRef.current) return;
-    accountOpRef.current = true;
+  const runAccountOp = (fn: () => Promise<void>): Promise<void> => {
+    if (accountOpRef.current) return accountOpRef.current;
+    const running = (async () => {
+      try {
+        await fn();
+      } finally {
+        accountOpRef.current = null;
+        setAccountBusy(false);
+      }
+    })();
+    accountOpRef.current = running;
     setAccountBusy(true);
-    try {
-      await fn();
-    } finally {
-      accountOpRef.current = false;
-      setAccountBusy(false);
-    }
+    return running;
   };
 
   const signOut = () => runAccountOp(async () => {
