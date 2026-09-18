@@ -1,5 +1,5 @@
 // Shared API helper + auth context for VantageLife 2.0
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { registerForPulseNotifications } from './push';
@@ -302,6 +302,9 @@ interface AuthCtx {
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   switchRole: (role: Role) => Promise<void>;
+  /** True while a sign-out, account deletion or tier switch is in flight, so
+   *  the screens offering them can disable the row instead of firing twice. */
+  accountBusy: boolean;
 }
 
 const AuthContext = createContext<AuthCtx | undefined>(undefined);
@@ -419,28 +422,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await reload();
   };
 
-  const signOut = async () => {
+  // Account-level writes run one at a time. The ref is the guard, not the
+  // state: two taps in the same tick both read the same stale state value, so
+  // state alone would miss the double-tap this exists for. Without it, two
+  // taps on Sign Out fire two logouts, and two on the tier switcher race —
+  // last response wins and the app can settle on a tier nobody chose.
+  const accountOpRef = useRef(false);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const runAccountOp = async (fn: () => Promise<void>) => {
+    if (accountOpRef.current) return;
+    accountOpRef.current = true;
+    setAccountBusy(true);
+    try {
+      await fn();
+    } finally {
+      accountOpRef.current = false;
+      setAccountBusy(false);
+    }
+  };
+
+  const signOut = () => runAccountOp(async () => {
     try { await api('/api/push/unregister', { method: 'POST' }); } catch {}
     try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
     await setToken(null);
     setUser(null); setAgent(null);
-  };
+  });
 
-  const deleteAccount = async () => {
+  const deleteAccount = () => runAccountOp(async () => {
     await api('/api/auth/account', { method: 'DELETE' });
     await setToken(null);
     setUser(null); setAgent(null);
-  };
+  });
 
-  const switchRole = async (role: Role) => {
+  const switchRole = (role: Role) => runAccountOp(async () => {
     // Self-service tier switcher (break-testers with the can_switch_role flag).
     // Reload after: /api/auth/me carries the admin-flag overlay and fresh agent.
     await api('/api/me/role', { method: 'POST', body: JSON.stringify({ role }) });
     await reload();
-  };
+  });
 
   return (
-    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInAuth0, signOut, deleteAccount, switchRole }}>
+    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInAuth0, signOut, deleteAccount, switchRole, accountBusy }}>
       {children}
     </AuthContext.Provider>
   );

@@ -18,7 +18,7 @@ const SWITCH_TIERS: { role: Role; label: string }[] = [
 
 export default function MoreScreen() {
   const router = useRouter();
-  const { user, agent, roleLabel, signOut, deleteAccount, switchRole } = useAuth();
+  const { user, agent, roleLabel, signOut, deleteAccount, switchRole, accountBusy } = useAuth();
   const { start: startTour } = useTour();
   const lvl = levelNum(user?.role);
   const [switching, setSwitching] = React.useState(false);
@@ -150,12 +150,18 @@ export default function MoreScreen() {
 
         <Text style={[styles.kicker, { marginTop: 16 }]}>ACCOUNT</Text>
         <View style={styles.list}>
-          <TouchableOpacity style={styles.item} onPress={async () => { await signOut(); router.replace('/login'); }} testID="logout-btn">
+          <TouchableOpacity
+            style={[styles.item, accountBusy && styles.itemBusy]}
+            disabled={accountBusy}
+            onPress={async () => { await signOut(); router.replace('/login'); }}
+            testID="logout-btn"
+          >
             <Ionicons name="log-out" size={18} color={COLORS.red} />
             <Text style={[styles.itemTxt, { color: COLORS.red }]}>Sign Out</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.item}
+            style={[styles.item, accountBusy && styles.itemBusy]}
+            disabled={accountBusy}
             testID="delete-account-btn"
             onPress={async () => {
               // Two-step on purpose — account deletion is irreversible.
@@ -194,6 +200,7 @@ export default function MoreScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
+  itemBusy: { opacity: 0.45 },
   profile: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderTopColor: COLORS.primary, borderTopWidth: 2, padding: 14, borderRadius: 6 },
   avatar: { width: 48, height: 48, borderRadius: 4, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   avatarTxt: { color: '#000', fontWeight: '900', fontSize: 22 },
