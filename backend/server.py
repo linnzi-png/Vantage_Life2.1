@@ -4743,13 +4743,48 @@ async def admin_hierarchy_audit(user: Dict[str, Any] = Depends(require_admin)):
     return await _hierarchy_repair_plan()
 
 
+def _hierarchy_plan_keys(plan: Dict[str, Any]) -> Dict[str, List[str]]:
+    """A stable identity for a plan: who merges into whom, and who gets which
+    upline. Sorted so two equal plans compare equal regardless of order."""
+    return {
+        "merges": sorted(f"{m['remove_agent_id']}>{m['keep_agent_id']}" for m in plan["merges"]),
+        "links": sorted(f"{p['agent_id']}>{p['upline_agent_id']}" for p in plan["proposals"]),
+    }
+
+
+class HierarchyFixIn(BaseModel):
+    """The plan the admin actually reviewed, echoed back so the apply can
+    refuse to run a different one. Optional for older clients."""
+    expected_merges: Optional[List[str]] = None
+    expected_links: Optional[List[str]] = None
+
+
 @api_router.post("/admin/hierarchy-audit/fix")
-async def admin_hierarchy_audit_fix(user: Dict[str, Any] = Depends(require_admin)):
+async def admin_hierarchy_audit_fix(
+    body: Optional[HierarchyFixIn] = None,
+    user: Dict[str, Any] = Depends(require_admin),
+):
     """Apply the plan above: merge each orphan that duplicates a linked
     profile, then set each remaining resolvable orphan's upline to the one the
     roster sheets record. Same cycle guard as /admin/set-upline, re-checked at
-    apply time since each link changes the tree."""
+    apply time since each link changes the tree.
+
+    The plan is recomputed here rather than trusted from the client, so a
+    concurrent import, repair or roster sync between the admin's review and
+    their tap could otherwise merge a profile that was never on the list they
+    approved — and a merge deletes a record. When the client echoes back the
+    plan it showed, any drift is a 409 and nothing is written; the admin
+    re-reads the new list and decides again."""
     plan = await _hierarchy_repair_plan()
+
+    if body is not None and body.expected_merges is not None and body.expected_links is not None:
+        now_keys = _hierarchy_plan_keys(plan)
+        if (now_keys["merges"] != sorted(body.expected_merges)
+                or now_keys["links"] != sorted(body.expected_links)):
+            raise HTTPException(
+                status_code=409,
+                detail="The repair plan changed since you reviewed it — nothing was "
+                       "applied. Review the new list and apply again.")
 
     merged = []
     for m in plan["merges"]:

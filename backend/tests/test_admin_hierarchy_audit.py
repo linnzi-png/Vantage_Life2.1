@@ -244,3 +244,73 @@ async def test_alias_resolves_eddie_leon_and_his_downline(client, seeded_db):
     julian = await seeded_db.agent_profiles.find_one({"agent_id": "JULIAN"})
     assert eddie["upline_id"] == "GOJCAJ"
     assert julian["upline_id"] == "EDDIE"
+
+
+# ---- The reviewed plan binds the apply (Codex review on PR #145) ----
+# The admin now reviews the plan as a list of names before applying it, and
+# the server recomputes at apply time. Between those two moments an import,
+# a roster sync or another admin can change the orphan set — and a merge
+# DELETES a profile. So the client echoes back the plan it displayed and a
+# drifted plan is refused outright rather than silently applying a different
+# one.
+
+
+async def test_fix_applies_when_echoed_plan_matches(client, seeded_db):
+    await seed_orphaned_snoor_team(seeded_db)
+    token = await admin_token(seeded_db)
+
+    plan = (await client.get("/api/admin/hierarchy-audit", headers=auth(token))).json()
+    body = {
+        "expected_merges": [f"{m['remove_agent_id']}>{m['keep_agent_id']}" for m in plan["merges"]],
+        "expected_links": [f"{p['agent_id']}>{p['upline_agent_id']}" for p in plan["proposals"]],
+    }
+    r = await client.post("/api/admin/hierarchy-audit/fix", headers=auth(token), json=body)
+    assert r.status_code == 200
+    assert {a["agent_id"] for a in r.json()["applied"]} == {"SHIKO", "BASEL", "MAHER"}
+
+
+async def test_fix_refuses_a_plan_that_changed_since_review(client, seeded_db):
+    """A new orphan appears after the review. The apply must write nothing."""
+    await seed_orphaned_snoor_team(seeded_db)
+    token = await admin_token(seeded_db)
+
+    plan = (await client.get("/api/admin/hierarchy-audit", headers=auth(token))).json()
+    reviewed = {
+        "expected_merges": [f"{m['remove_agent_id']}>{m['keep_agent_id']}" for m in plan["merges"]],
+        "expected_links": [f"{p['agent_id']}>{p['upline_agent_id']}" for p in plan["proposals"]],
+    }
+    # Someone imports another of Snoor's agents between review and apply.
+    await seeded_db.agent_profiles.insert_one(
+        {"agent_id": "LATE", "name": "Shiko Qaradaghi", "email": "",
+         "role": "level_1", "upline_id": None, "office": "MJ RGA",
+         "created_by_import": True})
+
+    r = await client.post("/api/admin/hierarchy-audit/fix", headers=auth(token), json=reviewed)
+    assert r.status_code == 409
+    assert "changed since you reviewed" in r.json()["detail"]
+    # Nothing was written — not the links, and above all not a merge.
+    for agent_id in ("SHIKO", "BASEL", "LATE"):
+        row = await seeded_db.agent_profiles.find_one({"agent_id": agent_id})
+        assert row is not None
+        assert row["upline_id"] is None
+
+
+async def test_fix_order_of_echoed_keys_does_not_matter(client, seeded_db):
+    await seed_orphaned_snoor_team(seeded_db)
+    token = await admin_token(seeded_db)
+
+    plan = (await client.get("/api/admin/hierarchy-audit", headers=auth(token))).json()
+    links = [f"{p['agent_id']}>{p['upline_agent_id']}" for p in plan["proposals"]]
+    r = await client.post(
+        "/api/admin/hierarchy-audit/fix", headers=auth(token),
+        json={"expected_merges": [], "expected_links": list(reversed(links))})
+    assert r.status_code == 200
+
+
+async def test_fix_without_an_echoed_plan_still_applies(client, seeded_db):
+    """Older clients send no body; the guard is opt-in, not a hard break."""
+    await seed_orphaned_snoor_team(seeded_db)
+    token = await admin_token(seeded_db)
+    r = await client.post("/api/admin/hierarchy-audit/fix", headers=auth(token))
+    assert r.status_code == 200
+    assert len(r.json()["applied"]) == 3

@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
 import { confirmAsync, notify } from '../lib/dialog';
+import { TypedConfirm } from './TypedConfirm';
 
 interface Orphan {
   agent_id: string;
@@ -25,8 +26,14 @@ interface Orphan {
 
 export interface UplineChoice { agent_id: string; name: string; office?: string; role: string; }
 
-interface HierarchyProposal { agent_id: string; name: string; upline_name: string; }
-interface HierarchyMerge { keep_agent_id: string; keep_name: string; remove_agent_id: string; }
+interface HierarchyProposal {
+  agent_id: string; name: string; office?: string;
+  upline_agent_id?: string; upline_name: string;
+}
+interface HierarchyMerge {
+  keep_agent_id: string; keep_name: string;
+  remove_agent_id: string; remove_name?: string; office?: string;
+}
 interface HierarchyPlan {
   proposals: HierarchyProposal[];
   merges: HierarchyMerge[];
@@ -46,6 +53,12 @@ export function OrphanRepair({ candidates, onRepaired }: {
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<HierarchyPlan | null>(null);
+  // The bulk fix is reviewed before it runs, never described in a dialog.
+  // It re-points N people's uplines and permanently deletes N duplicate
+  // profiles, and the names are already on the wire — approving a count
+  // means approving a list you were never shown.
+  const [reviewing, setReviewing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -75,26 +88,27 @@ export function OrphanRepair({ candidates, onRepaired }: {
     return candidates.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 5);
   }, [candidates, query]);
 
-  const autoLink = async () => {
-    if (!plan) return;
-    const nLink = plan.proposals.length;
-    const nMerge = plan.merges.length;
-    if (nLink + nMerge === 0) return;
-    const parts = [];
-    if (nMerge > 0) parts.push(`${nMerge} are duplicate profiles of someone already in the hierarchy and will be merged into them`);
-    if (nLink > 0) parts.push(`${nLink} have an upline recorded on the roster sheets and will be linked to it`);
-    const ok = await confirmAsync({
-      title: 'Auto-Fix Unlinked Agents',
-      message:
-        `${parts.join('; ')}. Anyone the sheets don’t cover stays listed for ` +
-        'manual assignment. Merges cannot be undone.',
-      confirmText: `Fix ${nLink + nMerge}`,
-    });
-    if (!ok) return;
+  const nLink = plan?.proposals.length ?? 0;
+  const nMerge = plan?.merges.length ?? 0;
+
+  const runAutoLink = async () => {
+    setConfirming(false);
     setBusy(true);
     try {
+      // Send back the exact plan this list was drawn from. The server
+      // recomputes at apply time — it has to, since each merge changes the
+      // tree — so without this, an import or another admin's repair between
+      // the review and the tap could delete a profile that was never on the
+      // list. A mismatch comes back 409 with nothing written.
       const r = await api<{ applied: HierarchyProposal[]; merged: HierarchyMerge[] }>(
-        '/api/admin/hierarchy-audit/fix', { method: 'POST' });
+        '/api/admin/hierarchy-audit/fix', {
+          method: 'POST',
+          body: JSON.stringify({
+            expected_merges: (plan?.merges ?? []).map((m) => `${m.remove_agent_id}>${m.keep_agent_id}`),
+            expected_links: (plan?.proposals ?? []).map((pr) => `${pr.agent_id}>${pr.upline_agent_id ?? ''}`),
+          }),
+        });
+      setReviewing(false);
       notify(
         'Agents repaired',
         `${r.applied.length} linked to their sheet upline, ${r.merged.length} duplicate ` +
@@ -103,10 +117,36 @@ export function OrphanRepair({ candidates, onRepaired }: {
       await load();
       onRepaired();
     } catch (e: unknown) {
-      notify('Auto-fix failed', e instanceof Error ? e.message : 'Please try again.');
+      const msg = e instanceof Error ? e.message : 'Please try again.';
+      // A stale plan is not a failure to retry blindly — reload it so the
+      // list on screen is the one that would run next, and leave it open.
+      if (/changed since you reviewed/i.test(msg)) {
+        await load();
+        setReviewing(true);
+        notify('Plan out of date', msg);
+      } else {
+        notify('Auto-fix failed', msg);
+      }
     } finally {
       setBusy(false);
     }
+  };
+
+  // Merges delete a profile outright, so they get the typed confirm the
+  // duplicate-merge tool uses. A re-link only moves an upline_id and an admin
+  // can reassign it by hand, so that alone stays an ordinary confirm.
+  const applyPlan = async () => {
+    if (nLink + nMerge === 0) return;
+    if (nMerge > 0) { setConfirming(true); return; }
+    const ok = await confirmAsync({
+      title: 'Link these agents?',
+      message:
+        `${nLink} agent${nLink === 1 ? '' : 's'} will be linked to the upline the ` +
+        'roster sheets record, exactly as listed. Anyone the sheets don’t cover ' +
+        'stays listed for manual assignment.',
+      confirmText: `Link ${nLink}`,
+    });
+    if (ok) await runAutoLink();
   };
 
   const assign = async (upline: UplineChoice) => {
@@ -158,22 +198,67 @@ export function OrphanRepair({ candidates, onRepaired }: {
       ) : (
         <>
           <Text style={styles.count}>{orphans.length} unlinked</Text>
-          {plan && plan.proposals.length + plan.merges.length > 0 ? (
-            <TouchableOpacity
-              style={[styles.autoBtn, busy && { opacity: 0.5 }]}
-              onPress={autoLink}
-              disabled={busy}
-              testID="orphans-autolink"
-            >
-              {busy
-                ? <ActivityIndicator color="#000" />
-                : (
-                  <Text style={styles.autoTxt}>
-                    AUTO-FIX {plan.proposals.length + plan.merges.length}
-                    {plan.merges.length > 0 ? ` (LINK ${plan.proposals.length} · MERGE ${plan.merges.length})` : ' FROM ROSTER SHEET'}
-                  </Text>
-                )}
-            </TouchableOpacity>
+          {plan && nLink + nMerge > 0 ? (
+            <>
+              <TouchableOpacity
+                style={[styles.autoBtn, busy && { opacity: 0.5 }]}
+                onPress={() => setReviewing((v) => !v)}
+                disabled={busy}
+                testID="orphans-autolink"
+              >
+                <Text style={styles.autoTxt}>
+                  {reviewing ? 'HIDE' : 'REVIEW'} {nLink + nMerge} FIX{nLink + nMerge === 1 ? '' : 'ES'}
+                  {nMerge > 0 ? ` (LINK ${nLink} · MERGE ${nMerge})` : ' FROM ROSTER SHEET'}
+                </Text>
+              </TouchableOpacity>
+
+              {reviewing ? (
+                <View style={styles.review} testID="orphans-review">
+                  {nMerge > 0 ? (
+                    <>
+                      <Text style={styles.reviewLab}>
+                        MERGE · {nMerge} DUPLICATE PROFILE{nMerge === 1 ? '' : 'S'} DELETED
+                      </Text>
+                      {plan.merges.map((m) => (
+                        <Text key={m.remove_agent_id} style={styles.reviewRow} testID={`orphan-plan-merge-${m.remove_agent_id}`}>
+                          <Text style={styles.reviewGone}>{m.remove_name || m.remove_agent_id}</Text>
+                          <Text style={styles.reviewDim}> folds into </Text>
+                          <Text style={styles.reviewKeep}>{m.keep_name}</Text>
+                          {m.office ? <Text style={styles.reviewDim}> · {m.office}</Text> : null}
+                        </Text>
+                      ))}
+                    </>
+                  ) : null}
+
+                  {nLink > 0 ? (
+                    <>
+                      <Text style={[styles.reviewLab, nMerge > 0 && { marginTop: 10 }]}>
+                        LINK · {nLink} UPLINE{nLink === 1 ? '' : 'S'} SET FROM THE SHEET
+                      </Text>
+                      {plan.proposals.map((pr) => (
+                        <Text key={pr.agent_id} style={styles.reviewRow} testID={`orphan-plan-link-${pr.agent_id}`}>
+                          <Text style={styles.reviewKeep}>{pr.name}</Text>
+                          <Text style={styles.reviewDim}> reports to </Text>
+                          <Text style={styles.reviewKeep}>{pr.upline_name}</Text>
+                          {pr.office ? <Text style={styles.reviewDim}> · {pr.office}</Text> : null}
+                        </Text>
+                      ))}
+                    </>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={[styles.applyBtn, busy && { opacity: 0.5 }]}
+                    onPress={applyPlan}
+                    disabled={busy}
+                    testID="orphans-apply"
+                  >
+                    {busy
+                      ? <ActivityIndicator color="#000" />
+                      : <Text style={styles.applyTxt}>APPLY ALL {nLink + nMerge}</Text>}
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </>
           ) : null}
           {plan && plan.unresolved.length > 0 ? (
             <Text style={styles.unresolvedNote}>
@@ -236,6 +321,22 @@ export function OrphanRepair({ candidates, onRepaired }: {
           })}
         </>
       )}
+
+      <TypedConfirm
+        visible={confirming}
+        title="MERGE AND LINK"
+        message={
+          `${nMerge} duplicate profile${nMerge === 1 ? ' is' : 's are'} deleted and folded ` +
+          `into the profile named beside ${nMerge === 1 ? 'it' : 'each'}` +
+          (nLink > 0 ? `, and ${nLink} agent${nLink === 1 ? '' : 's'} are linked to their sheet upline` : '') +
+          '.\n\nThe merges cannot be undone. The list above is exactly what runs.'
+        }
+        word="MERGE"
+        confirmText={`APPLY ${nLink + nMerge}`}
+        busy={busy}
+        onCancel={() => setConfirming(false)}
+        onConfirm={runAutoLink}
+      />
     </View>
   );
 }
@@ -252,6 +353,14 @@ const styles = StyleSheet.create({
   count: { color: COLORS.orange, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginTop: 12 },
   autoBtn: { backgroundColor: COLORS.primary, alignItems: 'center', padding: 12, borderRadius: 6, marginTop: 8 },
   autoTxt: { color: '#000', fontWeight: '900', fontSize: 12, letterSpacing: 0.5 },
+  review: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, padding: 10, marginTop: 8 },
+  reviewLab: { color: COLORS.orange, fontSize: 9, fontWeight: '900', letterSpacing: 1.2, marginBottom: 4 },
+  reviewRow: { fontSize: 12, lineHeight: 18, marginTop: 2 },
+  reviewKeep: { color: '#fff', fontWeight: '800' },
+  reviewGone: { color: COLORS.orange, fontWeight: '800', textDecorationLine: 'line-through' },
+  reviewDim: { color: COLORS.textDim, fontWeight: '500' },
+  applyBtn: { backgroundColor: COLORS.primary, alignItems: 'center', padding: 12, borderRadius: 6, marginTop: 12 },
+  applyTxt: { color: '#000', fontWeight: '900', fontSize: 12, letterSpacing: 0.5 },
   unresolvedNote: { color: COLORS.textDim, fontSize: 11, marginTop: 8, lineHeight: 16, fontStyle: 'italic' },
   row: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, marginTop: 8, overflow: 'hidden' },
   rowOn: { borderColor: COLORS.orange },
