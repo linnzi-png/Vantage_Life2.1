@@ -289,22 +289,27 @@ async def test_nobody_sees_their_own_coaching_card(client, seeded_db):
         assert await coaching(client, token, agent_id) is False, agent_id
 
 
-async def test_downline_never_sees_an_uplines_coaching_card(client, seeded_db):
-    """SA_1 may read GA_1's numbers — they share an office, and since
-    2026-09-15 the office's production is open to everyone in it. What they
-    never get is their own upline's coaching card: that runs on is_upline_of,
-    not on read scope, which is the whole reason the two are separate."""
+async def test_downline_never_reads_an_upline(client, seeded_db):
+    """Since 2026-09-19 an upline is a contact, not a row: SA_1 cannot open
+    GA_1's history at all, so the coaching question never arises. The two
+    rules stay separate — read scope is team_scope_agent_ids, coaching is
+    is_upline_of — which is why the 403 comes first here."""
     token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
-    assert await coaching(client, token, "GA_1") is False
+    r = await client.get("/api/agents/GA_1/history", headers=auth(token))
+    assert r.status_code == 403
 
 
-async def test_rga_does_not_see_another_rgas_coaching_card(client, seeded_db):
-    """level_4 reads the whole agency, but a peer RGA is not below them."""
+async def test_rga_does_not_read_another_rga(client, seeded_db):
+    """Since 2026-09-19 a plain RGA reads their own office; a peer RGA in
+    another office is out of scope entirely. MJ (the admin grant) reads the
+    company and still gets no coaching card on a peer — is_upline_of decides."""
     await seeded_db.agent_profiles.insert_one({
         "agent_id": "RGA_2", "name": "Rga Two", "email": "rga2@test.dev",
         "role": "level_4", "upline_id": None, "office": "AMP",
     })
     token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    assert (await client.get("/api/agents/RGA_2/history", headers=auth(token))).status_code == 403
+    await seeded_db.users.update_one({"email": "rga1@test.dev"}, {"$set": {"is_admin": True}})
     assert await coaching(client, token, "RGA_2") is False
 
 
@@ -334,8 +339,8 @@ async def test_weekly_show_rate_adds_n1_back_into_the_numerator(client, seeded_d
 # ---------------- an Agent reading an office teammate's card ----------------
 
 async def test_level_1_can_read_an_office_teammates_history(client, seeded_db):
-    """Owner, 2026-09-14: an agent may see any teammate's production. SA_1 is
-    AG_1's upline and shares their office, so the card opens with numbers."""
+    """An agent may see their SA team's production (owner, 2026-09-19). SA_1
+    runs AG_1's team, so the card opens with numbers."""
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     await entry(seeded_db, day="2026-02-18", agent_id="SA_1", sales=4, sits=8, gross_alp=900.0)
     r = await client.get("/api/agents/SA_1/history", headers=auth(token))
@@ -343,12 +348,19 @@ async def test_level_1_can_read_an_office_teammates_history(client, seeded_db):
     assert r.json()["series"][0]["gross_alp"] == 900.0
 
 
-async def test_level_1_can_read_an_office_teammates_day(client, seeded_db):
+async def test_level_1_can_read_an_sa_teammates_day(client, seeded_db):
+    """Since 2026-09-19 the team is the SA team: AG_1 reads a teammate under
+    the same SA, and the SA who runs the team, but not the GA above them."""
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "AG_1B", "name": "Agent One B", "email": "ag1b@test.dev",
+        "role": "level_1", "upline_id": "SA_1", "office": "MCM",
+    })
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
-    await entry(seeded_db, day="2026-02-18", agent_id="GA_1", sales=2, sits=5, sets=6, gross_alp=400.0)
-    r = await client.get("/api/agents/GA_1/day?sales_day=2026-02-18", headers=auth(token))
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1B", sales=2, sits=5, sets=6, gross_alp=400.0)
+    r = await client.get("/api/agents/AG_1B/day?sales_day=2026-02-18", headers=auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["totals"]["sales"] == 2
+    assert (await client.get("/api/agents/GA_1/day?sales_day=2026-02-18", headers=auth(token))).status_code == 403
 
 
 async def test_level_1_still_cannot_read_another_office(client, seeded_db):
@@ -366,4 +378,3 @@ async def test_level_1_gets_the_numbers_but_never_the_coaching_card(client, seed
     now read in full."""
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     assert await coaching(client, token, "SA_1") is False
-    assert await coaching(client, token, "GA_1") is False

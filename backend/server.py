@@ -424,6 +424,23 @@ def user_admin_active(user: Dict[str, Any]) -> bool:
     return not user_reads_own_only(user)
 
 
+def dashboard_scope_label(user: Dict[str, Any], ids: Optional[List[str]]) -> str:
+    """One word for what the dashboard summary covers, so every section
+    title and stat label say the same thing (owner, 2026-09-19: the old
+    header mixed "global", "team" and "agency" for one scope). "agency" is
+    the whole company (MJ, finance, a plain RGA, whose summary is agency-wide
+    as before); "office" is MJ's own-RGA view; "team" is a leader's downline;
+    "you" is a level_1, whose summary is their own production."""
+    if ids is None:
+        return "agency"
+    role = user.get("role", "level_1")
+    if role == "level_4":
+        return "office"
+    if role == "level_1":
+        return "you"
+    return "team"
+
+
 def user_may_export(user: Dict[str, Any]) -> bool:
     """Reconciliation exports are restricted to EXPORT_EMAILS, not to admins
     generally — see the constant for why. finance_admin is the one role that
@@ -947,37 +964,84 @@ async def office_agent_ids(user: Dict[str, Any]) -> List[str]:
         {"office": office}, {"_id": 0, "agent_id": 1})]
 
 
+async def sa_team_agent_ids(agent_id: str) -> List[str]:
+    """The SA team an agent belongs to (owner, 2026-09-19, MJ's rule): the
+    subtree under the nearest level_2 in their upline chain — the SA or GA
+    who runs them — including that leader. Someone with no level_2 above them
+    (a producer straight under an MGA or RGA) gets that upline's subtree.
+    The same grouping /api/team/missing uses, so "my team" means one thing.
+    Includes the agent themselves."""
+    chain = await _ancestor_chain(agent_id)
+    if not chain:
+        return [agent_id]
+    roles = {
+        a["agent_id"]: a.get("role") async for a in db.agent_profiles.find(
+            {"agent_id": {"$in": chain}}, {"_id": 0, "agent_id": 1, "role": 1})
+    }
+    root = next((aid for aid in chain if roles.get(aid) == "level_2"), chain[0])
+    return await downline_agent_ids(root)
+
+
 async def team_scope_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
     """Read scope for the Team tab and the agent card opened from it.
 
-    Everyone in the caller's home office, plus their own downline wherever it
-    reaches. Per owner (2026-09-14, extended 2026-09-15) any agent at any tier
-    may see general team stats, their office's sales numbers, any teammate's
-    day/week/month production, and that teammate's basic ALP and close ratio on
-    the contact card. /api/team, /api/team/weeks, /api/agents/{id}/history and
-    /api/agents/{id}/day all share this one definition rather than each
-    re-deriving it.
+    Per owner (2026-09-19, from MJ: "no one should see more than their SA
+    team"), which replaces the 2026-09-16 office-wide read:
 
-    This is READ scope only. Every write path — can_enter_for, remove-person,
-    reassign, set-tier — stays on downline_agent_ids and is unchanged, which is
-    why team_view marks each row with in_my_downline: the office is visible,
-    but only your own downline is actionable.
+      * level_1 — their SA team (sa_team_agent_ids): the nearest SA/GA above
+        them and everyone under that leader.
+      * level_2 / level_3 — their own downline, and nothing sideways.
+      * level_4 — their own office (plus their downline, which is normally
+        the same people). MJ, who is level_4 with the admin grant,
+        reads the whole company by default and his own RGA team when the More
+        tab switch is on "own" (user_reads_own_only).
+      * An admin below level_4 (Afnan) reads the company in the admin view
+        and her own team in the agent view (user_admin_active).
+      * finance_admin — the whole company, read only, as before.
+
+    Uplines are not in this set: the Team tab shows the chain above the caller
+    as contact rows only (team_uplines), never their production.
+
+    /api/team, /api/team/weeks, /api/agents/{id}/history and
+    /api/agents/{id}/day all share this one definition rather than each
+    re-deriving it. This is READ scope only. Every write path — can_enter_for,
+    remove-person, reassign, set-tier — stays on downline_agent_ids, and
+    team_view marks each row with in_my_downline so the client only offers
+    those actions where they would succeed.
     """
     role = user.get("role", "level_1")
-    if role == "level_4" and user_reads_own_only(user):
-        return await downline_agent_ids(user["agent_id"])  # MJ's "my RGA team" view
-    if role == "level_4" or role == FINANCE_ADMIN_ROLE:
-        return None  # full agency, same as visible_agent_ids
+    if role == FINANCE_ADMIN_ROLE:
+        return None
+    if user_admin_active(user) and not user_reads_own_only(user):
+        return None  # the admin grant reads the company (MJ, Afnan in the admin view)
+    agent_id = user.get("agent_id")
+    if not agent_id:
+        return []
+    if role == "level_4":
+        if user_reads_own_only(user):
+            return await downline_agent_ids(agent_id)  # MJ's "my RGA team" view
+        # Their office, which is their RGA ship. Unioned with the downline so
+        # an RGA never sees less than the people under them if a branch has
+        # been filed under another office name.
+        return list({*(await office_agent_ids(user)), *(await downline_agent_ids(agent_id))})
     if role == "level_1":
-        return await office_agent_ids(user)
-    # level_2 / level_3: their own downline PLUS their home office. An upline
-    # must never see less of the board than the agents under them do (per
-    # owner, 2026-09-15) — before this, an agent read the whole office while
-    # their own SA read only their downline. The union matters because an MGA's
-    # downline can reach past their home office, and neither half may be lost.
-    own = await visible_agent_ids(user)
-    office = await office_agent_ids(user)
-    return list({*(own or []), *office})
+        return await sa_team_agent_ids(agent_id)
+    return await downline_agent_ids(agent_id)
+
+
+async def team_uplines(agent_id: str) -> List[Dict[str, Any]]:
+    """The caller's upline chain, nearest first, as contact cards: name,
+    title, phone, email, office. No production — an agent may reach their
+    SA, GA, MGA and RGA, not read their numbers (owner, 2026-09-19)."""
+    chain = await _ancestor_chain(agent_id)
+    if not chain:
+        return []
+    docs = {
+        a["agent_id"]: a async for a in db.agent_profiles.find(
+            {"agent_id": {"$in": chain}, **ACTIVE_AGENT},
+            {"_id": 0, "agent_id": 1, "name": 1, "phone": 1, "email": 1, "role": 1, "io_role": 1, "office": 1})
+    }
+    return [docs[aid] for aid in chain if aid in docs]
 
 
 async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
@@ -1179,6 +1243,7 @@ async def dashboard_summary(
             "delta_pct_vs_yesterday": round(delta_pct, 1),  # vs previous window
             "gate": None,
             "is_full_agency": ids is None,
+            "scope": dashboard_scope_label(user, ids),
             "is_history": False,
         }
 
@@ -1205,6 +1270,7 @@ async def dashboard_summary(
         # The gate describes the live entry window; it has no meaning for history.
         "gate": gate_state() if day == today else None,
         "is_full_agency": ids is None,
+        "scope": dashboard_scope_label(user, ids),
         "is_history": day != today,
     }
 
@@ -1323,8 +1389,11 @@ async def dashboard_platinum_wall(
     for s in platinum:
         if isinstance(s.get("ts"), datetime):
             s["ts"] = iso_utc(s["ts"])
+    # What the wall ranks over, for its subtitle: the agency, the caller's
+    # office (level_1, or MJ's own-RGA view), or a leader's downline.
+    wall_scope = "agency" if "agent_id" not in q else ("office" if role == "level_1" else ("office" if role == "level_4" else "team"))
     return {"vets": vets, "rookies": rookies, "unranked": unranked,
-            "platinum_rule": platinum, "period": period or "daily"}
+            "platinum_rule": platinum, "period": period or "daily", "scope": wall_scope}
 
 
 @api_router.get("/dashboard/offices")
@@ -2109,9 +2178,9 @@ async def team_view(
     otherwise a backfilled entry, stamped when it was imported rather than when
     it was sold, would land in the wrong week.
 
-    Open to level_1+ (per owner, 2026-09-13): a level_1 Agent reads their own
-    office's full rollup here, same fields GA+ sees for their downline — see
-    office_agent_ids. Write actions below (add/move/remove a team member,
+    Open to level_1+ (per owner, 2026-09-13; narrowed 2026-09-19): a level_1
+    Agent reads their own SA team here, same fields GA+ sees for their
+    downline — see team_scope_agent_ids. Write actions below (add/move/remove a team member,
     entering on someone else's behalf) all stay behind their own level_2+
     checks (canEnter client-side; require_level(2)/can_enter_for server-side),
     so this only ever widens read access, never write.
@@ -2230,8 +2299,9 @@ async def team_view(
     #     strips every one of them for an agent, as it always did.
     # Leaders' team rollups, and the leaderboard rank on every row.
     #
-    # Per owner (2026-09-16): a team IS an office — MJ's team, Rust's team,
-    # Alwatan's, Gojcaj's — and the Team tab reads as a leaderboard of it.
+    # The Team tab reads as a leaderboard of whatever team_scope_agent_ids
+    # returned — an agent's SA team, a leader's downline, an RGA's office
+    # (owner, 2026-09-19; it was the whole office from 2026-09-16 to then).
     # Agents rank inside their tenure group (rookies, veterans, and a third
     # group for tenure nobody has set), leaders rank among leaders, and a
     # leader's row carries their own production and their team's rollup side by
@@ -2295,9 +2365,9 @@ async def team_view(
     # sorted by. Nobody with nothing produced is ranked at all — a board where
     # nine people tie for 4th at $0 says nothing to anyone.
     #
-    # Ranking is per OFFICE as well as per group, because a team is an office.
-    # This list is not always one office: an MGA's downline can reach past
-    # theirs, and level_4 reads the whole agency. Pooling them would put an MCM
+    # Ranking is per OFFICE as well as per group. This list is not always one
+    # office: an MGA's downline can reach past theirs, and MJ reads the whole
+    # agency. Pooling them would put an MCM
     # veteran in a race with an AMP one, and would give the same person a
     # different rank depending on who was looking — which is the one thing a
     # standing cannot do.
@@ -2330,6 +2400,8 @@ async def team_view(
 
     return {
         "team": out,
+        # The chain above the caller, contact details only (owner, 2026-09-19).
+        "uplines": await team_uplines(user["agent_id"]) if user.get("agent_id") else [],
         "sales_day": today,
         "period": None if week_start else period,
         "week_start": week_start,
@@ -2968,16 +3040,18 @@ async def agent_history(
     upline-only, so a level_1 reading an office peer gets the numbers and no
     coaching card.
     """
-    ids = await team_scope_agent_ids(user)
-    if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
-        raise HTTPException(status_code=403, detail="Not in your team")
-
+    # Existence before scope: agent ids are opaque, so a 404 for an unknown id
+    # leaks nothing, and a scoped caller gets the same answer an unscoped one
+    # does instead of a misleading "not in your team".
     profile = await db.agent_profiles.find_one(
         {"agent_id": agent_id},
         {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1},
     )
     if not profile:
         raise HTTPException(status_code=404, detail="Agent not found")
+    ids = await team_scope_agent_ids(user)
+    if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
+        raise HTTPException(status_code=403, detail="Not in your team")
 
     series, _ = await weekly_series({"agent_id": agent_id})
     if weeks and weeks > 0:
@@ -3015,16 +3089,18 @@ async def agent_day(
     what a correction would start from) plus close_rate / show_rate /
     alp_per_sale computed the canonical way, via metrics.py, never inline.
     """
-    ids = await team_scope_agent_ids(user)
-    if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
-        raise HTTPException(status_code=403, detail="Not in your team")
-
+    # Existence before scope: agent ids are opaque, so a 404 for an unknown id
+    # leaks nothing, and a scoped caller gets the same answer an unscoped one
+    # does instead of a misleading "not in your team".
     profile = await db.agent_profiles.find_one(
         {"agent_id": agent_id},
         {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1},
     )
     if not profile:
         raise HTTPException(status_code=404, detail="Agent not found")
+    ids = await team_scope_agent_ids(user)
+    if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
+        raise HTTPException(status_code=403, detail="Not in your team")
 
     sd = resolve_history_day(sales_day)
     q = {"agent_id": agent_id, "sales_day": sd}

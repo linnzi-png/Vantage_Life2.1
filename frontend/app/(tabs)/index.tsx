@@ -17,16 +17,23 @@ import { LoadState } from '../../src/components/LoadState';
 import PushGoal, { PushGoalData } from '../../src/components/PushGoal';
 import { PushGoalDetail } from '../../src/components/PushGoalDetail';
 
+// What the summary covers, from the server (owner, 2026-09-19): the header
+// mixed "global", "team" and "agency" for one scope, so now one word runs
+// through the section title and all three stat labels.
+type Scope = 'agency' | 'office' | 'team' | 'you';
+
 interface Summary {
   total_alp: number; total_net_alp: number; total_sits: number; total_sales: number;
   delta_pct_vs_yesterday: number; sales_day: string; gate: any; is_full_agency: boolean;
-  is_history?: boolean; period?: Period;
+  is_history?: boolean; period?: Period; scope?: Scope;
 }
+
+const SCOPE_WORD: Record<Scope, string> = { agency: 'Agency', office: 'Office', team: 'Team', you: 'Your' };
 
 const HISTORY_DAYS = 30;
 
 export default function DashboardScreen() {
-  const { user, roleLabel } = useAuth();
+  const { user, agent, roleLabel } = useAuth();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [ticker, setTicker] = useState<TickerItem[]>([]);
   const [vets, setVets] = useState<WallItem[]>([]);
@@ -35,6 +42,7 @@ export default function DashboardScreen() {
   // rather than dropped, which is what made the wall look empty.
   const [unranked, setUnranked] = useState<WallItem[]>([]);
   const [platinum, setPlatinum] = useState<PlatinumRulePost[]>([]);
+  const [wallScopeLabel, setWallScopeLabel] = useState<'agency' | 'office' | 'team' | null>(null);
   const [offices, setOffices] = useState<OfficeRow[]>([]);
   // Push Month (owner, 2026-09-19). Company-wide and unscoped by design, so
   // it ignores the period and day controls below it: whatever window the
@@ -108,7 +116,7 @@ export default function DashboardScreen() {
       const [s, t, p, o, g] = await Promise.allSettled([
         api<Summary>(`/api/dashboard/summary${q}`),
         api<{ items: TickerItem[] }>('/api/dashboard/ticker'),
-        api<{ vets: WallItem[]; rookies: WallItem[]; unranked?: WallItem[]; platinum_rule?: PlatinumRulePost[] }>(
+        api<{ vets: WallItem[]; rookies: WallItem[]; unranked?: WallItem[]; platinum_rule?: PlatinumRulePost[]; scope?: 'agency' | 'office' | 'team' }>(
           `/api/dashboard/platinum-wall${q}`),
         api<{ offices: OfficeRow[] }>(`/api/dashboard/offices${q}`),
         api<PushGoalData>('/api/dashboard/push-goal'),
@@ -148,6 +156,7 @@ export default function DashboardScreen() {
         setRookies(p.value.rookies);
         setUnranked(p.value.unranked || []);
         setPlatinum(p.value.platinum_rule || []);
+        setWallScopeLabel(p.value.scope ?? null);
         setWallScope(scope);
         setWallError(null);
       } else {
@@ -192,6 +201,20 @@ export default function DashboardScreen() {
   const onRefresh = async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); };
 
   const fmtMoney = (n: number) => `$${Math.round(n).toLocaleString()}`;
+
+  // Section copy. The window word and the scope word are decided once here so
+  // the header, the three cards, the wall and the office tabs all agree.
+  const scope: Scope = summary?.scope ?? (summary?.is_full_agency ? 'agency' : 'team');
+  const scopeWord = SCOPE_WORD[scope];
+  const windowWord = period === 'weekly' ? 'This week' : period === 'monthly' ? 'This month'
+    : viewDay ? viewDay : 'Today';
+  const coverage: Record<Scope, string> = {
+    agency: 'every office combined',
+    office: agent?.office ? `${agent.office} only` : 'your office only',
+    team: 'everyone who reports to you',
+    you: 'your own numbers',
+  };
+  const wallCoverage = wallScopeLabel === 'agency' ? 'every office' : wallScopeLabel === 'team' ? 'your downline' : 'your office';
 
   if (!user?.agent_id) {
     return (
@@ -264,16 +287,15 @@ export default function DashboardScreen() {
         >
           {!summary || !summaryMatchesScope ? null : (
           <>
-            <Text style={styles.sectionTitle}>
-              {period !== 'daily'
-                ? `${period.toUpperCase()} ${summary.is_full_agency ? 'GLOBAL' : 'TEAM'} PRODUCTION`
-                : summary.is_history
-                ? `PRODUCTION · ${summary.sales_day}`
-                : summary.is_full_agency ? "TODAY'S GLOBAL PRODUCTION" : "TODAY'S TEAM PRODUCTION"}
+            <Text style={styles.sectionTitle} testID="dashboard-section-title">
+              {`${scopeWord.toUpperCase()} PRODUCTION`}
+            </Text>
+            <Text style={styles.sectionSub} testID="dashboard-section-sub">
+              {`${windowWord} · ${coverage[scope]}`}
             </Text>
             <TourAnchor id="dash-stats" style={styles.cardsRow}>
               <StatCard
-                label="Total Team ALP"
+                label={`${scopeWord} ALP`}
                 value={fmtMoney(summary.total_alp)}
                 deltaPct={summary.delta_pct_vs_yesterday}
                 accent={COLORS.primary}
@@ -281,14 +303,14 @@ export default function DashboardScreen() {
               />
               <View style={{ width: 8 }} />
               <StatCard
-                label="Agency Sits"
+                label={`${scopeWord} Sits`}
                 value={summary.total_sits.toLocaleString()}
                 accent={COLORS.secondary}
                 testID="stat-total-sits"
               />
               <View style={{ width: 8 }} />
               <StatCard
-                label="Total Sales"
+                label={`${scopeWord} Sales`}
                 value={summary.total_sales.toLocaleString()}
                 accent={COLORS.gold}
                 testID="stat-total-sales"
@@ -309,6 +331,7 @@ export default function DashboardScreen() {
                 unranked={unranked}
                 platinum={platinum}
                 windowLabel={windowLabel}
+                subtitle={`Top 3 producers · ${wallCoverage}`}
                 onPress={(it: WallItem) => setContactAgent({
                   name: it.name, role: it.role || 'level_1', io_role: it.io_role,
                   phone: it.phone, email: it.email, office: it.office,
@@ -324,7 +347,11 @@ export default function DashboardScreen() {
               loadingText="Loading offices…"
               testID="dashboard-offices"
             >
-              <OfficeTabs offices={offices} windowLabel={windowLabel} />
+              <OfficeTabs
+                offices={offices}
+                windowLabel={windowLabel}
+                subtitle={scope === 'agency' ? 'Every office side by side' : 'Only what you can see, filed by office'}
+              />
             </LoadState>
 
             {user?.agent_id ? (
@@ -402,7 +429,8 @@ const styles = StyleSheet.create({
   },
   dayRowTxt: { color: '#fff', fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums' as any] },
   scroll: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 30 },
-  sectionTitle: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 10, marginTop: 6 },
+  sectionTitle: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2, marginTop: 6 },
+  sectionSub: { color: COLORS.textMuted, fontSize: 11, marginTop: 2, marginBottom: 10 },
   cardsRow: { flexDirection: 'row' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   notLinked: { color: '#fff', fontWeight: '800', fontSize: 16, marginTop: 12, textAlign: 'center' },

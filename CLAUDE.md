@@ -25,46 +25,63 @@ change (`com.aopremiere.vantagelife` bundle ID, `@aopremiere.com` demo emails).
 - `backend/tests/` — pytest suite
 
 ## RBAC Hierarchy (4-tier - NEVER flatten or bypass)
-1. `level_1` Agent — enters their own metrics only; reads full metrics for their own office via the Team tab (per owner, 2026-09-13 — see below)
+1. `level_1` Agent — enters their own metrics only; reads their own SA team via the Team tab (per owner, 2026-09-19 — see below)
 2. `level_2` GA (General Agent) — sees their team rollup — displays as "CoExecutive Producer"
 3. `level_3` MGA (Master General Agent) — sees GA-level rollups — displays as "Executive Producer"
-4. `level_4` RGA (Regional General Agent) — sees all MGA rollups — displays as "Chief Executive Producer"
+4. `level_4` RGA (Regional General Agent) — sees their own office — displays as "Chief Executive Producer"
 
-**A team IS an office (per owner, 2026-09-16).** MJ's team, Rust's team,
-Alwatan's, Gojcaj's — the four offices are the four teams, and "my team" in
-product language means the whole office, not the caller's downline. Seeing
-every person on it is deliberate: motivation, team building and healthy
-competition. Do not narrow it back to downline-only. The Team tab opens on the
-team and reads as a leaderboard — agents ranked inside their tenure group
-(ROOKIES, VETERANS, and TENURE NOT SET for the people nobody has recorded one
-for), leaders ranked among leaders with their own production and their team's
-rollup side by side. Rank always runs on Gross ALP, the same measure the
-Platinum Wall ranks on, and nobody who produced nothing in the window is
-ranked. The secondary filter, REPORTS TO ME, is the caller's downline — what an
-upline wants for entry, not for competing.
+**No one sees more than their SA team (per owner, 2026-09-19, from MJ).**
+This replaces the 2026-09-16 "a team IS an office" rule, which is retired:
+an agent is not to see the whole office. The Team tab's read scope, in one
+helper `team_scope_agent_ids()` shared by `GET /api/team`, `/api/team/weeks`,
+`/api/agents/{id}/history` and `/api/agents/{id}/day` and never re-derived per
+route, is:
 
-**Office read scope (per owner, 2026-09-13, extended 2026-09-14 and
-2026-09-15):** the Team tab shows everyone in the caller's own **office**, at
-every tier, plus their own downline wherever it reaches — one helper,
-`team_scope_agent_ids()`, shared by `GET /api/team`, `/api/team/weeks`,
-`/api/agents/{id}/history` and `/api/agents/{id}/day`, never re-derived per
-route. Any agent may see general team stats, their office's sales numbers, any
-teammate's day/week/month production, and that teammate's basic ALP and close
-ratio on the contact card. The union matters: an MGA's downline can reach past
-their home office, and an upline must never see less of the board than the
-agents under them do, which is what the 2026-09-15 extension fixed.
+- **level_1** — their SA team: the subtree under the nearest level_2 in
+  their upline chain (the SA or GA who runs them), leader included
+  (`sa_team_agent_ids()`). Someone straight under an MGA/RGA gets that
+  upline's subtree. This is the same grouping `/api/team/missing` uses.
+- **level_2 / level_3** — their own downline, nothing sideways.
+- **level_4** — their own office (plus their downline, normally the same
+  people). Gojcaj, Alwatan and Rust see their office, never the agency.
+- **MJ** (level_4 with the admin grant) — the whole company by default, his
+  own RGA team with the More-tab switch on "own". An admin below level_4
+  (Afnan) reads the company in the admin view and her SA team in the agent
+  view. `finance_admin` reads the company, read only.
 
-Three things are deliberately NOT widened with it:
+**Uplines are contacts, not rows.** `GET /api/team` returns `uplines`: the
+chain above the caller, nearest first, with name, title, phone, email and
+office only, never production (`team_uplines()`). The client opens them in
+the contact sheet without an `agent_id`, so no history is fetched.
+
+The dashboard is deliberately NOT narrowed with this: it keeps showing the
+caller's office and the whole agency as before (`visible_agent_ids` and the
+Platinum Wall are unchanged). What did change there is the copy: the summary
+carries `scope` (`agency` / `office` / `team` / `you`) and one scope word runs
+through the section title and all three stat labels, each section has a
+one-line subtitle saying what it covers, and OFFICE MARKET SHARE is now
+PRODUCTION BY OFFICE. "Agency" is the word for the whole company; "Office"
+for an RGA ship.
+
+The Team tab still reads as a leaderboard — agents ranked inside their tenure
+group (ROOKIES, VETERANS, and TENURE NOT SET for the people nobody has
+recorded one for), leaders ranked among leaders with their own production and
+their team's rollup side by side. Rank always runs on Gross ALP, the same
+measure the Platinum Wall ranks on, and nobody who produced nothing in the
+window is ranked. The secondary filter, REPORTS TO ME, is the caller's
+downline — what an upline wants for entry, not for competing.
+
+Three things stay exactly as they were:
 
 - **Coaching cards** stay upline-only (`is_upline_of`).
 - **Judgement alerts** (`UPLINE_ONLY_ALERTS`: low close ratio, low average
   deal, no pulse) are stripped from any row outside the caller's own downline —
-  the numbers are the office's, the assessment is the upline's. Neutral flags
+  the numbers are the team's, the assessment is the upline's. Neutral flags
   such as the rookie badge stay.
 - **Every write path** — `can_enter_for`, remove-person, reassign, set-tier —
   stays on `downline_agent_ids`. `team_view` marks each row with
   `in_my_downline` so the client only offers those actions where they would
-  succeed; the Team tab also uses it for the MY TEAM / MY OFFICE filter.
+  succeed; the Team tab also uses it for the MY TEAM / REPORTS TO ME filter.
 
 **Missing Numbers (per owner, 2026-09-19, MJ's request):** `GET
 /api/team/missing` lists, for each of the last 7 sales days (max 14), who has
@@ -218,7 +235,7 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 
 ## Forbidden Patterns
 - NEVER subtract N1 from Sits — Sits already excludes them; subtracting double-counts the exclusion
-- NEVER allow an Agent to see data above their RBAC tier — the two documented exceptions are the Team tab's own-office read and the agent card it opens (see RBAC Hierarchy above), and the Push Month goal (`GET /api/dashboard/push-goal`, owner 2026-09-19): one company-wide Gross ALP total with by-day and by-office splits, read by every tier, never per-agent; don't generalize either or extend them to other routes without an explicit owner decision
+- NEVER allow an Agent to see data above their RBAC tier — the two documented exceptions are the Team tab's own-SA-team read and the agent card it opens (see RBAC Hierarchy above), and the Push Month goal (`GET /api/dashboard/push-goal`, owner 2026-09-19): one company-wide Gross ALP total with by-day and by-office splits, read by every tier, never per-agent; don't generalize either or extend them to other routes without an explicit owner decision
 - NEVER change the 6AM cycle boundary without explicit instruction
 - NEVER bypass the Wednesday 2PM cutoff gate
 - NEVER collapse authentication and authorization into a single check

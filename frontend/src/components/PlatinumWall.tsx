@@ -13,7 +13,7 @@ export interface PlatinumRulePost { shoutout_id: string; agent_name: string; off
 const PLATINUM = '#E5E4E2';
 
 export default function PlatinumWall(
-  { vets, rookies, unranked = [], platinum = [], windowLabel, onPress }:
+  { vets, rookies, unranked = [], platinum = [], windowLabel, subtitle, onPress }:
   {
     vets: WallItem[]; rookies: WallItem[];
     /** Top producers whose tenure was never recorded. Shown rather than hidden
@@ -21,6 +21,9 @@ export default function PlatinumWall(
     unranked?: WallItem[];
     platinum?: PlatinumRulePost[];
     windowLabel?: string;
+    /** One line under the title saying what the wall ranks over (owner,
+     *  2026-09-19: every dashboard section states its own scope). */
+    subtitle?: string;
     onPress?: (item: WallItem) => void;
   },
 ) {
@@ -30,6 +33,7 @@ export default function PlatinumWall(
         <Text style={styles.title}>PLATINUM WALL</Text>
         {windowLabel ? <Text style={styles.window}>{windowLabel}</Text> : null}
       </View>
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       <View style={styles.row}>
         <Panel title="TOP 3 VETS" color={COLORS.gold} icon="ribbon" items={vets} testID="platinum-vets" onPress={onPress} />
         <View style={{ width: 8 }} />
@@ -104,6 +108,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 },
   title: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
   window: { color: COLORS.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  subtitle: { color: COLORS.textMuted, fontSize: 11, marginTop: -4, marginBottom: 8 },
   hint: { color: COLORS.textMuted, fontSize: 10, marginTop: 6, fontStyle: 'italic' },
   row: { flexDirection: 'row' },
   panel: {
