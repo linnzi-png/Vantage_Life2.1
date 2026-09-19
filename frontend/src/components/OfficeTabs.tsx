@@ -4,11 +4,13 @@ import { COLORS } from '../lib/auth';
 
 export interface OfficeRow { office: string; alp: number; sales: number; avg_deal: number; }
 
-export default function OfficeTabs({ offices, windowLabel }: {
+export default function OfficeTabs({ offices, windowLabel, subtitle }: {
   offices: OfficeRow[];
   /** What window these numbers cover, e.g. "WEEKLY" or "2026-06-10". Without it
    *  the section reads as stale, since the summary above it is always labelled. */
   windowLabel?: string;
+  /** One line under the title saying which offices are on the tabs. */
+  subtitle?: string;
 }) {
   // Which office the user explicitly picked. Deliberately NOT seeded from
   // offices[0]: a useState initializer runs once on mount, when offices is still
@@ -26,9 +28,10 @@ export default function OfficeTabs({ offices, windowLabel }: {
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <Text style={styles.title}>OFFICE MARKET SHARE</Text>
+        <Text style={styles.title}>PRODUCTION BY OFFICE</Text>
         {windowLabel ? <Text style={styles.window}>{windowLabel}</Text> : null}
       </View>
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
         {offices.map((o) => {
           const sel = o.office === active;
@@ -71,6 +74,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 },
   title: { color: COLORS.textDim, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
   window: { color: COLORS.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  subtitle: { color: COLORS.textMuted, fontSize: 11, marginTop: -4, marginBottom: 8 },
   tabs: { gap: 6, paddingBottom: 8 },
   tab: {
     paddingVertical: 6,

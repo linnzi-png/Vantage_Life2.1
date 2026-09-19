@@ -53,18 +53,20 @@ export default function TeamScreen() {
   const { user, agent, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<TeamRow[]>([]);
   const [moveTarget, setMoveTarget] = useState<TeamRow | null>(null);
-  // A team IS an office (owner, 2026-09-16) — MJ's team, Rust's, Alwatan's,
-  // Gojcaj's — and seeing the whole one is the point: it is a motivation and
-  // healthy-competition tactic, not an oversight. So the board opens on the
-  // team, and the narrower filter is "the people who report to me", which is
-  // what an upline wants when entering numbers rather than when competing.
+  // The board is whatever the server scoped (owner, 2026-09-19, from MJ: "no
+  // one should see more than their SA team"): an agent's SA team, a leader's
+  // downline, an RGA's office, the company for MJ. The narrower filter is
+  // "the people who report to me", which is what an upline wants when
+  // entering numbers rather than when competing.
   const [scope, setScope] = useState<'team' | 'mine'>('team');
   const [tierTarget, setTierTarget] = useState<TeamRow | null>(null);
-  const [upline, setUpline] = useState<AgentContact | null>(null);
+  // The chain above the caller, nearest first, as contacts only — no
+  // production (owner, 2026-09-19). Comes back with the board itself.
+  const [uplines, setUplines] = useState<AgentContact[]>([]);
+  const [uplineOpen, setUplineOpen] = useState<AgentContact | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [sortKey, setSortKey] = useState<keyof TeamRow>('gross_alp');
   const [selected, setSelected] = useState<TeamRow | null>(null);
-  const [uplineOpen, setUplineOpen] = useState(false);
   const [readyNoms, setReadyNoms] = useState(0);
   const [period, changePeriod] = usePersistedPeriod('vl_team_period', 'weekly');
   const [quickEntryTarget, setQuickEntryTarget] = useState<QuickEntryTarget | null>(null);
@@ -88,14 +90,13 @@ export default function TeamScreen() {
   const fetchAll = async () => {
     const scope = weekStart ? `week:${weekStart}` : `period:${period}`;
     try {
-      const [r, u, n] = await Promise.all([
-        api<{ team: TeamRow[] }>(
+      const [r, n] = await Promise.all([
+        api<{ team: TeamRow[]; uplines?: AgentContact[] }>(
           weekStart ? `/api/team?week_start=${weekStart}` : `/api/team?period=${period}`),
-        api<{ upline: AgentContact | null }>('/api/my-upline').catch(() => ({ upline: null })),
         api<{ nominations: any[] }>('/api/nominations?status=threshold_met').catch(() => ({ nominations: [] })),
       ]);
       setRows(r.team);
-      setUpline(u.upline);
+      setUplines(r.uplines ?? []);
       setReadyNoms(n.nominations.length);
       setLoadedScope(scope);
       setError(null);
@@ -241,7 +242,7 @@ export default function TeamScreen() {
                 {r.is_rookie ? <View style={styles.rookie}><Text style={styles.rookieTxt}>R</Text></View> : null}
                 {r.archived ? <View style={styles.removed}><Text style={styles.removedTxt}>REMOVED</Text></View> : null}
                 {r.in_my_downline === false && r.agent_id !== user?.agent_id ? (
-                  <View style={styles.officeBadge}><Text style={styles.officeBadgeTxt}>OFFICE</Text></View>
+                  <View style={styles.officeBadge}><Text style={styles.officeBadgeTxt}>TEAM</Text></View>
                 ) : null}
                 <Ionicons name="chevron-forward" size={12} color={COLORS.textDim} style={{ marginLeft: 'auto' }} />
               </View>
@@ -358,23 +359,29 @@ export default function TeamScreen() {
         </TourAnchor>
       </View>
 
-      {upline && levelNum(user?.role) < 4 ? (
-        <TouchableOpacity
-          style={styles.uplineCard}
-          onPress={() => setUplineOpen(true)}
-          activeOpacity={0.75}
-          testID="team-upline-card"
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={styles.uplineKicker}>YOUR {roleTitle(upline.io_role, upline.role).toUpperCase()}</Text>
-            <Text style={styles.uplineName}>{upline.name}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {upline.phone ? <Ionicons name="call" size={15} color={COLORS.primary} /> : null}
-            {upline.phone ? <Ionicons name="chatbubble" size={15} color={COLORS.secondary} /> : null}
-            <Ionicons name="chevron-forward" size={14} color={COLORS.textDim} />
-          </View>
-        </TouchableOpacity>
+      {uplines.length > 0 ? (
+        <View style={styles.uplineCard} testID="team-upline-card">
+          <Text style={styles.uplineKicker}>YOUR UPLINE · CONTACT ONLY</Text>
+          {uplines.map((u, i) => (
+            <TouchableOpacity
+              key={u.agent_id ?? `${u.name}-${i}`}
+              style={[styles.uplineRow, i > 0 && styles.uplineRowDivider]}
+              onPress={() => setUplineOpen({ ...u, agent_id: undefined })} // contact only: no agent_id, so the sheet shows no history
+              activeOpacity={0.75}
+              testID={`team-upline-${u.agent_id ?? i}`}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.uplineName} numberOfLines={1}>{u.name}</Text>
+                <Text style={styles.uplineMeta}>{roleTitle(u.io_role, u.role)}{u.office ? ` · ${u.office}` : ''}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {u.phone ? <Ionicons name="call" size={15} color={COLORS.primary} /> : null}
+                {u.phone ? <Ionicons name="chatbubble" size={15} color={COLORS.secondary} /> : null}
+                <Ionicons name="chevron-forward" size={14} color={COLORS.textDim} />
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
       ) : null}
 
       <View style={styles.periodBar}>
@@ -542,8 +549,8 @@ export default function TeamScreen() {
         onMoved={fetchAll}
       />
       <AgentContactSheet
-        agent={uplineOpen ? upline : null}
-        onClose={() => setUplineOpen(false)}
+        agent={uplineOpen}
+        onClose={() => setUplineOpen(null)}
       />
       <AddTeamMemberSheet
         visible={addMemberOpen}
@@ -614,14 +621,16 @@ const styles = StyleSheet.create({
   removed:       { borderWidth: 1, borderColor: COLORS.red, paddingHorizontal: 4, borderRadius: 2 },
   removedTxt:    { color: COLORS.red, fontWeight: '900', fontSize: 8, letterSpacing: 0.5 },
   uplineCard:    {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginHorizontal: 16, marginBottom: 8,
     backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
     borderLeftWidth: 3, borderLeftColor: COLORS.primary,
-    padding: 12, borderRadius: 6,
+    paddingHorizontal: 12, paddingTop: 10, borderRadius: 6,
   },
   uplineKicker:  { color: COLORS.primary, fontSize: 9, fontWeight: '900', letterSpacing: 1.8, marginBottom: 2 },
+  uplineRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
+  uplineRowDivider: { borderTopWidth: 1, borderTopColor: COLORS.border },
   uplineName:    { color: '#fff', fontWeight: '800', fontSize: 14 },
+  uplineMeta:    { color: COLORS.textDim, fontSize: 11, marginTop: 1 },
   missingCard:   {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     marginHorizontal: 16, marginBottom: 8,

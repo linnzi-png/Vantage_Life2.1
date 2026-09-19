@@ -67,4 +67,4 @@ Read `styles.css` for all token values and class names before styling. Read `gui
 | Ticker | Bottom marquee strip in monospace primary green |
 | Platinum Wall | Top-performers leaderboard with gold top-border accent |
 | Office Tabs | Full-width tab bar; active tab = 2px bottom border in `--color-primary` |
-| Close Rate | Sales ÷ (Sits − N1); N1 is never included in any aggregate |
+| Close Rate | Sales ÷ Sits. N1 (medically unqualified) is already left out of Sits at entry, so it is never subtracted again — see `backend/metrics.py` and CLAUDE.md (owner, 2026-08-08) |

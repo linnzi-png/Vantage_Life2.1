@@ -39,14 +39,44 @@ async def test_office_agent_ids_scopes_level_1_to_office_not_downline(seeded_db)
     assert "AG_2" not in ids and "GA_2" not in ids
 
 
-async def test_team_endpoint_scopes_level_1_to_office(client, seeded_db):
-    """Per owner, 2026-09-13: /api/team no longer 403s a level_1 caller — it
-    returns their own office's rollup instead of the old blanket refusal."""
+async def test_team_endpoint_scopes_level_1_to_their_sa_team(client, seeded_db):
+    """Per owner, 2026-09-19 (MJ: "no one should see more than their SA
+    team"): a level_1 reads the subtree under the nearest SA/GA above them,
+    leader included. The rest of the chain comes back as contacts only."""
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "AG_1B", "name": "Agent One B", "email": "ag1b@test.dev",
+        "role": "level_1", "upline_id": "SA_1", "office": "MCM",
+    })
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     r = await client.get("/api/team", headers=auth(token))
     assert r.status_code == 200, r.text
-    ids = {row["agent_id"] for row in r.json()["team"]}
-    assert ids == {"RGA_1", "MGA_1", "GA_1", "SA_1", "AG_1"}
+    body = r.json()
+    ids = {row["agent_id"] for row in body["team"]}
+    assert ids == {"SA_1", "AG_1", "AG_1B"}
+    assert [u["agent_id"] for u in body["uplines"]] == ["SA_1", "GA_1", "MGA_1", "RGA_1"]
+    assert "gross_alp" not in body["uplines"][0]
+    assert set(body["uplines"][0]) <= {"agent_id", "name", "phone", "email", "role", "io_role", "office"}
+
+
+async def test_an_agent_straight_under_an_mga_reads_that_uplines_team(client, seeded_db):
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "AG_3", "name": "Agent Three", "email": "ag3@test.dev",
+        "role": "level_1", "upline_id": "MGA_1", "office": "MCM",
+    })
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_3", email="ag3@test.dev")
+    ids = {row["agent_id"] for row in (await client.get("/api/team", headers=auth(token))).json()["team"]}
+    assert "MGA_1" in ids and "AG_3" in ids and "RGA_1" not in ids
+
+
+async def test_a_plain_rga_reads_their_own_office(client, seeded_db):
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "RGA_2", "name": "Rga Two", "email": "rga2@test.dev",
+        "role": "level_4", "upline_id": None, "office": "Rival",
+    })
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    ids = {row["agent_id"] for row in (await client.get("/api/team", headers=auth(token))).json()["team"]}
+    assert "RGA_2" not in ids
+    assert {"RGA_1", "MGA_1", "GA_1", "SA_1", "AG_1", "AG_2"} <= ids  # office plus downline
 
 
 async def test_level_1_cannot_add_or_remove_team_members(client, seeded_db):
@@ -107,41 +137,43 @@ async def test_upline_still_sees_the_judgement_alerts(client, seeded_db):
 
 # ---------------- office view for an upline ----------------
 #
-# Owner, 2026-09-15: an upline must never see less of the board than the agents
-# under them do. Every tier reads their own office; level_2 and level_3 also
-# keep their downline wherever it reaches. in_my_downline marks which rows are
-# theirs to act on, since every write path stays downline-scoped.
+# Owner, 2026-09-19: a leader reads their own downline and nothing sideways;
+# their uplines come back as contacts. in_my_downline still marks which rows
+# are theirs to act on, since every write path stays downline-scoped.
 
-async def test_an_sa_reads_their_whole_office_not_just_their_downline(client, seeded_db):
+async def test_a_leader_reads_their_downline_and_gets_uplines_as_contacts(client, seeded_db):
     token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
-    rows = {r["agent_id"]: r for r in (await client.get("/api/team", headers=auth(token))).json()["team"]}
-    # AG_1 is SA_1's own agent; GA_1, MGA_1 and RGA_1 are their uplines, all in
-    # office MCM. GA_2 and AG_2 are in AMP and stay out.
-    assert {"AG_1", "GA_1", "MGA_1", "RGA_1"} <= set(rows)
-    assert "AG_2" not in rows and "GA_2" not in rows
+    body = (await client.get("/api/team", headers=auth(token))).json()
+    rows = {r["agent_id"]: r for r in body["team"]}
+    assert set(rows) == {"SA_1", "AG_1"}
+    assert [u["agent_id"] for u in body["uplines"]] == ["GA_1", "MGA_1", "RGA_1"]
 
 
-async def test_the_downline_flag_separates_my_team_from_my_office(client, seeded_db):
+async def test_the_downline_flag_separates_my_team_from_myself(client, seeded_db):
     token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
     rows = {r["agent_id"]: r for r in (await client.get("/api/team", headers=auth(token))).json()["team"]}
     assert rows["AG_1"]["in_my_downline"] is True     # their agent
-    assert rows["GA_1"]["in_my_downline"] is False    # their upline
     assert rows["SA_1"]["in_my_downline"] is False    # themselves
 
 
 async def test_judgement_alerts_are_stripped_outside_my_downline(client, seeded_db):
-    """The office's numbers are open; the assessment of an office peer is not."""
-    token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
+    """A level_1 reads their SA team's numbers; the assessment of a teammate
+    is the upline's. AG_1 sees AG_1B's production and none of the flags."""
+    await seeded_db.agent_profiles.insert_one({
+        "agent_id": "AG_1B", "name": "Agent One B", "email": "ag1b@test.dev",
+        "role": "level_1", "upline_id": "SA_1", "office": "MCM",
+    })
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     await seeded_db.production_entries.insert_one({
-        "entry_id": "pe_bad", "agent_id": "GA_1", "office": "MCM",
+        "entry_id": "pe_bad", "agent_id": "AG_1B", "office": "MCM",
         "sales_day": server.current_sales_day_str(),
         "sets": 20, "sits": 15, "sales": 5, "ots_sits": 0, "ots_sales": 0, "n1": 0,
         "refs_obtained": 0, "ref_sits": 0, "ref_sales": 0, "pos_sits": 0,
         "pos_sales": 0, "vet_sits": 0, "vet_sales": 0, "gross_alp": 1000.0, "net_alp": 1000.0,
     })
     rows = {r["agent_id"]: r for r in (await client.get("/api/team", headers=auth(token))).json()["team"]}
-    assert not set(rows["GA_1"]["alerts"]) & server.UPLINE_ONLY_ALERTS
-    assert rows["GA_1"]["gross_alp"] == 1000.0  # the numbers are still there
+    assert not set(rows["AG_1B"]["alerts"]) & server.UPLINE_ONLY_ALERTS
+    assert rows["AG_1B"]["gross_alp"] == 1000.0  # the numbers are still there
 
 
 async def test_an_mga_keeps_a_downline_that_reaches_past_their_office(client, seeded_db):

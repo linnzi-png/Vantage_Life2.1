@@ -88,17 +88,18 @@ async def test_level1_admin_own_view_reads_the_board_as_a_plain_agent(client, se
     afnan = await admin_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     await entry(seeded_db, agent_id="SA_1", gross_alp=100)
 
-    # Admin view: the whole office is hers to act on, as it is for any admin.
+    # Admin view: the whole company, and every row hers to act on, as for any admin.
     team = (await client.get("/api/team", headers=auth(afnan))).json()["team"]
-    assert {row["agent_id"]: row["in_my_downline"] for row in team}["SA_1"] is True
+    flags = {row["agent_id"]: row["in_my_downline"] for row in team}
+    assert flags["SA_1"] is True and "AG_2" in flags
 
     await client.post("/api/me/view-mode", json={"view_mode": "own"}, headers=auth(afnan))
     team = (await client.get("/api/team", headers=auth(afnan))).json()["team"]
     rows = {row["agent_id"]: row for row in team}
     assert rows["SA_1"]["in_my_downline"] is False
-    assert "no_pulse" not in rows["GA_1"]["alerts"]  # judgement alerts stripped, as for any agent
-    # Still her office, exactly as a level_1 reads it.
-    assert "AG_2" not in rows
+    assert "no_pulse" not in rows["SA_1"]["alerts"]  # judgement alerts stripped, as for any agent
+    # Her SA team, exactly as a level_1 reads it: not the GA above, not AMP.
+    assert "GA_1" not in rows and "AG_2" not in rows
 
     # The grant itself is untouched: admin routes keep working in either view.
     r = await client.get("/api/admin/people", headers=auth(afnan))

@@ -40,6 +40,8 @@ export default function MissingScreen() {
   // Which team section is open per day; all open by default so the count in
   // the chip and the names underneath never disagree.
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Company view only: offices start closed so the four totals read first.
+  const [expandedOffices, setExpandedOffices] = useState<Record<string, boolean>>({});
 
   const fetchAll = useCallback(async () => {
     try {
@@ -147,7 +149,49 @@ export default function MissingScreen() {
           loadingText="Checking submissions…"
           testID="missing"
         >
-          {day ? day.teams.map((team) => {
+          {day && data?.scope === 'company' ? officesFor(day).map((o) => {
+            // MJ's view (owner, 2026-09-19): every team, filed by office, each
+            // office expandable so the company reads as four totals first.
+            const key = `${day.sales_day}:office:${o.office}`;
+            const open = !!expandedOffices[key];
+            return (
+              <View key={key} style={styles.office} testID={`missing-office-${o.office}`}>
+                <TouchableOpacity
+                  style={styles.officeHead}
+                  onPress={() => setExpandedOffices((c) => ({ ...c, [key]: !open }))}
+                  activeOpacity={0.8}
+                  testID={`missing-office-toggle-${o.office}`}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.officeName}>{o.office.toUpperCase()}</Text>
+                    <Text style={styles.officeMeta}>{o.missing} missing across {o.teams.length} {o.teams.length === 1 ? 'team' : 'teams'}</Text>
+                  </View>
+                  <View style={[styles.count, o.missing === 0 && styles.countClear]}>
+                    <Text style={styles.countTxt}>{o.missing}</Text>
+                  </View>
+                  <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={COLORS.textDim} />
+                </TouchableOpacity>
+                {open ? o.teams.map(renderTeam) : null}
+              </View>
+            );
+          }) : day ? day.teams.map(renderTeam) : null}
+        </LoadState>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      <QuickEntryForm
+        target={target}
+        initialSalesDay={day?.sales_day}
+        onClose={() => { setTarget(null); setQueue([]); }}
+        onSubmitted={advance}
+        hasNext={queue.length > 0}
+        onNext={advance}
+      />
+    </SafeAreaView>
+  );
+
+  function renderTeam(team: TeamMissing) {
+            if (!day) return null;
             const key = `${day.sales_day}:${team.leader?.agent_id ?? 'none'}`;
             const isCollapsed = !!collapsed[key];
             const leaderName = team.leader?.name ?? 'No upline on file';
@@ -194,21 +238,22 @@ export default function MissingScreen() {
                 ))}
               </View>
             );
-          }) : null}
-        </LoadState>
-        <View style={{ height: 40 }} />
-      </ScrollView>
+  }
+}
 
-      <QuickEntryForm
-        target={target}
-        initialSalesDay={day?.sales_day}
-        onClose={() => { setTarget(null); setQueue([]); }}
-        onSubmitted={advance}
-        hasNext={queue.length > 0}
-        onNext={advance}
-      />
-    </SafeAreaView>
-  );
+interface OfficeMissing { office: string; missing: number; teams: TeamMissing[]; }
+
+/** Teams filed under their leader's office, the office with the most missing
+ *  first. A team with no leader on file goes under "Unassigned". */
+function officesFor(day: DayMissing): OfficeMissing[] {
+  const byOffice = new Map<string, TeamMissing[]>();
+  for (const t of day.teams) {
+    const office = t.leader?.office || 'Unassigned';
+    byOffice.set(office, [...(byOffice.get(office) ?? []), t]);
+  }
+  return Array.from(byOffice, ([office, teams]) => ({
+    office, teams, missing: teams.reduce((n, t) => n + t.missing.length, 0),
+  })).sort((a, b) => b.missing - a.missing || a.office.localeCompare(b.office));
 }
 
 const styles = StyleSheet.create({
@@ -234,6 +279,13 @@ const styles = StyleSheet.create({
   countTxt: { color: COLORS.yellow, fontSize: 10, fontWeight: '900' },
   countTxtOn: { color: '#000' },
   scroll: { paddingHorizontal: 16, paddingTop: 4 },
+  office: { marginBottom: 12 },
+  officeHead: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 4,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border, marginBottom: 8,
+  },
+  officeName: { color: '#fff', fontSize: 14, fontWeight: '900', letterSpacing: 1.4 },
+  officeMeta: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
   team: {
     backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
     borderLeftWidth: 3, borderLeftColor: COLORS.yellow, borderRadius: 6, marginBottom: 10, overflow: 'hidden',
