@@ -57,7 +57,16 @@ export interface AppUser {
    *  visibility only — the sheet's route keeps its own gate. */
   secret_sauce?: boolean;
   can_switch_role?: boolean;
+  /** The More-tab view switch (owner, 2026-09-19). 'full' is the account's
+   *  whole reach; 'own' narrows it: a level_4 admin to their own team, an
+   *  admin below level_4 to plain agent duties. Server-normalised. */
+  view_mode?: ViewMode;
+  /** Whether the switch is offered at all — the server's answer, never a
+   *  client guess (admins with a linked producer tier only). */
+  can_toggle_view?: boolean;
 }
+
+export type ViewMode = 'full' | 'own';
 
 export interface AppAgent {
   agent_id: string;
@@ -302,6 +311,7 @@ interface AuthCtx {
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   switchRole: (role: Role) => Promise<void>;
+  setViewMode: (mode: ViewMode) => Promise<void>;
   /** True while a sign-out, account deletion or tier switch is in flight, so
    *  the screens offering them can disable the row instead of firing twice. */
   accountBusy: boolean;
@@ -471,8 +481,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await reload();
   });
 
+  const setViewMode = (mode: ViewMode) => runAccountOp(async () => {
+    // Same shape as switchRole: the server owns the value, and every screen
+    // reads it from the reloaded session rather than from local state, so
+    // the dashboard, the Team tab and the More tab can never disagree.
+    await api('/api/me/view-mode', { method: 'POST', body: JSON.stringify({ view_mode: mode }) });
+    await reload();
+  });
+
   return (
-    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInAuth0, signOut, deleteAccount, switchRole, accountBusy }}>
+    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInAuth0, signOut, deleteAccount, switchRole, setViewMode, accountBusy }}>
       {children}
     </AuthContext.Provider>
   );
@@ -510,6 +528,18 @@ export function isFinanceAdmin(role?: Role | null): boolean {
  *  out an is_admin account below level_4 that the server would admit. */
 export function hasFullControl(user?: AppUser | null): boolean {
   return user?.is_admin === true || levelNum(user?.role) >= 4;
+}
+
+/** user_admin_active(): the admin grant as the READ surfaces should treat it.
+ *  A level_4 admin keeps it in either view (their switch picks a team, not a
+ *  job); an admin below level_4 who has switched to the 'own' view is, for
+ *  what the app shows and offers, the agent they are. Menu visibility and
+ *  action hints only — every admin route keeps honouring is_admin, so a deep
+ *  link still works, and the server re-checks every write regardless. */
+export function adminActive(user?: AppUser | null): boolean {
+  if (user?.is_admin !== true) return false;
+  if (levelNum(user.role) >= 4) return true;
+  return user.view_mode !== 'own';
 }
 
 /** require_level4_or_finance_admin(): the read-only Historical Vault views

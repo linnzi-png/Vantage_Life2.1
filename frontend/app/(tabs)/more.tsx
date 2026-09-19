@@ -1,10 +1,10 @@
 // More tab: profile, manager, audit, vault, logout
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useAuth, COLORS, levelNum, Role } from '../../src/lib/auth';
+import { useAuth, COLORS, levelNum, adminActive, Role } from '../../src/lib/auth';
 import { useTour } from '../../src/lib/tour';
 import { TourAnchor } from '../../src/components/TourAnchor';
 import { confirmAsync, notify } from '../../src/lib/dialog';
@@ -18,10 +18,25 @@ const SWITCH_TIERS: { role: Role; label: string }[] = [
 
 export default function MoreScreen() {
   const router = useRouter();
-  const { user, agent, roleLabel, signOut, deleteAccount, switchRole, accountBusy } = useAuth();
+  const { user, agent, roleLabel, signOut, deleteAccount, switchRole, setViewMode, accountBusy } = useAuth();
   const { start: startTour } = useTour();
   const lvl = levelNum(user?.role);
   const [switching, setSwitching] = React.useState(false);
+  // The view switch (owner, 2026-09-19). One server-side preference, two
+  // meanings by tier: a level_4 admin (MJ) picks the whole company or their
+  // own RGA team; an admin below level_4 (Afnan) picks agent duties or the
+  // in-house admin tools. The server decides who is offered it
+  // (can_toggle_view) and what "own" narrows; this screen only flips it.
+  const adminTools = adminActive(user);
+  const viewIsFull = user?.view_mode !== 'own';
+  const viewSwitchIsTeam = levelNum(user?.role) >= 4;
+  const onToggleView = async (full: boolean) => {
+    try {
+      await setViewMode(full ? 'full' : 'own');
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'The view could not be changed');
+    }
+  };
 
   const replayTour = () => {
     if (!user || user.role === 'pending' || !user.agent_id) return;
@@ -31,7 +46,7 @@ export default function MoreScreen() {
   };
 
   const items: { id: string; icon: any; label: string; onPress: () => void; show: boolean }[] = [
-    { id: 'admin', icon: 'shield-checkmark', label: 'Admin Panel', onPress: () => router.push('/admin'), show: !!user?.is_admin },
+    { id: 'admin', icon: 'shield-checkmark', label: 'Admin Panel', onPress: () => router.push('/admin'), show: adminTools },
     { id: 'nominations', icon: 'medal', label: 'Platinum Nominations', onPress: () => router.push('/nominations'), show: lvl >= 2 },
     // Eraser access was opened from RGA-only to MGA+RGA on the backend
     // (/api/manager/erase is level_3+); it's scoped to the caller's own
@@ -41,9 +56,9 @@ export default function MoreScreen() {
     // Audit + vault reads carry no agent-identity requirement, so per owner
     // (2026-09-01) is_admin gets them too — see has_full_control() in
     // backend/server.py.
-    { id: 'audit', icon: 'list', label: 'Audit Log', onPress: () => router.push('/audit'), show: lvl >= 4 || !!user?.is_admin },
-    { id: 'vault', icon: 'stats-chart', label: 'Company Health', onPress: () => router.push('/vault'), show: lvl >= 4 || !!user?.is_admin },
-    { id: 'push-log', icon: 'notifications-off', label: 'Push Delivery Log', onPress: () => router.push('/push-log'), show: lvl >= 4 || !!user?.is_admin },
+    { id: 'audit', icon: 'list', label: 'Audit Log', onPress: () => router.push('/audit'), show: lvl >= 4 || adminTools },
+    { id: 'vault', icon: 'stats-chart', label: 'Company Health', onPress: () => router.push('/vault'), show: lvl >= 4 || adminTools },
+    { id: 'push-log', icon: 'notifications-off', label: 'Push Delivery Log', onPress: () => router.push('/push-log'), show: lvl >= 4 || adminTools },
     // The Easter egg (per owner, 2026-09-17): a straight shot to the weekly
     // top-producer sheet for the accounts on SECRET_SAUCE_EMAILS. The server
     // decides who sees it (`secret_sauce` on the session) and still gates
@@ -78,6 +93,36 @@ export default function MoreScreen() {
             </View>
           </View>
         </View>
+
+        {user?.can_toggle_view ? (
+          <>
+            <Text style={styles.kicker}>{viewSwitchIsTeam ? 'VIEW' : 'ADMIN MODE'}</Text>
+            <View style={[styles.viewCard, accountBusy && styles.itemBusy]} testID="view-mode-card">
+              <View style={{ flex: 1 }}>
+                <Text style={styles.viewTitle} testID="view-mode-label">
+                  {viewSwitchIsTeam
+                    ? (viewIsFull ? 'Entire company' : `My RGA team${agent?.office ? ` · ${agent.office}` : ''}`)
+                    : (viewIsFull ? 'In-house admin' : 'Agent duties')}
+                </Text>
+                <Text style={styles.viewNote}>
+                  {viewSwitchIsTeam
+                    ? 'On: every office. Off: only the team under you — dashboard, Platinum Wall, offices and Team tab all follow it.'
+                    : 'On: the admin tools and agency-wide actions. Off: your own numbers and your team, as any agent sees them.'}
+                </Text>
+              </View>
+              <Switch
+                value={viewIsFull}
+                onValueChange={onToggleView}
+                disabled={accountBusy}
+                trackColor={{ false: COLORS.surface2, true: COLORS.primary }}
+                thumbColor="#fff"
+                ios_backgroundColor={COLORS.surface2}
+                accessibilityLabel={viewSwitchIsTeam ? 'Company-wide view' : 'In-house admin mode'}
+                testID="view-mode-switch"
+              />
+            </View>
+          </>
+        ) : null}
 
         {agent ? (
           <>
@@ -218,6 +263,13 @@ const styles = StyleSheet.create({
   logoutTxt: { color: COLORS.red, fontWeight: '800' },
   footer: { color: COLORS.textMuted, fontSize: 10, textAlign: 'center', marginTop: 24 },
   switchCard: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderLeftWidth: 3, borderLeftColor: COLORS.yellow, borderRadius: 6, padding: 12 },
+  viewCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    borderLeftWidth: 3, borderLeftColor: COLORS.primary, borderRadius: 6, padding: 12,
+  },
+  viewTitle: { color: '#fff', fontWeight: '900', fontSize: 14 },
+  viewNote: { color: COLORS.textDim, fontSize: 11, marginTop: 4, lineHeight: 15 },
   switchNote: { color: COLORS.textDim, fontSize: 11, marginBottom: 10 },
   switchRow: { flexDirection: 'row', gap: 6 },
   switchBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface2 },

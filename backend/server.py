@@ -357,6 +357,58 @@ def user_is_admin(user: Dict[str, Any]) -> bool:
     return bool(user.get("is_admin")) or str(user.get("email", "")).lower() in ADMIN_EMAILS
 
 
+# View mode (owner, 2026-09-19, two of MJ's requests folded into one switch
+# on the More tab). A user whose reach is wider than their own place in the
+# hierarchy can choose to look at the app from that place instead:
+#
+#   * MJ (level_4 + admin) flips between the whole company — his default,
+#     "the entire kit and caboodle" — and his own RGA team only.
+#   * Afnan (level_1 + the in-house admin grant) flips between her ordinary
+#     agent duties and the admin tools. Morgan, who is admin without an agent
+#     link, has nothing to narrow to and gets no switch.
+#
+# "own" narrows READ scope for a level_4 (visible_agent_ids and friends
+# return their downline instead of the whole agency) and, for an admin below
+# level_4, makes the read paths treat them as the plain agent they are. It is
+# a preference about what the person is looking at, never a security
+# boundary: the is_admin grant itself is untouched, every require_admin
+# route keeps honouring it, and flipping back needs no re-login.
+VIEW_MODE_FULL = "full"
+VIEW_MODE_OWN = "own"
+VIEW_MODES = {VIEW_MODE_FULL, VIEW_MODE_OWN}
+
+
+def user_view_mode(user: Dict[str, Any]) -> str:
+    mode = user.get("view_mode")
+    return mode if mode in VIEW_MODES else VIEW_MODE_FULL
+
+
+def user_can_toggle_view(user: Dict[str, Any]) -> bool:
+    """Only someone with both a wider reach (admin) and a place in the
+    hierarchy to narrow to (a linked producer tier) has two views to choose
+    between. A level_4 who is not an admin already reads the agency, but
+    narrowing is MJ's request, not a general RGA feature — see CLAUDE.md."""
+    return user_is_admin(user) and bool(user.get("agent_id")) \
+        and str(user.get("role", "")).startswith("level_")
+
+
+def user_reads_own_only(user: Dict[str, Any]) -> bool:
+    """True when the caller has chosen the narrow view and is entitled to it."""
+    return user_can_toggle_view(user) and user_view_mode(user) == VIEW_MODE_OWN
+
+
+def user_admin_active(user: Dict[str, Any]) -> bool:
+    """The admin grant as the READ paths should see it. A level_4 admin keeps
+    it in either view (their switch is about which team, not which job); an
+    admin below level_4 in the narrow view is, for reads, the agent they are.
+    Write and admin routes never consult this — they use user_is_admin."""
+    if not user_is_admin(user):
+        return False
+    if role_level(user.get("role")) >= 4:
+        return True
+    return not user_reads_own_only(user)
+
+
 def user_may_export(user: Dict[str, Any]) -> bool:
     """Reconciliation exports are restricted to EXPORT_EMAILS, not to admins
     generally — see the constant for why. finance_admin is the one role that
@@ -774,6 +826,11 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
     user["can_export"] = user_may_export(user)
     user["secret_sauce"] = user_has_secret_sauce(user)
     user["can_switch_role"] = bool(user.get("can_switch_role"))
+    # The More-tab view switch (see VIEW_MODES). Normalised here so the client
+    # never sees an unset or stale value, and can_toggle_view is the server's
+    # answer to whether the switch should be offered at all.
+    user["view_mode"] = user_view_mode(user)
+    user["can_toggle_view"] = user_can_toggle_view(user)
     # A non-producing team member (app developer, office support) keeps their
     # real RBAC tier for access, but must not be LABELLED as a producer tier
     # anywhere others can see: their own io_role title is the label.
@@ -892,6 +949,8 @@ async def team_scope_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
     but only your own downline is actionable.
     """
     role = user.get("role", "level_1")
+    if role == "level_4" and user_reads_own_only(user):
+        return await downline_agent_ids(user["agent_id"])  # MJ's "my RGA team" view
     if role == "level_4" or role == FINANCE_ADMIN_ROLE:
         return None  # full agency, same as visible_agent_ids
     if role == "level_1":
@@ -909,6 +968,10 @@ async def team_scope_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
 async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
     """Return list of agent_ids visible to this user, or None for full access (level_4)."""
     role = user.get("role", "level_1")
+    if role == "level_4" and user_reads_own_only(user):
+        # The narrow view (see VIEW_MODE_OWN): a level_4 admin reading only
+        # the team under them, which is their office.
+        return await downline_agent_ids(user["agent_id"])
     if role == "level_4" or role == FINANCE_ADMIN_ROLE:
         return None  # full agency — finance_admin gets level_4's read scope, never write
     agent_id = user.get("agent_id")
@@ -1186,7 +1249,9 @@ async def dashboard_platinum_wall(
     # weekly/monthly ranges identically to the summary above it.
     q, _ = scoreboard_window(period or "daily", sales_day)
     role = user.get("role", "level_1")
-    if role == "level_4" or role == FINANCE_ADMIN_ROLE:
+    if role == "level_4" and user_reads_own_only(user):
+        q["agent_id"] = {"$in": await downline_agent_ids(user["agent_id"])}  # narrow view
+    elif role == "level_4" or role == FINANCE_ADMIN_ROLE:
         pass  # full agency — no scoping, same as before
     elif role == "level_1":
         me = await db.agent_profiles.find_one({"agent_id": user.get("agent_id")}, {"_id": 0, "office": 1})
@@ -2142,7 +2207,10 @@ async def team_view(
         r.setdefault("rank_of", None)
 
     my_downline: Optional[set] = None  # None = everyone (level_4 / admin reach)
-    if role_level(user.get("role")) < 4 and not user_is_admin(user) \
+    # user_admin_active, not user_is_admin: an admin below level_4 who has
+    # switched to the agent view (VIEW_MODE_OWN) reads this board as the
+    # agent they are, so office peers are not marked as theirs to act on.
+    if role_level(user.get("role")) < 4 and not user_admin_active(user) \
             and not user_is_finance_admin(user) and user.get("agent_id"):
         my_downline = set(await downline_agent_ids(user["agent_id"])) - {user["agent_id"]}
     for row in out:
@@ -3541,6 +3609,10 @@ class AdminSetFlagsIn(BaseModel):
 
 class SelfRoleIn(BaseModel):
     role: str  # level_1..level_4
+
+
+class SelfViewModeIn(BaseModel):
+    view_mode: str  # "full" | "own"
 
 
 def _login_ts(value: Any) -> Optional[str]:
@@ -5781,6 +5853,22 @@ async def self_set_role(payload: SelfRoleIn, user: Dict[str, Any] = Depends(requ
     })
     fresh = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return {"ok": True, "user": fresh, "role_label": LEVELS.get(payload.role, payload.role)}
+
+
+@api_router.post("/me/view-mode")
+async def self_set_view_mode(payload: SelfViewModeIn, user: Dict[str, Any] = Depends(get_current_user)):
+    """The More-tab view switch (owner, 2026-09-19). A preference on the
+    caller's own users doc, nothing more: it changes what the read paths show
+    them (see VIEW_MODES), not what they are allowed to do, so it is neither
+    audited nor gated beyond "does this account have two views to choose
+    from". Stored server-side rather than on the device so the choice follows
+    the person across phone and web, and so the scope helpers can read it."""
+    if payload.view_mode not in VIEW_MODES:
+        raise HTTPException(status_code=400, detail="view_mode must be 'full' or 'own'")
+    if not user_can_toggle_view(user):
+        raise HTTPException(status_code=403, detail="This account has only one view")
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"view_mode": payload.view_mode}})
+    return {"ok": True, "view_mode": payload.view_mode}
 
 
 # Mount router & app
