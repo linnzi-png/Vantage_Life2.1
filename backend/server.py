@@ -131,6 +131,21 @@ LOW_AVG_DEAL_USD = 1200
 # team_view so the client cannot be the thing that decides it.
 UPLINE_ONLY_ALERTS = {"low_close_ratio", "low_avg_deal", "no_pulse"}
 
+# Push Month (owner, 2026-09-19, confirmed by MJ in the App Testing Crew
+# thread): one company-wide Gross ALP goal across all four offices, running
+# from the 2026-09-18 sales day through 2026-10-30 — "a running countdown
+# starting today till Oct 30, every policy written makes countdown go up."
+# No per-office sub-goals and no per-team breakdown. The window is expressed
+# in sales days, so the 6 AM Detroit boundary (sales_day_for) is what decides
+# which side of the start a policy lands on. Env-overridable so the next
+# campaign is a config change, not a deploy.
+PUSH_GOAL_ALP = float(os.environ.get("PUSH_GOAL_ALP", "2000000"))
+PUSH_GOAL_START_DAY = os.environ.get("PUSH_GOAL_START_DAY", "2026-09-18")
+PUSH_GOAL_END_DAY = os.environ.get("PUSH_GOAL_END_DAY", "2026-10-30")
+PUSH_GOAL_LABEL = os.environ.get("PUSH_GOAL_LABEL", "Push Month: Let's Hit Two Million Together")
+# The "$X remaining" callout joins the fill bar for the final stretch only.
+PUSH_GOAL_COUNTDOWN_PCT = 80.0
+
 
 def _leaderboard_group(row: Dict[str, Any]) -> str:
     """Which board a Team tab row is ranked on: "leader" for level_2+ (they
@@ -1283,6 +1298,100 @@ async def dashboard_offices(
             "avg_deal": round(avg, 2),
         })
     return {"offices": out, "period": period or "daily"}
+
+
+@api_router.get("/dashboard/push-goal")
+async def dashboard_push_goal(user: Dict[str, Any] = Depends(require_agent_or_finance_admin)):
+    """The Push Month centerpiece: company-wide Gross ALP since the campaign's
+    first sales day against PUSH_GOAL_ALP, plus the two breakdowns the detail
+    view opens — by sales day and by office.
+
+    Deliberately NOT scoped by visible_agent_ids (owner, 2026-09-19): the goal
+    is the whole company's, and MJ's brief is that every agent watches the
+    same number climb. That makes this the second documented place a level_1
+    reads past their own office (the first is the Team tab), and it is read
+    scope for four office totals only — no per-agent figures leave here.
+
+    Everything is keyed on sales_day, never submitted_at, so a backfilled entry
+    counts on the night it was sold, and the 6 AM boundary is decided once, by
+    sales_day_for(), the same as everywhere else.
+    """
+    today = current_sales_day_str()
+    start = date.fromisoformat(PUSH_GOAL_START_DAY)
+    end = date.fromisoformat(PUSH_GOAL_END_DAY)
+    today_d = date.fromisoformat(today)
+    window: Dict[str, Any] = {"sales_day": {"$gte": start.isoformat(), "$lte": end.isoformat()}}
+
+    by_day_raw: Dict[str, Dict[str, Any]] = {}
+    async for d in db.production_entries.aggregate([
+        {"$match": window},
+        {"$group": {"_id": "$sales_day",
+                    "gross_alp": {"$sum": "$gross_alp"},
+                    "sales": {"$sum": "$sales"}}},
+    ]):
+        by_day_raw[d["_id"]] = d
+    # Every day from the start through today (or the end, once it has passed)
+    # is listed, zero nights included: a gap in the list would read as a
+    # missing day, not a quiet one.
+    last_listed = min(today_d, end)
+    by_day = []
+    cursor = start
+    while cursor <= last_listed:
+        key = cursor.isoformat()
+        d = by_day_raw.get(key, {})
+        by_day.append({
+            "sales_day": key,
+            "alp": round(float(d.get("gross_alp") or 0), 2),
+            "sales": int(d.get("sales") or 0),
+        })
+        cursor += timedelta(days=1)
+
+    # Office comes from the roster, not the entry, so a person moved between
+    # offices carries their production with them — the same rule
+    # dashboard_offices follows.
+    office_of = await agent_office_map()
+    by_office_raw: Dict[str, Dict[str, float]] = {}
+    async for d in db.production_entries.aggregate([
+        {"$match": window},
+        {"$group": {"_id": "$agent_id",
+                    "gross_alp": {"$sum": "$gross_alp"},
+                    "sales": {"$sum": "$sales"}}},
+    ]):
+        office = office_of.get(d["_id"]) or UNASSIGNED_OFFICE
+        bucket = by_office_raw.setdefault(office, {"gross_alp": 0.0, "sales": 0})
+        bucket["gross_alp"] += float(d.get("gross_alp") or 0)
+        bucket["sales"] += int(d.get("sales") or 0)
+    # Every office on the roster is listed even at $0, so the four teams always
+    # appear side by side; sorted by ALP so the leader reads first.
+    for office in await db.agent_profiles.distinct("office", ACTIVE_AGENT):
+        by_office_raw.setdefault(office or UNASSIGNED_OFFICE, {"gross_alp": 0.0, "sales": 0})
+    by_office = sorted(
+        ({"office": o, "alp": round(v["gross_alp"], 2), "sales": int(v["sales"])} for o, v in by_office_raw.items()),
+        key=lambda r: (-r["alp"], r["office"]),
+    )
+
+    total_alp = round(sum(r["alp"] for r in by_day), 2)
+    total_sales = sum(r["sales"] for r in by_day)
+    pct = metrics.goal_progress(total_alp, PUSH_GOAL_ALP)
+    return {
+        "label": PUSH_GOAL_LABEL,
+        "goal_alp": PUSH_GOAL_ALP,
+        "start_day": start.isoformat(),
+        "end_day": end.isoformat(),
+        "today": today,
+        # Whole sales days left after today; 0 on the final day.
+        "days_remaining": max((end - today_d).days, 0),
+        "started": today_d >= start,
+        "ended": today_d > end,
+        "total_alp": total_alp,
+        "total_sales": total_sales,
+        "pct": round(pct, 2),
+        "remaining_alp": round(max(PUSH_GOAL_ALP - total_alp, 0.0), 2),
+        "countdown_pct": PUSH_GOAL_COUNTDOWN_PCT,
+        "show_countdown": pct >= PUSH_GOAL_COUNTDOWN_PCT,
+        "by_day": by_day,
+        "by_office": by_office,
+    }
 
 
 # =========================================================

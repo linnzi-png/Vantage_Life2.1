@@ -42,3 +42,13 @@ def show_rate(sits: int, n1: int, sets: int) -> float:
     Returns 0 when no appointments were set.
     """
     return ((sits + n1) / sets * 100) if sets > 0 else 0
+
+
+def goal_progress(total: float, goal: float) -> float:
+    """Progress toward a production goal, as a percentage of the goal.
+
+    Not capped at 100: once a push campaign crosses its goal the dashboard
+    should be able to say how far past it the office went. Returns 0 for a
+    non-positive goal, so a misconfigured campaign never divides by zero.
+    """
+    return (total / goal * 100) if goal > 0 else 0
