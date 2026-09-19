@@ -11,6 +11,7 @@ import { Modal, View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform }
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../lib/auth';
 import { PushGoalData, fmtWhole, fmtCompact } from './PushGoal';
+import { DISPLAY_FONT, useDisplayFonts } from '../lib/fonts';
 
 function fmtDay(d: string): string {
   const [y, m, dd] = d.split('-').map(Number);
@@ -28,7 +29,9 @@ function Bar({ value, max, color }: { value: number; max: number; color: string 
 }
 
 export function PushGoalDetail({ data, onClose }: { data: PushGoalData | null; onClose: () => void }) {
+  const fontsReady = useDisplayFonts();
   if (!data) return null;
+  const display = fontsReady ? { fontFamily: DISPLAY_FONT.extrabold, fontWeight: 'normal' as const, fontSize: 32, letterSpacing: 0 } : null;
   const officeMax = Math.max(...data.by_office.map((o) => o.alp), 0);
   const dayMax = Math.max(...data.by_day.map((d) => d.alp), 0);
   // Newest night first — that is the one everybody opens this for.
@@ -51,7 +54,7 @@ export function PushGoalDetail({ data, onClose }: { data: PushGoalData | null; o
           <View style={styles.head}>
             <View style={{ flex: 1 }}>
               <Text style={styles.kicker}>PUSH MONTH · BREAKDOWN</Text>
-              <Text style={styles.title}>{fmtWhole(data.total_alp)} <Text style={styles.titleDim}>OF {fmtCompact(data.goal_alp).toUpperCase()}</Text></Text>
+              <Text style={[styles.title, display]}>{fmtWhole(data.total_alp)} <Text style={styles.titleDim}>OF {fmtCompact(data.goal_alp).toUpperCase()}</Text></Text>
             </View>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close">
               <Ionicons name="close" size={22} color={COLORS.textDim} />

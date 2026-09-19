@@ -9,6 +9,7 @@ import { TourProvider } from '../src/lib/tour';
 import { TourOverlay } from '../src/components/TourOverlay';
 import NotificationNagOverlay from '../src/components/NotificationNagOverlay';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
+import { useDisplayFonts } from '../src/lib/fonts';
 
 // Keep the splash visible until the layout tree is mounted.
 // Without this, the splash auto-hides before React has painted the dark
@@ -17,6 +18,11 @@ import { ErrorBoundary } from '../src/components/ErrorBoundary';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  // Starts the display faces loading at launch so the dashboard's Push Month
+  // card usually has them by the time it paints. Not awaited: the splash
+  // hides on layout as before, and the card falls back to the system font
+  // until the files land.
+  useDisplayFonts();
   useEffect(() => {
     // Hide once the root layout has rendered.  Auth state is still loading
     // at this point, but the dark GestureHandlerRootView is already on screen,

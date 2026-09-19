@@ -15,6 +15,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, LayoutChang
 import Svg, { Defs, LinearGradient, Stop, Rect, Pattern, Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../lib/auth';
+import { DISPLAY_FONT, useDisplayFonts } from '../lib/fonts';
 
 export interface PushGoalDay { sales_day: string; alp: number; sales: number; }
 export interface PushGoalOffice { office: string; alp: number; sales: number; }
@@ -65,6 +66,13 @@ export default function PushGoal({ data, onPress, testID = 'push-goal' }: {
   testID?: string;
 }) {
   const [trackW, setTrackW] = useState(0);
+  // Barlow Condensed for the title, the big number and the callouts — the
+  // one place in the app the display face is used, which is what makes the
+  // card read as the campaign centerpiece rather than another stat card.
+  // Weight rides on the file, so these styles set no fontWeight.
+  const fontsReady = useDisplayFonts();
+  const display = fontsReady ? { fontFamily: DISPLAY_FONT.extrabold, fontWeight: 'normal' as const } : null;
+  const displaySemi = fontsReady ? { fontFamily: DISPLAY_FONT.semibold, fontWeight: 'normal' as const } : null;
   // Animated.Values held in state initializers rather than refs: they are
   // created once and mutated in place by the animations, exactly as a ref
   // would be, but the interpolations below are read during render and the
@@ -126,21 +134,21 @@ export default function PushGoal({ data, onPress, testID = 'push-goal' }: {
       <Animated.View style={[styles.head, entrance(0)]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.kicker}>PUSH MONTH</Text>
-          <Text style={styles.title}>{data.label.replace(/^Push Month:\s*/i, '').toUpperCase()}</Text>
+          <Text style={[styles.title, display, fontsReady && styles.titleDisplay]}>{data.label.replace(/^Push Month:\s*/i, '').toUpperCase()}</Text>
         </View>
         <View style={[styles.daysChip, data.days_remaining <= 7 && data.started && !data.ended && styles.daysChipUrgent]}>
           <Ionicons name="hourglass-outline" size={11} color={COLORS.gold} />
-          <Text style={styles.daysTxt} testID="push-goal-days">{daysLabel(data)}</Text>
+          <Text style={[styles.daysTxt, displaySemi, fontsReady && styles.daysTxtDisplay]} testID="push-goal-days">{daysLabel(data)}</Text>
         </View>
       </Animated.View>
 
       <Animated.View style={[styles.figures, entrance(1)]}>
-        <Text style={styles.total} testID="push-goal-total" numberOfLines={1} adjustsFontSizeToFit>
+        <Text style={[styles.total, display, fontsReady && styles.totalDisplay]} testID="push-goal-total" numberOfLines={1} adjustsFontSizeToFit>
           {fmtWhole(data.total_alp)}
         </Text>
         <View style={styles.goalCol}>
           <Text style={styles.ofGoal}>OF {fmtCompact(data.goal_alp).toUpperCase()}</Text>
-          <Text style={[styles.pct, reached && { color: COLORS.gold }]} testID="push-goal-pct">
+          <Text style={[styles.pct, display, fontsReady && styles.pctDisplay, reached && { color: COLORS.gold }]} testID="push-goal-pct">
             {data.pct.toFixed(data.pct >= 10 ? 0 : 1)}%
           </Text>
         </View>
@@ -189,12 +197,12 @@ export default function PushGoal({ data, onPress, testID = 'push-goal' }: {
         {reached ? (
           <View style={[styles.callout, styles.calloutReached]} testID="push-goal-reached">
             <Ionicons name="trophy" size={14} color="#000" />
-            <Text style={[styles.calloutTxt, { color: '#000' }]} numberOfLines={1} adjustsFontSizeToFit>GOAL HIT · {fmtWhole(data.total_alp - data.goal_alp)} OVER</Text>
+            <Text style={[styles.calloutTxt, display, fontsReady && styles.calloutTxtDisplay, { color: '#000' }]} numberOfLines={1} adjustsFontSizeToFit>GOAL HIT · {fmtWhole(data.total_alp - data.goal_alp)} OVER</Text>
           </View>
         ) : data.show_countdown ? (
           <Animated.View style={[styles.callout, { transform: [{ scale: calloutScale }] }]} testID="push-goal-countdown">
             <Ionicons name="flash" size={14} color={COLORS.gold} />
-            <Text style={styles.calloutTxt} numberOfLines={1} adjustsFontSizeToFit>{fmtWhole(data.remaining_alp)} TO GO</Text>
+            <Text style={[styles.calloutTxt, display, fontsReady && styles.calloutTxtDisplay]} numberOfLines={1} adjustsFontSizeToFit>{fmtWhole(data.remaining_alp)} TO GO</Text>
           </Animated.View>
         ) : (
           <Text style={styles.footTxt}>
@@ -258,4 +266,11 @@ const styles = StyleSheet.create({
   calloutTxt: { color: COLORS.gold, fontSize: 12, fontWeight: '900', letterSpacing: 1, fontVariant: ['tabular-nums'] },
   more: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   moreTxt: { color: COLORS.textDim, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  // Condensed metrics: the display face sets tighter and taller than the
+  // system font, so each use gets its own size and tracking once loaded.
+  titleDisplay: { fontSize: 22, lineHeight: 24, letterSpacing: 0.6 },
+  daysTxtDisplay: { fontSize: 13, letterSpacing: 1.2 },
+  totalDisplay: { fontSize: 52, lineHeight: 54, letterSpacing: -0.5 },
+  pctDisplay: { fontSize: 24, letterSpacing: 0 },
+  calloutTxtDisplay: { fontSize: 17, letterSpacing: 1.4 },
 });
