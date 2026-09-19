@@ -257,7 +257,7 @@ const TEAM_STEPS: TourStep[] = [
     screen: '/team',
     anchor: 'team-missing',
     title: 'MISSING TONIGHT',
-    body: "Agents who haven't submitted their Pulse show up in the MISSING TONIGHT card. Tap ENTER ALL to walk their entries back-to-back — as their upline you can submit for anyone on your team, up to 7 sales days back.",
+    body: "Agents who haven't submitted their Pulse show up in the MISSING TONIGHT card. Tap it for the full list by team and by night, and enter anyone's numbers from there — as their upline you can submit for anyone on your team, up to 7 sales days back.",
   },
   {
     id: 'noms-inbox',

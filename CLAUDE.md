@@ -66,6 +66,20 @@ Three things are deliberately NOT widened with it:
   `in_my_downline` so the client only offers those actions where they would
   succeed; the Team tab also uses it for the MY TEAM / MY OFFICE filter.
 
+**Missing Numbers (per owner, 2026-09-19, MJ's request):** `GET
+/api/team/missing` lists, for each of the last 7 sales days (max 14), who has
+not submitted, grouped by team — every producer filed under the nearest
+level_2 in their chain (a level_2 heads their own section; someone straight
+under an MGA/RGA files under that upline). It is a grouping of the hierarchy,
+never a permission, and no access decision reads a title. Scope is the
+caller's own **downline** (level_2+ only; level_4 sees every team), because
+the panel exists to enter numbers on people's behalf and that write is
+downline-only. Same candidate rule as the 9 PM escalation: active level_1 and
+level_2 producers, minus non-producing staff. The screen is
+`frontend/app/missing.tsx`, opened from the Team tab's MISSING TONIGHT card;
+tapping a person opens `QuickEntryForm` aimed at that night
+(`initialSalesDay`), ENTER ALL walks one team's list.
+
 **Tier changes by an upline (per owner, 2026-09-14):** `POST /api/team/set-tier`
 lets an upline change the access tier of someone in their **own downline**, in
 either direction, and only to a tier **strictly below their own** — an MGA may

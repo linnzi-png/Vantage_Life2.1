@@ -2,7 +2,7 @@
 // stepping. Built for uplines (level_2+) entering on behalf of a downline
 // agent, where speed matters more than the guided one-field-at-a-time flow
 // self-entry uses (that flow stays untouched in pulse.tsx).
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Modal, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
@@ -35,6 +35,11 @@ interface Props {
   onSubmitted: (agentId: string) => void;
   hasNext?: boolean;
   onNext?: () => void;
+  // Preselects the day chip. The Missing Numbers panel opens this on a past
+  // night, and asking the leader to re-pick the day they just tapped would
+  // invite entering it against tonight instead. Must be inside the upline
+  // window; anything else falls back to tonight.
+  initialSalesDay?: string;
 }
 
 type FormState = Record<PulseFieldKey, string>;
@@ -55,11 +60,21 @@ function buildPayload(form: FormState): PulsePayload {
   return out as PulsePayload;
 }
 
-export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext }: Props) {
+export function QuickEntryForm({ target, onClose, onSubmitted, hasNext, onNext, initialSalesDay }: Props) {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [nifSubmitting, setNifSubmitting] = useState(false);
   const [salesDay, setSalesDay] = useState<string>(currentSalesDay());
+  // Re-aim the day whenever a new target opens with one; a target without one
+  // resets to tonight so a past day never carries over to the next person.
+  useEffect(() => {
+    if (!target) return;
+    const wanted = initialSalesDay && recentSalesDays(UPLINE_WINDOW_DAYS).includes(initialSalesDay)
+      ? initialSalesDay : currentSalesDay();
+    // Syncing a prop into the picker's state when the sheet (re)opens.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSalesDay(wanted);
+  }, [target, initialSalesDay]);
   // Persists across a failed submit so a retry reuses the same idempotency
   // key; reset only after the server confirms the write.
   const pendingEntryId = useRef<string | null>(null);
