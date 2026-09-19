@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, A
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS, useAuth, levelNum, roleTitle, isFinanceAdmin, Role } from '../../src/lib/auth';
+import { api, COLORS, useAuth, levelNum, roleTitle, isFinanceAdmin, adminActive, Role } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
 import { ChangeTierSheet } from '../../src/components/ChangeTierSheet';
 import { QuickEntryForm, QuickEntryTarget } from '../../src/components/QuickEntryForm';
@@ -150,7 +150,9 @@ export default function TeamScreen() {
   // an office peer's card offers nothing an upline could not actually do.
   // is_admin and finance_admin act agency-wide at the same cap, which is why
   // they bypass it. Only ever a hint: /api/team/set-tier re-checks every part.
-  const agencyWide = !!user?.is_admin || isFinanceAdmin(user?.role);
+  // adminActive, not is_admin: an admin who has switched to the agent view
+  // (More tab) should not be offered agency-wide actions on this board.
+  const agencyWide = adminActive(user) || isFinanceAdmin(user?.role);
   const canChangeTierRow = (r: TeamRow) =>
     !r.archived && r.agent_id !== user?.agent_id && r.role !== 'level_4' &&
     (agencyWide || canRemoveRow(r));

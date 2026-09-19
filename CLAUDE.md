@@ -79,6 +79,22 @@ active direct reports may be lowered (their branch would go dark to them) —
 reassign first. Every change is audit-logged as `set_role` and syncs the linked
 login so it applies without a re-login.
 
+**The view switch (per owner, 2026-09-19):** one preference on the users doc,
+`view_mode` (`full` | `own`), set by the More tab through
+`POST /api/me/view-mode` and offered only where `user_can_toggle_view()` —
+an `is_admin` account with a linked producer tier. Two meanings by tier:
+MJ (level_4 + admin) flips between the whole company and his own RGA team
+(`visible_agent_ids`, `team_scope_agent_ids` and the Platinum Wall return his
+downline in `own`); Afnan (level_1 + the in-house admin grant) flips between
+agent duties and the admin tools (`user_admin_active()` is what the read
+paths consult, so in `own` the Team tab marks office peers as not hers and
+the client hides the admin menu). It is a preference about what the person
+is looking at, never a security boundary: `is_admin` is untouched, every
+`require_admin` route keeps honouring it, and no re-login is needed. Morgan
+(admin, no agent link) has nothing to narrow to and is not offered it; plain
+RGAs are not offered it either — narrowing is MJ's request, not a general
+RGA feature. The in-house admin grant itself is still `/api/admin/set-flags`.
+
 Display titles (producer track) are separate from access tiers. `io_role`
 titles map via `roleTitle()` in `frontend/src/lib/auth.tsx`: SA → Regional
 Producer, GA → CoExecutive Producer, MGA → Executive Producer, RGA → Chief
