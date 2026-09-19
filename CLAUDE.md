@@ -192,6 +192,15 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
   never re-derive it from roles. Read scope (`visible_agent_ids`) is
   deliberately wider than this and must not be conflated with it.
   (Owner, 2026-09-13.)
+- Push Month (owner, 2026-09-19; confirmed by MJ): one company-wide Gross ALP
+  goal of $2,000,000 across all four offices, from the 2026-09-18 sales day
+  through 2026-10-30, drawn at the top of the dashboard. Fill bar throughout;
+  a "$X to go" callout joins it at 80%; days-left always shown. Tapping opens
+  ALP by day and by office. No per-office sub-goals and no per-team widget
+  (MJ declined). Constants `PUSH_GOAL_*` in `backend/server.py` are
+  env-overridable so the next campaign is config, not code. Keyed on
+  `sales_day` like everything else — the 6 AM boundary decides which side of
+  the start a policy lands on.
 - All metric calculations go in `backend/metrics.py`, never inline in route handlers
 
 ## Commands
@@ -209,7 +218,7 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 
 ## Forbidden Patterns
 - NEVER subtract N1 from Sits — Sits already excludes them; subtracting double-counts the exclusion
-- NEVER allow an Agent to see data above their RBAC tier — the one documented exception is the Team tab's own-office read and the agent card it opens (see RBAC Hierarchy above); don't generalize it or extend it to other routes without an explicit owner decision
+- NEVER allow an Agent to see data above their RBAC tier — the two documented exceptions are the Team tab's own-office read and the agent card it opens (see RBAC Hierarchy above), and the Push Month goal (`GET /api/dashboard/push-goal`, owner 2026-09-19): one company-wide Gross ALP total with by-day and by-office splits, read by every tier, never per-agent; don't generalize either or extend them to other routes without an explicit owner decision
 - NEVER change the 6AM cycle boundary without explicit instruction
 - NEVER bypass the Wednesday 2PM cutoff gate
 - NEVER collapse authentication and authorization into a single check

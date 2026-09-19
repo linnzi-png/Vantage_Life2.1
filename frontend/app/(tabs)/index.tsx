@@ -14,6 +14,8 @@ import { AgentHistory } from '../../src/components/AgentHistory';
 import { PeriodSelector, usePersistedPeriod, Period } from '../../src/components/PeriodSelector';
 import { TourAnchor } from '../../src/components/TourAnchor';
 import { LoadState } from '../../src/components/LoadState';
+import PushGoal, { PushGoalData } from '../../src/components/PushGoal';
+import { PushGoalDetail } from '../../src/components/PushGoalDetail';
 
 interface Summary {
   total_alp: number; total_net_alp: number; total_sits: number; total_sales: number;
@@ -34,6 +36,13 @@ export default function DashboardScreen() {
   const [unranked, setUnranked] = useState<WallItem[]>([]);
   const [platinum, setPlatinum] = useState<PlatinumRulePost[]>([]);
   const [offices, setOffices] = useState<OfficeRow[]>([]);
+  // Push Month (owner, 2026-09-19). Company-wide and unscoped by design, so
+  // it ignores the period and day controls below it: whatever window the
+  // rest of the dashboard is on, the goal is always "since 9/18, to date".
+  // Kept on failure — the last good total is still true, and a campaign
+  // centerpiece flickering out on a flaky poll would be worse than staleness.
+  const [pushGoal, setPushGoal] = useState<PushGoalData | null>(null);
+  const [pushGoalOpen, setPushGoalOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
   // Read-only history: null = live today; a YYYY-MM-DD string = that past sales day.
@@ -96,12 +105,13 @@ export default function DashboardScreen() {
       // the ticker, say — rejected the whole batch, so none of the four
       // setState calls ran, `summary` stayed null, and the screen showed a
       // bare spinner forever. Each section now lands or fails on its own.
-      const [s, t, p, o] = await Promise.allSettled([
+      const [s, t, p, o, g] = await Promise.allSettled([
         api<Summary>(`/api/dashboard/summary${q}`),
         api<{ items: TickerItem[] }>('/api/dashboard/ticker'),
         api<{ vets: WallItem[]; rookies: WallItem[]; unranked?: WallItem[]; platinum_rule?: PlatinumRulePost[] }>(
           `/api/dashboard/platinum-wall${q}`),
         api<{ offices: OfficeRow[] }>(`/api/dashboard/offices${q}`),
+        api<PushGoalData>('/api/dashboard/push-goal'),
       ]);
       // A newer fetchAll() started while this one was in flight — its
       // response (for whatever tab is now selected) already landed or will
@@ -124,6 +134,10 @@ export default function DashboardScreen() {
       // The ticker is unscoped and live, so stale items are still true — a
       // failed tick just leaves the last ones running.
       if (t.status === 'fulfilled') setTicker(t.value.items);
+
+      // Same reasoning as the ticker: the goal is unscoped, so the previous
+      // figure is still true when a refresh fails.
+      if (g.status === 'fulfilled') setPushGoal(g.value);
 
       // The wall and the office tiles ARE scoped, so a failure cannot leave
       // their previous contents standing: they would be presented under the
@@ -230,6 +244,10 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
       >
+        {/* The campaign centerpiece sits above everything, outside the
+            summary's LoadState: it has its own request, and the goal should
+            be on screen even while a period change is re-fetching the rest. */}
+        {pushGoal ? <PushGoal data={pushGoal} onPress={() => setPushGoalOpen(true)} /> : null}
         <LoadState
           // A summary fetched for another window is not an answer for this
           // one, so a period or day change shows the spinner rather than the
@@ -325,6 +343,7 @@ export default function DashboardScreen() {
         <Ticker items={ticker} />
       </TourAnchor>
       <AgentContactSheet agent={contactAgent} onClose={() => setContactAgent(null)} />
+      {pushGoalOpen ? <PushGoalDetail data={pushGoal} onClose={() => setPushGoalOpen(false)} /> : null}
 
       <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setPickerOpen(false)}>
