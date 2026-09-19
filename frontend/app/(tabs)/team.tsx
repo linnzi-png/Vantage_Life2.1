@@ -192,12 +192,6 @@ export default function TeamScreen() {
     setQuickEntryTarget({ agent_id: row.agent_id, name: row.name });
   };
 
-  const startMissingQueue = () => {
-    if (missingTonight.length === 0) return;
-    setMissingQueue(missingTonight.slice(1));
-    setQuickEntryTarget({ agent_id: missingTonight[0].agent_id, name: missingTonight[0].name });
-  };
-
   const advanceQueue = async () => {
     await fetchAll();
     setMissingQueue((q) => {
@@ -434,11 +428,15 @@ export default function TeamScreen() {
         ) : null}
       </View>
 
+      {/* Opens the per-team, per-night panel (owner, 2026-09-19); the
+          ENTER ALL queue lives there now, one team at a time. The card keeps
+          tonight's count from this screen's own rows so it never lags the
+          board it sits on. */}
       {canEnter && missingTonight.length > 0 ? (
         <TourAnchor id="team-missing">
         <TouchableOpacity
           style={styles.missingCard}
-          onPress={startMissingQueue}
+          onPress={() => router.push('/missing')}
           activeOpacity={0.75}
           testID="missing-tonight-card"
         >
@@ -451,7 +449,7 @@ export default function TeamScreen() {
               {missingTonight.slice(0, 3).map((r) => r.name).join(', ')}{missingTonight.length > 3 ? `, +${missingTonight.length - 3} more` : ''}
             </Text>
           </View>
-          <Text style={styles.missingAction}>ENTER ALL</Text>
+          <Text style={styles.missingAction}>BY TEAM</Text>
           <Ionicons name="chevron-forward" size={14} color={COLORS.textDim} />
         </TouchableOpacity>
         </TourAnchor>

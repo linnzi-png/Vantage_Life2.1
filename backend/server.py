@@ -2228,6 +2228,106 @@ async def team_view(
     }
 
 
+MISSING_DAYS_DEFAULT = MAX_UPLINE_BUFFER_DAYS  # the window an upline may still fill
+MISSING_DAYS_MAX = 14
+
+
+@api_router.get("/team/missing")
+async def team_missing(
+    days: int = MISSING_DAYS_DEFAULT,
+    user: Dict[str, Any] = Depends(require_level(2)),
+):
+    """Missing Numbers, per team, per night (owner, 2026-09-19, MJ's request
+    2.3): for each of the last `days` sales days, who on the caller's team has
+    not submitted, broken out by the team they belong to.
+
+    A "team" here is the group an SA or GA runs: every producing agent is
+    filed under the nearest level_2 in their upline chain (a level_2 files
+    under their own name — when an SA misses a night they head their own
+    section). Someone reporting straight to an MGA or RGA with no level_2
+    between files under that upline. This is a grouping of the hierarchy that
+    already exists, never a permission: SA and GA are not special-cased and
+    no access decision reads a title.
+
+    Scope is the caller's own DOWNLINE (downline_agent_ids), not their office:
+    this panel exists to enter numbers on people's behalf, and that write path
+    is downline-only (can_enter_for), so a leader sees exactly the people they
+    can act on. level_4 sees every team, so MJ reads the whole company here
+    as everywhere else. Same candidate rule as the 9 PM escalation
+    (run_pulse_escalation_check): active level_1 and level_2 producers, minus
+    non-producing staff, who have no entry for that sales day.
+    """
+    days = max(1, min(int(days), MISSING_DAYS_MAX))
+    today = date.fromisoformat(current_sales_day_str())
+    day_keys = [(today - timedelta(days=i)).isoformat() for i in range(days)]
+
+    scope_ids = await visible_agent_ids(user)  # None = level_4, whole company
+    roster: Dict[str, Dict[str, Any]] = {
+        a["agent_id"]: a async for a in db.agent_profiles.find(
+            {}, {"_id": 0, "agent_id": 1, "name": 1, "role": 1, "io_role": 1,
+                 "upline_id": 1, "office": 1, "archived": 1, "non_producing": 1})
+    }
+
+    def team_leader_of(agent_id: str) -> Optional[str]:
+        """Nearest level_2 at or above this agent; else the first upline of
+        any tier; None only for someone with no upline at all."""
+        a = roster.get(agent_id)
+        if a and a.get("role") == "level_2":
+            return agent_id
+        seen = set()
+        cur = (a or {}).get("upline_id")
+        fallback = cur
+        while cur and cur not in seen and cur in roster:
+            seen.add(cur)
+            if roster[cur].get("role") == "level_2":
+                return cur
+            cur = roster[cur].get("upline_id")
+        return fallback
+
+    candidates = [
+        a for a in roster.values()
+        if a.get("role") in ("level_1", "level_2")
+        and not a.get("archived") and not a.get("non_producing")
+        and (scope_ids is None or a["agent_id"] in scope_ids)
+        and a["agent_id"] != user.get("agent_id")
+    ]
+    candidate_ids = [a["agent_id"] for a in candidates]
+    submitted: Dict[str, set] = {d: set() for d in day_keys}
+    if candidate_ids:
+        async for e in db.production_entries.find(
+                {"sales_day": {"$in": day_keys}, "agent_id": {"$in": candidate_ids}},
+                {"_id": 0, "agent_id": 1, "sales_day": 1}):
+            submitted.setdefault(e["sales_day"], set()).add(e["agent_id"])
+
+    def person(a: Dict[str, Any]) -> Dict[str, Any]:
+        return {"agent_id": a["agent_id"], "name": a.get("name") or "", "role": a.get("role"),
+                "io_role": a.get("io_role") or "", "office": a.get("office") or ""}
+
+    out_days = []
+    for d in day_keys:
+        teams: Dict[str, List[Dict[str, Any]]] = {}
+        for a in candidates:
+            if a["agent_id"] in submitted.get(d, set()):
+                continue
+            teams.setdefault(team_leader_of(a["agent_id"]) or "", []).append(person(a))
+        team_rows = []
+        for leader_id, missing in teams.items():
+            missing.sort(key=lambda p: p["name"].lower())
+            leader = roster.get(leader_id)
+            team_rows.append({
+                "leader": person(leader) if leader else None,
+                "team_size": sum(1 for a in candidates if (team_leader_of(a["agent_id"]) or "") == leader_id),
+                "missing": missing,
+            })
+        team_rows.sort(key=lambda t: ((t["leader"] or {}).get("name") or "~").lower())
+        out_days.append({
+            "sales_day": d,
+            "total_missing": sum(len(t["missing"]) for t in team_rows),
+            "teams": team_rows,
+        })
+    return {"today": day_keys[0], "days": out_days, "scope": "company" if scope_ids is None else "downline"}
+
+
 @api_router.get("/team/weeks")
 async def team_weeks(user: Dict[str, Any] = Depends(require_level(1))):
     """Reporting weeks that have production for the caller's visible team —
