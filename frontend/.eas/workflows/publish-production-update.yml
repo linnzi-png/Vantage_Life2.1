@@ -45,6 +45,23 @@ on:
       - ota-ready
     if: ${{ github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' }}
 
+# pull_request_labeled checks out the PR's head commit, not main's tip after
+# the merge — the `if:` above only decides whether the run fires, it doesn't
+# change what gets checked out. If main moved between the merge and someone
+# adding the label (another PR landed, or the merge itself resolved
+# conflicts), publishing the PR head would ship a tree that's stale or never
+# actually existed on main. The after_checkout hook below re-points every
+# job at main's real, current tip before anything installs or publishes, so
+# this workflow always ships what's actually live on main — for the label
+# trigger, a manual `eas workflow:run`, or any other trigger added later.
+defaults:
+  hooks:
+    after_checkout:
+      - name: Check out main's current tip
+        run: |
+          git fetch origin main
+          git checkout origin/main
+
 jobs:
   publish_android_update:
     name: Publish Android update
