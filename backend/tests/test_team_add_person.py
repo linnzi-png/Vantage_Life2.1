@@ -123,7 +123,7 @@ async def test_trainee_title_does_not_grant_tier(client, seeded_db):
     token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
     r = await client.post("/api/team/add-person", headers=auth(token),
                           json=person(role="level_2", io_role="inTraining"))
-    assert r.status_code == 403
+    assert r.status_code in (400, 403)  # the Trainee title is pinned to level_1, and level_2 is at/above an SA anyway
 
 
 async def test_mga_adds_ga_at_level_2(client, seeded_db):

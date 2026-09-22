@@ -90,6 +90,16 @@ const TIERS_FOR_FINANCE_ADMIN: Role[] = ['level_1', 'level_sa', 'level_2', 'leve
 const TIERS_FOR_RGA: Role[] = ['level_1', 'level_sa', 'level_2', 'level_3', 'level_4', 'finance_admin'];
 const TIER_SHORT: Record<string, string> = { level_1: 'L1', level_sa: 'SA', level_2: 'L2', level_3: 'L3', level_4: 'L4', finance_admin: 'FA' };
 const IO_ROLES = ['Agent', 'SA', 'GA', 'MGA', 'RGA', 'Partner', 'Senior Partner', 'Builder', 'inTraining'];
+// Tier and title move together on the onboarding form (owner, 2026-09-22):
+// picking a tier selects that tier's default title, and picking a title whose
+// home is Agent, SA or GA selects its tier. The server rejects a mismatched
+// pair (title_tier_mismatch), so this keeps the form from offering one.
+const TIER_DEFAULT_TITLE: Partial<Record<Role, string>> = {
+  level_1: 'Agent', level_sa: 'SA', level_2: 'GA', level_3: 'MGA', level_4: 'RGA',
+};
+const TITLE_HOME_TIER: Record<string, Role | undefined> = {
+  Agent: 'level_1', inTraining: 'level_1', Builder: 'level_1', SA: 'level_sa', GA: 'level_2',
+};
 
 export default function AdminScreen() {
   const router = useRouter();
@@ -483,7 +493,19 @@ export default function AdminScreen() {
             <Text style={styles.lab}>ACCESS TIER</Text>
             <View style={styles.tierRow}>
               {tiersForViewer.map((t) => (
-                <TouchableOpacity key={t} style={[styles.tierBtn, fRole === t && styles.tierBtnOn]} onPress={() => setFRole(t)}>
+                <TouchableOpacity
+                  key={t}
+                  style={[styles.tierBtn, fRole === t && styles.tierBtnOn]}
+                  onPress={() => {
+                    setFRole(t);
+                    const home = TITLE_HOME_TIER[fIoRole];
+                    // Keep a floating title (Partner, MGA on an RGA…) unless it
+                    // belongs to a low tier that no longer matches.
+                    if (TIER_DEFAULT_TITLE[t] && (home !== undefined ? home !== t : levelNum(t) <= 2)) {
+                      setFIoRole(TIER_DEFAULT_TITLE[t] ?? fIoRole);
+                    }
+                  }}
+                >
                   <Text style={[styles.tierTxt, fRole === t && styles.tierTxtOn]}>{TIER_SHORT[t]}</Text>
                 </TouchableOpacity>
               ))}
@@ -519,7 +541,15 @@ export default function AdminScreen() {
                 <Text style={styles.lab}>DISPLAY TITLE (IO ROLE)</Text>
                 <View style={styles.chipWrap}>
                   {IO_ROLES.map((r) => (
-                    <TouchableOpacity key={r} style={[styles.chip, fIoRole === r && styles.chipOn]} onPress={() => setFIoRole(r)}>
+                    <TouchableOpacity
+                      key={r}
+                      style={[styles.chip, fIoRole === r && styles.chipOn]}
+                      onPress={() => {
+                        setFIoRole(r);
+                        const home = TITLE_HOME_TIER[r];
+                        if (home && home !== fRole && tiersForViewer.includes(home)) setFRole(home);
+                      }}
+                    >
                       <Text style={[styles.chipTxt, fIoRole === r && styles.chipTxtOn]}>{roleTitle(r)}</Text>
                     </TouchableOpacity>
                   ))}

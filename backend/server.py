@@ -230,12 +230,43 @@ def is_leader_role(role: Any) -> bool:
     return str(role) in LEADER_ROLES
 
 
+# Default title for each tier, used when an admin's tier button moves someone
+# and their current title belongs to another tier (Partner / Senior Partner are
+# deliberate level_3/level_4 titles and are kept unless the person drops below
+# level_3). Keeps roleTitle() honest: the title never outranks or underranks
+# the tier it sits on.
+TIER_DEFAULT_TITLE = {"level_1": "Agent", SA_ROLE: "SA", "level_2": "GA", "level_3": "MGA", "level_4": "RGA"}
+TITLE_HOME_TIER = {
+    "Agent": "level_1", "inTraining": "level_1", "Builder": "level_1",
+    "SA": SA_ROLE, "GA": "level_2", "MGA": "level_3", "RGA": "level_4",
+}
+_PROTECTED_LEADER_TITLES = {"Partner", "Senior Partner"}
+
+
+def title_after_tier_change(current_title: Optional[str], new_role: str) -> Optional[str]:
+    """The io_role to write when an admin sets `new_role` on someone whose
+    title is `current_title`; None when the title can stay. A title that
+    belongs to another tier is replaced by the new tier's default; Partner /
+    Senior Partner survive any move at level_3 or above."""
+    cur = (current_title or "").strip()
+    if new_role not in TIER_DEFAULT_TITLE:
+        return None
+    if cur in _PROTECTED_LEADER_TITLES:
+        return None if role_level(new_role) >= 3 else TIER_DEFAULT_TITLE[new_role]
+    if TITLE_HOME_TIER.get(cur) == new_role:
+        return None
+    return TIER_DEFAULT_TITLE[new_role]
+
+
 def title_tier_mismatch(role: Optional[str], io_role: Optional[str]) -> Optional[str]:
-    """The error to raise when a title is pinned to a different tier than the
-    one being set; None when the pair is fine or the title is unpinned."""
-    want = TITLE_TIER.get((io_role or "").strip())
-    if want and role != want:
-        return f"The {io_role} title belongs to the {LEVELS[want]} tier — set them to that tier"
+    """The error to raise when a title belongs to a different tier than the
+    one being set; None when the pair is fine or the title is unpinned. The
+    Agent, Trainee, Builder, SA and GA titles are each pinned to exactly one
+    tier; MGA, RGA, Partner and Senior Partner float across level_3/level_4."""
+    title = (io_role or "").strip()
+    want = TITLE_HOME_TIER.get(title)
+    if want and role_level(want) <= 2 and role != want:
+        return f"The {title} title belongs to the {LEVELS[want]} tier — set them to that tier"
     return None
 
 
@@ -519,14 +550,20 @@ async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
     return user
 
 
-def require_level(min_level: int):
-    """min_level: 1..4 (higher = more access). level_1 has level=1, level_4 has level=4."""
+def require_level(min_level: float):
+    """min_level: a rank from ROLE_RANK (higher = more access). Use
+    require_leader for "SA and above" — a bare 2 means GA and above."""
     async def dep(user: Dict[str, Any] = Depends(require_agent)) -> Dict[str, Any]:
         lvl = role_level(user["role"])
         if lvl < min_level:
             raise HTTPException(status_code=403, detail=f"Requires level {min_level}+")
         return user
     return dep
+
+
+# "Any leader": SA and above (RANK_SA), never a bare require_level(2), which
+# would turn away every SA now that SA ranks 1.5 (owner, 2026-09-22).
+require_leader = require_level(RANK_SA)
 
 
 # Financial Admin: a standalone back-office role (agent_profiles.role ==
@@ -2314,7 +2351,7 @@ async def team_view(
     Agent reads their own SA team here, same fields GA+ sees for their
     downline — see team_scope_agent_ids. Write actions below (add/move/remove a team member,
     entering on someone else's behalf) all stay behind their own level_2+
-    checks (canEnter client-side; require_level(2)/can_enter_for server-side),
+    checks (canEnter client-side; require_leader/can_enter_for server-side),
     so this only ever widens read access, never write.
     """
     ids = await team_scope_agent_ids(user)
@@ -2550,7 +2587,7 @@ MISSING_DAYS_MAX = 14
 @api_router.get("/team/missing")
 async def team_missing(
     days: int = MISSING_DAYS_DEFAULT,
-    user: Dict[str, Any] = Depends(require_level(2)),
+    user: Dict[str, Any] = Depends(require_leader),
 ):
     """Missing Numbers, per team, per night (owner, 2026-09-19, MJ's request
     2.3): for each of the last `days` sales days, who on the caller's team has
@@ -2866,7 +2903,7 @@ async def create_nomination(payload: NominationIn, user: Dict[str, Any] = Depend
 
 
 @api_router.get("/nominations")
-async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = Depends(require_level(2))):
+async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = Depends(require_leader)):
     ids = await visible_agent_ids(user)
     q: Dict[str, Any] = {}
     if ids is not None:
@@ -2896,7 +2933,7 @@ async def list_nominations(status: Optional[str] = None, user: Dict[str, Any] = 
 
 
 @api_router.post("/nominations/{nomination_id}/endorse")
-async def endorse_nomination(nomination_id: str, user: Dict[str, Any] = Depends(require_level(2))):
+async def endorse_nomination(nomination_id: str, user: Dict[str, Any] = Depends(require_leader)):
     nom = await db.nominations.find_one({"nomination_id": nomination_id}, {"_id": 0})
     if not nom:
         raise HTTPException(status_code=404, detail="Nomination not found")
@@ -4154,13 +4191,14 @@ async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends
         update["upline_id"] = None  # no place in the ladder
     elif current_role == FINANCE_ADMIN_ROLE:
         update["upline_id"] = upline_agent_id
-    # The SA and GA titles are pinned to their tiers (TITLE_TIER): setting the
-    # SA tier gives the SA title, and moving an SA up to the GA tier gives the
-    # GA title, so the Admin Panel's tier buttons cannot leave a title behind.
-    pinned = {tier: title for title, tier in TITLE_TIER.items()}
-    if payload.role in pinned and (agent.get("io_role") or "") != pinned[payload.role]:
-        if payload.role == SA_ROLE or (agent.get("io_role") or "") in TITLE_TIER:
-            update["io_role"] = pinned[payload.role]
+    # The title moves with the tier on every admin tier change (owner,
+    # 2026-09-22): a title that belongs to another tier is replaced by the new
+    # tier's default, so the Admin Panel's buttons can never leave an Agent
+    # title on a GA tier or an SA title on an Agent tier. Partner / Senior
+    # Partner survive any move at MGA or above.
+    new_title = title_after_tier_change(agent.get("io_role"), payload.role)
+    if new_title is not None:
+        update["io_role"] = new_title
     await db.agent_profiles.update_one(
         {"agent_id": payload.agent_id},
         {"$set": update},
@@ -4218,6 +4256,9 @@ async def _roster_add_person(
     no production life and no place in the upline ladder (see FINANCE_ADMIN_ROLE)."""
     if role not in VALID_ROLES and role != FINANCE_ADMIN_ROLE:
         raise HTTPException(status_code=400, detail="Invalid role")
+    mismatch = title_tier_mismatch(role, io_role)
+    if mismatch:
+        raise HTTPException(status_code=400, detail=mismatch)
     if role != FINANCE_ADMIN_ROLE and is_rookie is None:
         raise HTTPException(status_code=400, detail="Tenure is required — choose Veteran or Rookie")
     email = email.lower().strip()
@@ -4306,7 +4347,7 @@ class TeamAddPersonIn(BaseModel):
 
 
 @api_router.post("/team/add-person")
-async def team_add_person(payload: TeamAddPersonIn, user: Dict[str, Any] = Depends(require_level(2))):
+async def team_add_person(payload: TeamAddPersonIn, user: Dict[str, Any] = Depends(require_leader)):
     """Let any upline (SA and above, level_2+) onboard a new team member DIRECTLY
     UNDER THEMSELVES. The upline is always the requester — never client-chosen —
     so the new member automatically rolls up through the requester's existing

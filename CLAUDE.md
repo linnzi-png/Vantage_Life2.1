@@ -164,9 +164,13 @@ a nightly pulse and gets the 9 PM ladder. "Is this person a leader" checks
 go through `is_leader_role()` / `LEADER_ROLES` (server) and
 `levelNum(r) >= LEADER_MIN` (client) — never a bare `>= 2`, which now means
 GA and above. `NIGHTLY_PULSE_ROLES` is everyone who owes a pulse (Agent, SA,
-GA). The SA and GA titles are pinned to their tiers (`TITLE_TIER`): set-tier
-and add-person reject a mismatch, and the Admin Panel's tier buttons carry
-the title along. `migrate_sa_tier()` runs on every start and moves any
+GA). Route gates for "any leader" use `require_leader` (= `require_level(RANK_SA)`);
+a bare `require_level(2)` would turn every SA away. The Agent, Trainee,
+Builder, SA and GA titles are each pinned to one tier (`TITLE_HOME_TIER`,
+`title_tier_mismatch()`): set-tier and the shared add-person core reject a
+mismatched pair, and an admin tier change replaces a title that belongs to
+another tier with the new tier's default (`title_after_tier_change()`;
+Partner / Senior Partner survive at MGA and above). `migrate_sa_tier()` runs on every start and moves any
 SA-titled `level_2` profile (and login) to `level_sa` once. RBAC is still
 enforced by `role`, never by title; the tier does the work.
 
