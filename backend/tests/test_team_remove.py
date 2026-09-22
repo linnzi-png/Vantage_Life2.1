@@ -258,10 +258,13 @@ async def test_ga_cannot_reassign_same_tier_or_outside(client, seeded_db):
 
 async def test_mga_reassigns_across_branches_and_cycles_blocked(client, seeded_db):
     token = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
+    # Across branches inside one office is fine: AG_1 (MCM, under SA_1) to
+    # GA_1 (MCM). GA_2 is in AMP, and crossing an office is admin-only
+    # (owner, 2026-09-22) — see test_office_move.py.
     r = await client.post("/api/team/reassign", headers=auth(token),
-                          json={"agent_id": "AG_2", "new_upline_agent_id": "GA_1"})
+                          json={"agent_id": "AG_1", "new_upline_agent_id": "GA_1"})
     assert r.status_code == 200
-    assert (await profile(seeded_db, "AG_2"))["upline_id"] == "GA_1"
+    assert (await profile(seeded_db, "AG_1"))["upline_id"] == "GA_1"
     # Admin path still refuses loops: GA_1 under their own descendant AG_1.
     admin = await admin_token(seeded_db)
     r = await client.post("/api/team/reassign", headers=auth(admin),

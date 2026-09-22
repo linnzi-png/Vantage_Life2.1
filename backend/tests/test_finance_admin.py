@@ -154,11 +154,14 @@ async def _reassign(client, token, agent_id, new_upline):
 
 async def test_finance_admin_reassigns_agency_wide(client, seeded_db):
     token = await finance_admin_session(seeded_db)
-    # AG_1 (MCM, under SA_1) moves under GA_2 (AMP) — no downline scope at all.
-    r = await _reassign(client, token, "AG_1", "GA_2")
+    # AG_1 (MCM, under SA_1) moves under GA_1 (MCM) — no downline scope at all.
+    r = await _reassign(client, token, "AG_1", "GA_1")
     assert r.status_code == 200, r.text
     doc = await seeded_db.agent_profiles.find_one({"agent_id": "AG_1"})
-    assert doc["upline_id"] == "GA_2"
+    assert doc["upline_id"] == "GA_1"
+    # But not into another office: crossing an office boundary is for the
+    # owner and MJ only (is_admin), not a Financial Admin (owner, 2026-09-22).
+    assert (await _reassign(client, token, "AG_1", "GA_2")).status_code == 403
     # A leader too: MGA_1 may be moved (level_3 is inside the range).
     assert (await _reassign(client, token, "GA_1", "RGA_1")).status_code == 200
 
