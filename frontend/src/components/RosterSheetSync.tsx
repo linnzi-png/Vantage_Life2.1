@@ -11,7 +11,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS } from '../lib/auth';
+import { api, COLORS, tierShort } from '../lib/auth';
 import { confirmAsync, notify } from '../lib/dialog';
 
 interface SyncChange {
@@ -36,9 +36,6 @@ interface SyncPlan {
   profiles_total: number;
 }
 
-function tierShort(role: string): string {
-  return role.replace('level_', 'L');
-}
 
 function describeChange(c: SyncChange): string {
   const bits: string[] = [];

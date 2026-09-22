@@ -51,16 +51,26 @@ async def test_upline_cannot_be_chosen_by_client(client, seeded_db):
 
 
 async def test_cannot_add_at_or_above_own_level(client, seeded_db):
-    token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
+    # An SA (level_sa) may not add another SA — that is their own tier.
+    token = await make_session(seeded_db, role="level_sa", agent_id="SA_1", email="sa1@test.dev")
     r = await client.post("/api/team/add-person", headers=auth(token),
-                          json=person(role="level_2", io_role="SA"))
+                          json=person(role="level_sa", io_role="SA"))
     assert r.status_code == 403
+    # A GA may: SA is strictly below GA (owner, 2026-09-22).
+    token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    r = await client.post("/api/team/add-person", headers=auth(token),
+                          json=person(role="level_sa", io_role="SA"))
+    assert r.status_code == 200, r.text
+    # And the SA title cannot be handed out on any other tier.
+    r = await client.post("/api/team/add-person", headers=auth(token),
+                          json=person(role="level_1", io_role="SA", email="sa.wrong@test.dev"))
+    assert r.status_code == 400
 
 
 async def test_mga_can_add_sa(client, seeded_db):
     token = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
     r = await client.post("/api/team/add-person", headers=auth(token),
-                          json=person(role="level_2", io_role="SA"))
+                          json=person(role="level_sa", io_role="SA"))
     assert r.status_code == 200
     agent = r.json()["agent"]
     assert agent["upline_id"] == "MGA_1"
@@ -113,7 +123,7 @@ async def test_trainee_title_does_not_grant_tier(client, seeded_db):
     token = await make_session(seeded_db, role="level_2", agent_id="SA_1", email="sa1@test.dev")
     r = await client.post("/api/team/add-person", headers=auth(token),
                           json=person(role="level_2", io_role="inTraining"))
-    assert r.status_code == 403
+    assert r.status_code in (400, 403)  # the Trainee title is pinned to level_1, and level_2 is at/above an SA anyway
 
 
 async def test_mga_adds_ga_at_level_2(client, seeded_db):
@@ -136,7 +146,7 @@ async def test_ga_cannot_be_added_at_mga_tier(client, seeded_db):
     token = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
     r = await client.post("/api/team/add-person", headers=auth(token),
                           json=person(role="level_3", io_role="GA"))
-    assert r.status_code == 403
+    assert r.status_code in (400, 403)  # own tier, and the GA title is pinned to level_2
 
 
 async def test_ga_added_by_ga_is_rejected(client, seeded_db):

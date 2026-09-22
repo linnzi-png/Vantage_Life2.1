@@ -11,6 +11,7 @@ import { confirmAsync, notify } from '../../src/lib/dialog';
 
 const SWITCH_TIERS: { role: Role; label: string }[] = [
   { role: 'level_1', label: 'L1' },
+  { role: 'level_sa', label: 'SA' },
   { role: 'level_2', label: 'L2' },
   { role: 'level_3', label: 'L3' },
   { role: 'level_4', label: 'L4' },

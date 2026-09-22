@@ -26,9 +26,10 @@ async def role_of(db, agent_id: str) -> str:
 
 async def test_mga_promotes_a_downline_agent_and_sets_the_title(client, seeded_db):
     token = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
-    r = await set_tier(client, token, agent_id="AG_1", role="level_2", io_role="GA")
+    # AG_2 reports straight to GA_2, so GA is not above their upline.
+    r = await set_tier(client, token, agent_id="AG_2", role="level_2", io_role="GA")
     assert r.status_code == 200, r.text
-    profile = await seeded_db.agent_profiles.find_one({"agent_id": "AG_1"}, {"_id": 0})
+    profile = await seeded_db.agent_profiles.find_one({"agent_id": "AG_2"}, {"_id": 0})
     assert profile["role"] == "level_2"
     assert profile["io_role"] == "GA"
 
@@ -36,18 +37,18 @@ async def test_mga_promotes_a_downline_agent_and_sets_the_title(client, seeded_d
 async def test_promotion_syncs_the_linked_login_so_no_re_login_is_needed(client, seeded_db):
     token = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
     await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
-    assert (await set_tier(client, token, agent_id="AG_1", role="level_2", io_role="SA")).status_code == 200
+    assert (await set_tier(client, token, agent_id="AG_1", role="level_sa", io_role="SA")).status_code == 200
     user = await seeded_db.users.find_one({"email": "ag1@test.dev"}, {"_id": 0, "role": 1})
-    assert user["role"] == "level_2"
+    assert user["role"] == "level_sa"
 
 
 async def test_promotion_is_written_to_the_audit_log(client, seeded_db):
     token = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
-    await set_tier(client, token, agent_id="AG_1", role="level_2", io_role="SA")
+    await set_tier(client, token, agent_id="AG_1", role="level_sa", io_role="SA")
     entry = await seeded_db.audit_log.find_one({"agent_id": "AG_1", "action": "set_role"}, {"_id": 0})
     assert entry is not None
     assert entry["original_value"] == "level_1"
-    assert entry["new_value"] == "level_2"
+    assert entry["new_value"] == "level_sa"
     assert entry["new_io_role"] == "SA"
 
 
@@ -63,10 +64,15 @@ async def test_an_upline_cannot_promote_to_their_own_tier(client, seeded_db):
 
 
 async def test_an_upline_cannot_change_someone_at_their_own_tier(client, seeded_db):
-    """GA_1 and SA_1 are both level_2, so a GA cannot retier their own SA."""
+    """A GA cannot retier a fellow GA in their downline; SA is below GA now,
+    so GA_1 may lower SA_1 once SA_1 has no reports."""
+    await seeded_db.agent_profiles.insert_one(
+        {"agent_id": "GA_3", "name": "Ga Three", "email": "ga3@test.dev", "role": "level_2",
+         "io_role": "GA", "upline_id": "GA_1", "office": "MCM"})
     token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
-    r = await set_tier(client, token, agent_id="SA_1", role="level_1")
-    assert r.status_code == 403
+    assert (await set_tier(client, token, agent_id="GA_3", role="level_1")).status_code == 403
+    await seeded_db.agent_profiles.update_one({"agent_id": "AG_1"}, {"$set": {"upline_id": "GA_1"}})
+    assert (await set_tier(client, token, agent_id="SA_1", role="level_1", io_role="Agent")).status_code == 200
 
 
 async def test_nobody_sets_level_4_here(client, seeded_db):
@@ -139,9 +145,9 @@ async def test_finance_admin_may_change_tiers_agency_wide(client, seeded_db):
         "role": "finance_admin", "upline_id": None, "office": "",
     })
     token = await make_session(seeded_db, role="finance_admin", agent_id="FA_1", email="fa@test.dev")
-    r = await set_tier(client, token, agent_id="AG_2", role="level_2", io_role="SA")
+    r = await set_tier(client, token, agent_id="AG_2", role="level_sa", io_role="SA")
     assert r.status_code == 200, r.text
-    assert await role_of(seeded_db, "AG_2") == "level_2"
+    assert await role_of(seeded_db, "AG_2") == "level_sa"
 
 
 async def test_a_finance_admin_account_is_not_retiered_here(client, seeded_db):
@@ -167,3 +173,44 @@ async def test_a_no_op_is_refused(client, seeded_db):
     token = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
     r = await set_tier(client, token, agent_id="AG_1", role="level_1")
     assert r.status_code == 400
+
+
+# ---------------- the SA tier (owner, 2026-09-22) ----------------
+
+async def test_a_ga_promotes_an_agent_to_sa(client, seeded_db):
+    """The whole point of the SA tier: GA is strictly above SA, so a GA may
+    mint one; an SA may not mint another SA."""
+    # GA_2 runs AG_2 directly.
+    token = await make_session(seeded_db, role="level_2", agent_id="GA_2", email="ga2@test.dev")
+    r = await set_tier(client, token, agent_id="AG_2", role="level_sa", io_role="SA")
+    assert r.status_code == 200, r.text
+    assert await role_of(seeded_db, "AG_2") == "level_sa"
+    profile = await seeded_db.agent_profiles.find_one({"agent_id": "AG_2"}, {"_id": 0})
+    assert profile["io_role"] == "SA"
+
+
+async def test_an_sa_cannot_make_an_sa(client, seeded_db):
+    token = await make_session(seeded_db, role="level_sa", agent_id="SA_1", email="sa1@test.dev")
+    r = await set_tier(client, token, agent_id="AG_1", role="level_sa", io_role="SA")
+    assert r.status_code == 403
+    assert await role_of(seeded_db, "AG_1") == "level_1"
+    # An SA still handles their own agents: Agent <-> Trainee is below them.
+    r = await set_tier(client, token, agent_id="AG_1", role="level_1", io_role="inTraining")
+    assert r.status_code == 200, r.text
+
+
+async def test_a_ga_cannot_make_a_ga_and_an_mga_can(client, seeded_db):
+    ga = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    assert (await set_tier(client, ga, agent_id="SA_1", role="level_2", io_role="GA")).status_code == 403
+    mga = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
+    r = await set_tier(client, mga, agent_id="SA_1", role="level_2", io_role="GA")
+    assert r.status_code == 200, r.text
+    assert await role_of(seeded_db, "SA_1") == "level_2"
+
+
+async def test_sa_and_ga_titles_are_pinned_to_their_tiers(client, seeded_db):
+    mga = await make_session(seeded_db, role="level_3", agent_id="MGA_1", email="mga1@test.dev")
+    r = await set_tier(client, mga, agent_id="AG_1", role="level_2", io_role="SA")
+    assert r.status_code == 400 and "SA title" in r.json()["detail"]
+    r = await set_tier(client, mga, agent_id="AG_1", role="level_sa", io_role="GA")
+    assert r.status_code == 400 and "GA title" in r.json()["detail"]

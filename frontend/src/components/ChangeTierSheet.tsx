@@ -45,10 +45,10 @@ const TIER_OPTIONS: { role: Role; io_role: string; label: string; blurb: string 
     blurb: 'Enters their own numbers. In training.' },
   { role: 'level_1', io_role: 'Agent', label: 'AGENT',
     blurb: 'Enters their own numbers; reads their office.' },
-  { role: 'level_2', io_role: 'SA', label: 'SA',
-    blurb: 'Runs a team: reads their downline, enters on their behalf.' },
+  { role: 'level_sa', io_role: 'SA', label: 'SA',
+    blurb: 'Runs a team: reads their downline, enters on their behalf, promotes to Agent.' },
   { role: 'level_2', io_role: 'GA', label: 'GA',
-    blurb: 'Same access as SA, plus reassigning their own downline.' },
+    blurb: 'Runs SAs and agents: everything an SA does, plus promoting to SA.' },
   { role: 'level_3', io_role: 'MGA', label: 'MGA',
     blurb: 'Reads every GA rollup beneath them.' },
 ];

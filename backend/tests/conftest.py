@@ -41,7 +41,7 @@ HIERARCHY = [
     {"agent_id": "MGA_1", "name": "Mga One", "email": "mga1@test.dev", "role": "level_3", "upline_id": "RGA_1", "office": "MCM"},
     {"agent_id": "GA_1", "name": "Ga One", "email": "ga1@test.dev", "role": "level_2", "upline_id": "MGA_1", "office": "MCM"},
     {"agent_id": "GA_2", "name": "Ga Two", "email": "ga2@test.dev", "role": "level_2", "upline_id": "MGA_1", "office": "AMP"},
-    {"agent_id": "SA_1", "name": "Sa One", "email": "sa1@test.dev", "role": "level_2", "io_role": "SA", "upline_id": "GA_1", "office": "MCM"},
+    {"agent_id": "SA_1", "name": "Sa One", "email": "sa1@test.dev", "role": "level_sa", "io_role": "SA", "upline_id": "GA_1", "office": "MCM"},
     {"agent_id": "AG_1", "name": "Agent One", "email": "ag1@test.dev", "role": "level_1", "upline_id": "SA_1", "office": "MCM"},
     {"agent_id": "AG_2", "name": "Agent Two", "email": "ag2@test.dev", "role": "level_1", "upline_id": "GA_2", "office": "AMP"},
 ]

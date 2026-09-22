@@ -11,7 +11,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS } from '../lib/auth';
+import { api, COLORS, tierShort } from '../lib/auth';
 import { notify } from '../lib/dialog';
 import { TypedConfirm } from './TypedConfirm';
 
@@ -172,7 +172,7 @@ export function DuplicateMerge({ onMerged }: { onMerged: () => void }) {
                     />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.name}>
-                        {p.name} <Text style={styles.dim}>· {p.role.replace('level_', 'L')}</Text>
+                        {p.name} <Text style={styles.dim}>· {tierShort(p.role)}</Text>
                       </Text>
                       <Text style={styles.meta}>
                         {p.email || 'no email'}

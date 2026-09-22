@@ -24,9 +24,10 @@ change (`com.aopremiere.vantagelife` bundle ID, `@aopremiere.com` demo emails).
 - `backend/metrics.py` — metric calculations (Close Rate lives here, never inline)
 - `backend/tests/` — pytest suite
 
-## RBAC Hierarchy (4-tier - NEVER flatten or bypass)
+## RBAC Hierarchy (5-tier - NEVER flatten or bypass)
 1. `level_1` Agent — enters their own metrics only; reads their own SA team via the Team tab (per owner, 2026-09-19 — see below)
-2. `level_2` GA (General Agent) — sees their team rollup — displays as "CoExecutive Producer"
+1½. `level_sa` SA — runs a team: reads and enters for their own downline, promotes to Agent/Trainee only — displays as "Regional Producer" (per owner, 2026-09-22 — see "The SA tier" below)
+2. `level_2` GA (General Agent) — sees their team rollup, may promote to SA — displays as "CoExecutive Producer"
 3. `level_3` MGA (Master General Agent) — sees GA-level rollups — displays as "Executive Producer"
 4. `level_4` RGA (Regional General Agent) — sees their own office — displays as "Chief Executive Producer"
 
@@ -37,11 +38,11 @@ helper `team_scope_agent_ids()` shared by `GET /api/team`, `/api/team/weeks`,
 `/api/agents/{id}/history` and `/api/agents/{id}/day` and never re-derived per
 route, is:
 
-- **level_1** — their SA team: the subtree under the nearest level_2 in
+- **level_1** — their SA team: the subtree under the nearest SA or GA in
   their upline chain (the SA or GA who runs them), leader included
   (`sa_team_agent_ids()`). Someone straight under an MGA/RGA gets that
   upline's subtree. This is the same grouping `/api/team/missing` uses.
-- **level_2 / level_3** — their own downline, nothing sideways.
+- **level_sa / level_2 / level_3** — their own downline, nothing sideways.
 - **level_4** — their own office (plus their downline, normally the same
   people). Gojcaj, Alwatan and Rust see their office, never the agency.
 - **MJ** (level_4 with the admin grant) — the whole company by default, his
@@ -86,21 +87,21 @@ Three things stay exactly as they were:
 **Missing Numbers (per owner, 2026-09-19, MJ's request):** `GET
 /api/team/missing` lists, for each of the last 7 sales days (max 14), who has
 not submitted, grouped by team — every producer filed under the nearest
-level_2 in their chain (a level_2 heads their own section; someone straight
+SA or GA in their chain (an SA or GA heads their own section; someone straight
 under an MGA/RGA files under that upline). It is a grouping of the hierarchy,
 never a permission, and no access decision reads a title. Scope is the
-caller's own **downline** (level_2+ only; level_4 sees every team), because
+caller's own **downline** (SA and above; level_4 sees every team), because
 the panel exists to enter numbers on people's behalf and that write is
-downline-only. Same candidate rule as the 9 PM escalation: active level_1 and
-level_2 producers, minus non-producing staff. The screen is
+downline-only. Same candidate rule as the 9 PM escalation: active Agent, SA
+and GA producers (`NIGHTLY_PULSE_ROLES`), minus non-producing staff. The screen is
 `frontend/app/missing.tsx`, opened from the Team tab's MISSING TONIGHT card;
 tapping a person opens `QuickEntryForm` aimed at that night
 (`initialSalesDay`), ENTER ALL walks one team's list.
 
 **Tier changes by an upline (per owner, 2026-09-14):** `POST /api/team/set-tier`
 lets an upline change the access tier of someone in their **own downline**, in
-either direction, and only to a tier **strictly below their own** — an MGA may
-make someone a GA, never another MGA. `is_admin` and `finance_admin` get the
+either direction, and only to a tier **strictly below their own** — a GA may
+make an SA, an SA may make an Agent, an MGA may make a GA, never a peer. `is_admin` and `finance_admin` get the
 same control agency-wide, capped the same way. Setting `level_4`, changing an
 RGA's tier, and anything involving the Financial Admin role stay in the Admin
 Panel (`/api/admin/set-role`). The producer title (`io_role`) moves with the
@@ -150,12 +151,28 @@ Executive Producer; Partner and Senior Partner are titles carried by
 level_3/level_4 holders (no exclusive access tier); Agent, Builder, and
 In Training are unchanged. RBAC is always enforced by `role`, never by title.
 
-SA is a level_2 title: SAs and GAs have identical permissions across the
-app (per owner, 2026-07-09, reaffirmed 2026-09-15 — every SA reassigns and
-promotes, and SA and GA read the same way). Never model SA as a special case
-in code; the tier does the work. Reassigning was the last exception and was
-removed on 2026-09-15, so no access decision anywhere reads an `io_role`
-title.
+**The SA tier (per owner, 2026-09-22; this retires the 2026-07-09 /
+2026-09-15 "SA and GA are one tier" rule).** The ladder is Agent < SA < GA <
+MGA < RGA. SA is its own tier, `level_sa`, ranked **1.5** in `ROLE_RANK` /
+`role_level()` (and `levelNum()` on the client) so the `level_1..level_4`
+strings and every existing comparison keep their meaning. What changed is
+only what "strictly below your own tier" now yields: **a GA makes an SA, an
+SA makes Agents and Trainees only, an MGA makes a GA.** An SA otherwise has
+every GA power, limited to their own downline: reads it, enters for it,
+promotes, moves and removes inside it, heads a team in Missing Numbers, owes
+a nightly pulse and gets the 9 PM ladder. "Is this person a leader" checks
+go through `is_leader_role()` / `LEADER_ROLES` (server) and
+`levelNum(r) >= LEADER_MIN` (client) — never a bare `>= 2`, which now means
+GA and above. `NIGHTLY_PULSE_ROLES` is everyone who owes a pulse (Agent, SA,
+GA). Route gates for "any leader" use `require_leader` (= `require_level(RANK_SA)`);
+a bare `require_level(2)` would turn every SA away. The Agent, Trainee,
+Builder, SA and GA titles are each pinned to one tier (`TITLE_HOME_TIER`,
+`title_tier_mismatch()`): set-tier and the shared add-person core reject a
+mismatched pair, and an admin tier change replaces a title that belongs to
+another tier with the new tier's default (`title_after_tier_change()`;
+Partner / Senior Partner survive at MGA and above). `migrate_sa_tier()` runs on every start and moves any
+SA-titled `level_2` profile (and login) to `level_sa` once. RBAC is still
+enforced by `role`, never by title; the tier does the work.
 
 Enforced server-side in `backend/server.py`: `require_agent()` / `require_level()`
 dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
@@ -231,8 +248,8 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 - Coaching card visibility: everyone **above** an agent in that agent's own
   chain may see their coaching card — SA, GA, MGA, RGA alike — and nobody at or
   below them, and nobody sideways. This is a hierarchy question, never a tier
-  comparison: SA and GA are both level_2, so `viewer_level > agent_level`
-  denies a GA their own SA's card. Decided server-side by `is_upline_of()` and
+  comparison: a chain walk is what makes an SA's own upline GA (and nobody
+  sideways) the right answer, whatever the ranks say. Decided server-side by `is_upline_of()` and
   returned as `coaching_visible` on `/api/agents/{id}/history`; the client must
   never re-derive it from roles. Read scope (`visible_agent_ids`) is
   deliberately wider than this and must not be conflated with it.

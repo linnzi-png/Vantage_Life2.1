@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, A
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS, useAuth, levelNum, roleTitle, isFinanceAdmin, adminActive, Role } from '../../src/lib/auth';
+import { api, COLORS, useAuth, levelNum, LEADER_MIN, roleTitle, isFinanceAdmin, adminActive, Role } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
 import { ChangeTierSheet } from '../../src/components/ChangeTierSheet';
 import { QuickEntryForm, QuickEntryTarget } from '../../src/components/QuickEntryForm';
@@ -130,7 +130,7 @@ export default function TeamScreen() {
   const q = query.trim().toLowerCase();
   // Any upline (SA/GA and above, level 2+) may enter Nightly Numbers on a
   // downline teammate's behalf, matching can_enter_for on the backend.
-  const canEnter = levelNum(user?.role) >= 2;
+  const canEnter = levelNum(user?.role) >= LEADER_MIN;
   // Only my own downline: this card opens proxy entry, which is downline-only.
   const missingTonight = rows.filter((r) => r.alerts?.includes('no_pulse') && r.in_my_downline !== false);
 
@@ -140,7 +140,7 @@ export default function TeamScreen() {
   const myLevel = levelNum(user?.role);
   const mine = (r: TeamRow) => r.in_my_downline !== false;
   const canRemoveRow = (r: TeamRow) =>
-    myLevel >= 2 && mine(r) && !r.archived && r.agent_id !== user?.agent_id &&
+    myLevel >= LEADER_MIN && mine(r) && !r.archived && r.agent_id !== user?.agent_id &&
     levelNum(r.role) < myLevel;
   // Moving (owner, 2026-09-22): an admin in the agency view may move anyone
   // but themselves and an RGA, including into another office — the office
