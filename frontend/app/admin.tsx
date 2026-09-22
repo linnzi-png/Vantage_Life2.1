@@ -21,6 +21,7 @@ import { OrphanRepair } from '../src/components/OrphanRepair';
 import { DuplicateMerge } from '../src/components/DuplicateMerge';
 import { RosterSheetSync } from '../src/components/RosterSheetSync';
 import { RosterEmailAudit } from '../src/components/RosterEmailAudit';
+import { MoveMemberSheet } from '../src/components/MoveMemberSheet';
 import { confirmAsync, notify } from '../src/lib/dialog';
 
 interface Person {
@@ -116,6 +117,12 @@ export default function AdminScreen() {
   // Tapping a roster row's contact icon opens the same call/text/email sheet
   // every other screen uses — independent of the tier-management expand.
   const [contactFor, setContactFor] = useState<Person | ArchivedPerson | null>(null);
+  // Office correction and hierarchy moves (owner, 2026-09-22): the office
+  // field fixes one record with no hierarchy change; MOVE opens the same
+  // sheet the Team tab uses, with the whole roster as candidates, because an
+  // admin without a producer row of their own has no Team tab to move from.
+  const [officeDraft, setOfficeDraft] = useState<Record<string, string>>({});
+  const [moveFor, setMoveFor] = useState<Person | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [loginFilter, setLoginFilter] = useState<LoginFilter>('all');
@@ -335,6 +342,32 @@ export default function AdminScreen() {
       notifyError(e, 'Tenure update failed');
     }
   });
+
+  const saveOffice = (p: Person) =>
+    runOnce(`${p.agent_id}:office`, async () => {
+    const office = (officeDraft[p.agent_id] ?? p.office ?? '').trim();
+    if (!office || office === (p.office || '')) return;
+    const ok = await confirmAsync({
+      title: 'Correct Office',
+      message: `File ${p.name} under ${office}? Their upline and downline are not changed — use MOVE for a hierarchy change.`,
+      confirmText: 'Save',
+    });
+    if (!ok) return;
+    try {
+      await api('/api/admin/set-office', { method: 'POST', body: JSON.stringify({ agent_id: p.agent_id, office }) });
+      setPeople((prev) => prev.map((x) => (x.agent_id === p.agent_id ? { ...x, office } : x)));
+      setOfficeDraft((d) => { const { [p.agent_id]: _gone, ...rest } = d; return rest; });
+    } catch (e: unknown) {
+      notifyError(e, 'Office update failed');
+    }
+  });
+
+  const uplineOf = (p: Person) => people.find((x) => x.agent_id === p.upline_id);
+  const moveCandidates = moveFor
+    ? people.filter((c) =>
+        c.agent_id !== moveFor.agent_id && c.role !== 'finance_admin' &&
+        levelNum(c.role) >= levelNum(moveFor.role))
+    : [];
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
@@ -690,6 +723,49 @@ export default function AdminScreen() {
 
                   {!isFA ? (
                     <>
+                      <Text style={styles.lab}>OFFICE</Text>
+                      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                        <TextInput
+                          style={[styles.input, { flex: 1 }]}
+                          value={officeDraft[p.agent_id] ?? p.office ?? ''}
+                          onChangeText={(v) => setOfficeDraft((d) => ({ ...d, [p.agent_id]: v }))}
+                          placeholder="Office name"
+                          placeholderTextColor={COLORS.textMuted}
+                          autoCapitalize="words"
+                          testID={`admin-office-${p.agent_id}`}
+                        />
+                        <TouchableOpacity
+                          style={[styles.smallBtn, ((officeDraft[p.agent_id] ?? p.office ?? '').trim() === (p.office || '') || isPending(`${p.agent_id}:office`)) && styles.busyCtl]}
+                          disabled={(officeDraft[p.agent_id] ?? p.office ?? '').trim() === (p.office || '') || isPending(`${p.agent_id}:office`)}
+                          onPress={() => saveOffice(p)}
+                          testID={`admin-office-save-${p.agent_id}`}
+                        >
+                          <Text style={styles.smallBtnTxt}>SAVE</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.fieldNote}>Corrects this one record only. A change of upline sets the office from the new upline.</Text>
+
+                      {p.role !== 'finance_admin' ? (
+                        <>
+                          <Text style={styles.lab}>UPLINE</Text>
+                          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                            <Text style={[styles.detail, { flex: 1 }]} numberOfLines={1}>
+                              {uplineOf(p)?.name ?? (p.role === 'level_4' ? 'None — top of an office' : 'None on file')}
+                            </Text>
+                            {p.role !== 'level_4' ? (
+                              <TouchableOpacity
+                                style={styles.smallBtn}
+                                onPress={() => setMoveFor(p)}
+                                testID={`admin-move-${p.agent_id}`}
+                              >
+                                <Ionicons name="swap-horizontal" size={12} color="#000" />
+                                <Text style={styles.smallBtnTxt}>MOVE</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                          </View>
+                        </>
+                      ) : null}
+
                       <View style={styles.flagRow}>
                         <Text style={styles.flagLab}>Admin panel access</Text>
                         <Switch
@@ -817,6 +893,13 @@ export default function AdminScreen() {
         ) : null}
       </ScrollView>
       <AgentContactSheet agent={contactFor} onClose={() => setContactFor(null)} />
+      <MoveMemberSheet
+        target={moveFor}
+        candidates={moveCandidates}
+        canCrossOffice
+        onClose={() => setMoveFor(null)}
+        onMoved={load}
+      />
     </View>
   );
 }
@@ -848,6 +931,8 @@ const styles = StyleSheet.create({
   card: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, padding: 14, marginTop: 10 },
   lab: { color: COLORS.textMuted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2, marginTop: 12, marginBottom: 4 },
   fieldNote: { color: COLORS.textDim, fontSize: 11, marginTop: 4, fontStyle: 'italic' },
+  smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.gold, borderRadius: 6, paddingVertical: 10, paddingHorizontal: 12 },
+  smallBtnTxt: { color: '#000', fontWeight: '900', fontSize: 11, letterSpacing: 1 },
   input: { backgroundColor: COLORS.surface2, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, color: '#fff', paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
   tierRow: { flexDirection: 'row', gap: 6 },
   tierBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface2 },

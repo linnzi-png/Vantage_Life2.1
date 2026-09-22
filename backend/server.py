@@ -4397,6 +4397,15 @@ class TeamRemovePersonIn(BaseModel):
 class TeamReassignIn(BaseModel):
     agent_id: str
     new_upline_agent_id: str
+    # Whether the person's own downline goes with them (owner, 2026-09-22).
+    # False leaves the downline where it is, under the moved person's former
+    # upline — the same place remove-person parks an orphaned downline.
+    move_downline: bool = True
+
+
+class AdminSetOfficeIn(BaseModel):
+    agent_id: str
+    office: str
 
 
 class AdminUnarchivePersonIn(BaseModel):
@@ -4557,6 +4566,65 @@ async def team_remove_person(payload: TeamRemovePersonIn, user: Dict[str, Any] =
     return {"ok": True, "dry_run": False, "plan": plan}
 
 
+
+def _office_of(profile: Dict[str, Any]) -> str:
+    return profile.get("office") or UNASSIGNED_OFFICE
+
+
+async def _rehome_under(target: Dict[str, Any], new_upline: Dict[str, Any], move_downline: bool) -> Dict[str, Any]:
+    """Put `target` under `new_upline`, office following the upline.
+
+    Owner, 2026-09-22: a person whose office disagrees with their upline's is a
+    data error, not a state the app supports — the Team tab, Missing Numbers
+    and the dashboard all resolve office through agent_profiles, so a move
+    under someone in another office rehomes the whole hierarchy above them at
+    once. Shared by /team/reassign and /admin/set-upline so neither becomes
+    the back door that recreates the mismatch.
+
+    move_downline: the person's own downline keeps reporting to them and only
+    changes office. Off, their direct reports go to the person's former upline
+    (where remove-person parks an orphaned downline) so nobody is left
+    reporting across an office line. The caller has already validated both
+    profiles, the tier rules and the cycle guard.
+    """
+    old_office = _office_of(target)
+    new_office = _office_of(new_upline)
+    office_changes = old_office != new_office
+    subtree = [a for a in await downline_agent_ids(target["agent_id"]) if a != target["agent_id"]]
+    former_upline_id = target.get("upline_id")
+    direct_reports: List[str] = []
+    if subtree and not move_downline:
+        if not former_upline_id:
+            raise HTTPException(
+                status_code=400,
+                detail="They have no upline to leave their downline under — move the downline with them")
+        direct_reports = [
+            d["agent_id"] async for d in db.agent_profiles.find(
+                {"upline_id": target["agent_id"], **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1})
+        ]
+
+    now = now_utc()
+    update: Dict[str, Any] = {"upline_id": new_upline["agent_id"], "updated_at": now}
+    if office_changes:
+        update["office"] = new_office
+    await db.agent_profiles.update_one({"agent_id": target["agent_id"]}, {"$set": update})
+    downline_moved: List[str] = []
+    if subtree and move_downline and office_changes:
+        await db.agent_profiles.update_many(
+            {"agent_id": {"$in": subtree}},
+            {"$set": {"office": new_office, "updated_at": now}})
+        downline_moved = subtree
+    if direct_reports:
+        await db.agent_profiles.update_many(
+            {"agent_id": {"$in": direct_reports}},
+            {"$set": {"upline_id": former_upline_id, "updated_at": now}})
+    return {
+        "ts": now, "old_office": old_office, "office": new_office,
+        "office_changed": office_changes,
+        "downline_moved": downline_moved, "downline_left": direct_reports,
+    }
+
+
 @api_router.post("/team/reassign")
 async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(get_current_user)):
     """Move a downline member under a different upline. Any upline level_2+ may
@@ -4627,13 +4695,18 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
             status_code=400,
             detail="That would create a loop — the chosen upline already reports to this agent")
 
-    now = now_utc()
-    await db.agent_profiles.update_one(
-        {"agent_id": target["agent_id"]},
-        {"$set": {"upline_id": new_upline["agent_id"], "updated_at": now}})
+    # Office follows the upline (owner, 2026-09-22): crossing an office
+    # boundary is admin-only — the owner and MJ — because it changes which
+    # RGA's numbers the person counts toward.
+    if _office_of(target) != _office_of(new_upline) and not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Only an admin can move someone to another office")
+
+    moved = await _rehome_under(target, new_upline, payload.move_downline)
     await db.audit_log.insert_one({
         "audit_id": f"au_{uuid.uuid4().hex[:10]}",
-        "ts": now,
+        "ts": moved["ts"],
         "action": "reassign_agent",
         "agent_id": target["agent_id"],
         "agent_name": target.get("name", ""),
@@ -4641,8 +4714,22 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
         "changed_by_name": user.get("name"),
         "old_upline_id": target.get("upline_id"),
         "new_upline_id": new_upline["agent_id"],
+        "old_office": moved["old_office"],
+        "new_office": moved["office"],
+        "move_downline": payload.move_downline,
+        "downline_moved": moved["downline_moved"],
+        "downline_left_under": target.get("upline_id") if moved["downline_left"] else None,
+        "downline_left": moved["downline_left"],
     })
-    return {"ok": True, "agent_id": target["agent_id"], "upline_id": new_upline["agent_id"]}
+    return {
+        "ok": True,
+        "agent_id": target["agent_id"],
+        "upline_id": new_upline["agent_id"],
+        "office": moved["office"],
+        "office_changed": moved["office_changed"],
+        "downline_moved": moved["downline_moved"],
+        "downline_left": moved["downline_left"],
+    }
 
 
 # Field titles the roster uses. Mirrors IO_ROLES in frontend/app/admin.tsx and
@@ -4839,6 +4926,41 @@ async def admin_unarchive_person(payload: AdminUnarchivePersonIn, user: Dict[str
         "upline_id": upline_id,
     })
     return {"ok": True, "agent_id": target["agent_id"], "upline_id": upline_id}
+
+
+@api_router.post("/admin/set-office")
+async def admin_set_office(payload: AdminSetOfficeIn, user: Dict[str, Any] = Depends(require_admin)):
+    """Correct one person's office without touching their hierarchy (owner,
+    2026-09-22). This is the fix for a wrong office on the roster — a hierarchy
+    move goes through /team/reassign, which sets office from the new upline.
+    One agent at a time; their downline is not touched, because a downline in
+    a different office from its upline is exactly the error this exists to
+    correct one record at a time, never to spread."""
+    office = payload.office.strip()
+    if not office:
+        raise HTTPException(status_code=400, detail="Office is required")
+    agent = await db.agent_profiles.find_one({"agent_id": payload.agent_id}, {"_id": 0})
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    old_office = agent.get("office") or UNASSIGNED_OFFICE
+    if old_office == office:
+        return {"ok": True, "agent_id": payload.agent_id, "office": office, "changed": False}
+    await db.agent_profiles.update_one(
+        {"agent_id": payload.agent_id},
+        {"$set": {"office": office, "updated_at": now_utc()}},
+    )
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now_utc(),
+        "action": "set_office",
+        "agent_id": payload.agent_id,
+        "agent_name": agent.get("name"),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "old_office": old_office,
+        "new_office": office,
+    })
+    return {"ok": True, "agent_id": payload.agent_id, "office": office, "changed": True}
 
 
 @api_router.post("/admin/set-tenure")
@@ -5756,11 +5878,35 @@ async def admin_set_upline(
                 detail="That would create a loop — the chosen upline already reports to this agent.",
             )
 
-    await db.agent_profiles.update_one(
-        {"agent_id": payload.agent_id},
-        {"$set": {"upline_id": upline_id, "updated_at": now_utc()}},
-    )
-    return {"ok": True, "agent_id": payload.agent_id, "upline_id": upline_id}
+    if upline_id is None:
+        await db.agent_profiles.update_one(
+            {"agent_id": payload.agent_id},
+            {"$set": {"upline_id": None, "updated_at": now_utc()}},
+        )
+        return {"ok": True, "agent_id": payload.agent_id, "upline_id": None}
+
+    # Office follows the upline here too (owner, 2026-09-22), downline along
+    # with them — a repaired orphan's downline was already reporting to them.
+    target = await db.agent_profiles.find_one({"agent_id": payload.agent_id}, {"_id": 0})
+    new_upline = await db.agent_profiles.find_one({"agent_id": upline_id}, {"_id": 0})
+    moved = await _rehome_under(target, new_upline, True)
+    if moved["office_changed"]:
+        await db.audit_log.insert_one({
+            "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+            "ts": moved["ts"],
+            "action": "set_upline",
+            "agent_id": payload.agent_id,
+            "agent_name": target.get("name", ""),
+            "changed_by": user["user_id"],
+            "changed_by_name": user.get("name"),
+            "old_upline_id": target.get("upline_id"),
+            "new_upline_id": upline_id,
+            "old_office": moved["old_office"],
+            "new_office": moved["office"],
+            "downline_moved": moved["downline_moved"],
+        })
+    return {"ok": True, "agent_id": payload.agent_id, "upline_id": upline_id,
+            "office": moved["office"], "office_changed": moved["office_changed"]}
 
 
 @api_router.get("/admin/offices")

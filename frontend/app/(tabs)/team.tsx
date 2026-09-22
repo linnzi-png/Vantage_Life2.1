@@ -142,7 +142,14 @@ export default function TeamScreen() {
   const canRemoveRow = (r: TeamRow) =>
     myLevel >= 2 && mine(r) && !r.archived && r.agent_id !== user?.agent_id &&
     levelNum(r.role) < myLevel;
-  const canMoveRow = canRemoveRow;
+  // Moving (owner, 2026-09-22): an admin in the agency view may move anyone
+  // but themselves and an RGA, including into another office — the office
+  // follows the new upline. Everyone else moves within their own downline,
+  // which the server keeps inside one office. adminOnly, not finance_admin:
+  // crossing an office line is the owner's and MJ's alone.
+  const canMoveRow = (r: TeamRow) =>
+    (adminActive(user) && !r.archived && r.agent_id !== user?.agent_id && r.role !== 'level_4')
+    || canRemoveRow(r);
   // Proxy entry is downline-only server-side (can_enter_for), so an office
   // peer's card must not offer it.
   const canEnterForRow = (r: TeamRow) => canEnter && mine(r) && !r.archived;
@@ -184,8 +191,9 @@ export default function TeamScreen() {
 
   const moveCandidates = moveTarget
     ? rows.filter((c) =>
-        !c.archived && c.agent_id !== moveTarget.agent_id &&
-        levelNum(c.role) >= levelNum(moveTarget.role) && levelNum(c.role) <= myLevel)
+        !c.archived && c.agent_id !== moveTarget.agent_id && c.role !== 'finance_admin' &&
+        levelNum(c.role) >= levelNum(moveTarget.role) &&
+        (adminActive(user) || levelNum(c.role) <= myLevel))
     : [];
 
   const openQuickEntry = (row: TeamRow) => {
@@ -545,6 +553,8 @@ export default function TeamScreen() {
       <MoveMemberSheet
         target={moveTarget}
         candidates={moveCandidates}
+        canCrossOffice={adminActive(user)}
+        downlineCount={moveTarget?.team_size}
         onClose={() => setMoveTarget(null)}
         onMoved={fetchAll}
       />

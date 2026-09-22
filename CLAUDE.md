@@ -110,6 +110,23 @@ active direct reports may be lowered (their branch would go dark to them) —
 reassign first. Every change is audit-logged as `set_role` and syncs the linked
 login so it applies without a re-login.
 
+**Office follows the upline (per owner, 2026-09-22):** a person's office is
+set from their upline's, never left to disagree with it. `POST /api/team/reassign`
+(the Team tab's MOVE, and the Admin Panel's UPLINE · MOVE) and
+`POST /api/admin/set-upline` (orphan repair) both go through `_rehome_under()`:
+a move under someone in another office rehomes the person into that office,
+so the whole hierarchy above them is the new office's. Crossing an office
+line is **admin-only** (`is_admin`: the owner and MJ) — not RGA, not
+`finance_admin`; a leader's within-downline move stays inside one office.
+`move_downline` (default on, a Switch on the Move sheet) takes the person's
+downline with them, office and all, still reporting to them; off, their
+direct reports go to the person's former upline (where remove-person parks an
+orphaned downline), so nobody is left reporting across an office line.
+`POST /api/admin/set-office` corrects **one** record's office with no
+hierarchy change (the Admin Panel's OFFICE field) and deliberately does not
+cascade. Every one of these is audit-logged with the old and new office and
+the ids moved.
+
 **The view switch (per owner, 2026-09-19):** one preference on the users doc,
 `view_mode` (`full` | `own`), set by the More tab through
 `POST /api/me/view-mode` and offered only where `user_can_toggle_view()` —
