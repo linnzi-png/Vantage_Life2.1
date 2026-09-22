@@ -201,6 +201,17 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
   importer replaces rather than adds. Reconcile with
   `python3 backend/audit_war_overlap.py <folder>`.
 - 9 PM gate = yellow warning banner; "Midnight Miracle" = the 12 AM–6 AM entry window (`gate_state()`)
+- Leaders' pulse is NIF by default (owner, 2026-09-22): at 06:30 Detroit
+  `run_leader_auto_nif()` files an automatic all-zero NIF entry (`is_nif`,
+  `auto_nif`, `source: "auto"`, `entered_by: "system"`) for every active,
+  producing MGA/RGA — `LEADER_AUTO_NIF_ROLES`, level_3 and level_4 **by
+  tier**, never by title — who has no entry for the sales day that closed at
+  06:00. Only that one day, never older ones, never twice. A real entry for
+  that day (their own or a proxy) deletes the automatic one. For those tiers
+  `/pulse/me/today` returns an open gate and `auto_nif: true` (no yellow
+  banner), `/pulse/me/streak` returns `exempt: true` (no streak pill), and
+  `team_view` files no `no_pulse` flag on their row. Agents, SAs and GAs are
+  untouched: the 9 PM ladder and Missing Numbers were already MGA/RGA-free.
 - Close Rate formula: `Sales / Sits` — implemented in `backend/metrics.py`.
   N1 is a person who cannot be insured for medical reasons. An agent has no
   control over that, so it must never count against them — and it doesn't,
