@@ -11,6 +11,7 @@
     { "source": "/tour", "destination": "/tour.html" },
     { "source": "/iphone", "destination": "/iphone.html" },
     { "source": "/android", "destination": "/android.html" },
+    { "source": "/leaders", "destination": "/leaders.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
