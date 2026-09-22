@@ -55,14 +55,20 @@ chain above the caller, nearest first, with name, title, phone, email and
 office only, never production (`team_uplines()`). The client opens them in
 the contact sheet without an `agent_id`, so no history is fetched.
 
-The dashboard is deliberately NOT narrowed with this: it keeps showing the
-caller's office and the whole agency as before (`visible_agent_ids` and the
-Platinum Wall are unchanged). What did change there is the copy: the summary
-carries `scope` (`agency` / `office` / `team` / `you`) and one scope word runs
-through the section title and all three stat labels, each section has a
-one-line subtitle saying what it covers, and OFFICE MARKET SHARE is now
-PRODUCTION BY OFFICE. "Agency" is the word for the whole company; "Office"
-for an RGA ship.
+**The dashboard is universal (owner, 2026-09-22).** Every agent, leader and
+office opens the same board, whatever their tier and whatever the More-tab
+switch says: Push Month, then Agency ALP / Sits / Sales directly under the
+countdown, then Top 3 Vets & Rookies with the Platinum Rule, then Production
+by Office with its four office tabs, all on the Daily / Weekly / Monthly
+selector. `GET /api/dashboard/summary`, `/ticker`, `/platinum-wall` and
+`/offices` all take their agent filter from one helper,
+`dashboard_agent_ids()`, which returns None (no filter) — never call
+`visible_agent_ids` or `team_scope_agent_ids` from a dashboard route, and
+never add a per-tier branch there. The summary still carries `scope` and one
+scope word runs through the section title and the three stat labels; on
+the dashboard that word is always "Agency". The old PRODUCTION HISTORY block
+(the viewer's own 13-week chart at the foot of the dashboard) is gone; that
+chart lives on the contact card the Team tab opens.
 
 The Team tab still reads as a leaderboard — agents ranked inside their tenure
 group (ROOKIES, VETERANS, and TENURE NOT SET for the people nobody has
@@ -133,8 +139,9 @@ the ids moved.
 `POST /api/me/view-mode` and offered only where `user_can_toggle_view()` —
 an `is_admin` account with a linked producer tier. Two meanings by tier:
 MJ (level_4 + admin) flips between the whole company and his own RGA team
-(`visible_agent_ids`, `team_scope_agent_ids` and the Platinum Wall return his
-downline in `own`); Afnan (level_1 + the in-house admin grant) flips between
+on the Team tab (`visible_agent_ids` and `team_scope_agent_ids` return his
+downline in `own`; the dashboard does not move — see "The dashboard is
+universal" above); Afnan (level_1 + the in-house admin grant) flips between
 agent duties and the admin tools (`user_admin_active()` is what the read
 paths consult, so in `own` the Team tab marks office peers as not hers and
 the client hides the admin menu). It is a preference about what the person
@@ -280,7 +287,7 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 
 ## Forbidden Patterns
 - NEVER subtract N1 from Sits — Sits already excludes them; subtracting double-counts the exclusion
-- NEVER allow an Agent to see data above their RBAC tier — the two documented exceptions are the Team tab's own-SA-team read and the agent card it opens (see RBAC Hierarchy above), and the Push Month goal (`GET /api/dashboard/push-goal`, owner 2026-09-19): one company-wide Gross ALP total with by-day and by-office splits, read by every tier, never per-agent; don't generalize either or extend them to other routes without an explicit owner decision
+- NEVER allow an Agent to see data above their RBAC tier — the documented exceptions are the Team tab's own-SA-team read and the agent card it opens (see RBAC Hierarchy above), and the dashboard (owner 2026-09-22; Push Month owner 2026-09-19): `GET /api/dashboard/summary`, `/ticker`, `/platinum-wall`, `/offices` and `/push-goal` are company-wide for every tier — rollups, top-3 names with their Gross ALP, office totals and the Push Month goal, never a per-agent history; don't generalize these or extend them to other routes without an explicit owner decision
 - NEVER change the 6AM cycle boundary without explicit instruction
 - NEVER bypass the Wednesday 2PM cutoff gate
 - NEVER collapse authentication and authorization into a single check

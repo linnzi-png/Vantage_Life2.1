@@ -30,7 +30,6 @@ export type TourAnchorId =
   | 'dash-stats'
   | 'dash-wall'
   | 'dash-ticker'
-  | 'dash-history'
   | 'pulse-stepper'
   | 'pulse-days'
   | 'pulse-upline'
@@ -117,13 +116,6 @@ const BASICS_FULL: TourStep[] = [
     body: 'Top Vets, top Rookies, and Platinum Rule honorees. Tap any name to open their contact card — call or text them straight from the app.',
   },
   {
-    id: 'production-history',
-    screen: '/',
-    anchor: 'dash-history',
-    title: 'PRODUCTION HISTORY',
-    body: 'Scroll to the bottom of your dashboard for PRODUCTION HISTORY — your last 13 weeks of ALP, sales, and close rate, charted week by week.',
-  },
-  {
     id: 'ticker',
     screen: '/',
     anchor: 'dash-ticker',
@@ -190,14 +182,7 @@ const basicsBrief = (welcomeBody: string, includeUpline: boolean): TourStep[] =>
     screen: '/',
     anchor: 'dash-stats',
     title: 'LIVE ROLLUPS',
-    body: 'ALP, Sits, and Sales roll up live across everyone visible to you. Close Rate everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close rate down.',
-  },
-  {
-    id: 'production-history',
-    screen: '/',
-    anchor: 'dash-history',
-    title: 'PRODUCTION HISTORY',
-    body: 'At the bottom of the dashboard: PRODUCTION HISTORY — 13 weeks of ALP, sales, and close rate, charted week by week.',
+    body: 'ALP, Sits, and Sales roll up live across the whole agency — the same board for everyone. Close Rate everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close rate down.',
   },
   {
     id: 'nightly-pulse',
@@ -312,8 +297,8 @@ const MGA_STEPS: TourStep[] = [
     id: 'hierarchy-scope',
     screen: '/',
     anchor: 'dash-stats',
-    title: 'FULL-HIERARCHY SCOPE',
-    body: 'Your dashboard and Team view roll up every leader and agent under you — the numbers here are your whole hierarchy, live.',
+    title: 'ONE BOARD, YOUR TEAM',
+    body: 'Your dashboard is the whole agency\'s scoreboard — the same board every agent, leader and office sees. Your hierarchy rolls up in the TEAM tab: every leader and agent under you, live.',
   },
 ];
 

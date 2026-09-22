@@ -86,8 +86,6 @@
   .wall-col.vets h4 { color: var(--gold); } .wall-col.rooks h4 { color: var(--orange); }
   .wall-item { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; border-top: 1px solid var(--border); }
   .wall-item b { font-weight: 800; } .wall-item span { color: var(--primary); font-weight: 900; }
-  .mini-chart { display: flex; align-items: flex-end; gap: 3px; height: 46px; margin-top: 8px; }
-  .mini-chart i { flex: 1; background: linear-gradient(180deg, rgba(49,152,66,.9), rgba(49,152,66,.25)); border-radius: 2px 2px 0 0; }
   .ticker { position: absolute; left: 0; right: 0; bottom: 58px; height: 32px; background: #000; border-top: 1px solid var(--border); display: flex; align-items: center; overflow: hidden; }
   .ticker .live { background: var(--primary); color: #000; font-size: 10px; font-weight: 900; letter-spacing: 1.4px; padding: 0 9px; height: 100%; display: flex; align-items: center; flex: none; }
   .ticker .feed { white-space: nowrap; font-size: 10.5px; color: var(--dim); animation: marquee 18s linear infinite; padding-left: 12px; }
@@ -278,7 +276,7 @@
           <div class="day-pill">📅 <span class="num">2026-08-09</span> ▾</div>
         </div>
         <div class="seg" data-t="dash-period"><span class="on">Daily</span><span>Weekly</span><span>Monthly</span></div>
-        <div class="sect" id="dash-scope">TODAY'S TEAM PRODUCTION</div>
+        <div class="sect" id="dash-scope">TODAY'S AGENCY PRODUCTION</div>
         <div class="stats" data-t="dash-stats">
           <div class="stat" style="--ac:#319842"><div class="lab">Total Team ALP</div><div class="val num">$45,210</div><div class="delta">▲ +8.5% vs yest.</div></div>
           <div class="stat" style="--ac:#00558C"><div class="lab">Agency Sits</div><div class="val num">31</div></div>
@@ -296,10 +294,6 @@
               <div class="wall-item"><b>K. Pyles</b><span class="num">$2,150</span></div>
             </div>
           </div>
-        </div>
-        <div class="card" data-t="dash-history">
-          <div class="sect">PRODUCTION HISTORY · 13W</div>
-          <div class="mini-chart" aria-hidden="true"><i style="height:36%"></i><i style="height:48%"></i><i style="height:41%"></i><i style="height:58%"></i><i style="height:52%"></i><i style="height:66%"></i><i style="height:60%"></i><i style="height:74%"></i><i style="height:69%"></i><i style="height:82%"></i><i style="height:77%"></i><i style="height:90%"></i><i style="height:100%"></i></div>
         </div>
         <div class="ticker" data-t="dash-ticker"><div class="live">LIVE</div><div class="feed">● <b>J. Rivers</b> <em class="num">$2,100</em> Detroit · 2 REPS&nbsp;&nbsp;&nbsp;● <b>M. Cole</b> <em class="num">$1,450</em> Troy · 1 REP&nbsp;&nbsp;&nbsp;● <b>A. Mulder</b> <em class="num">$3,300</em> Gojcaj · 2 REPS&nbsp;&nbsp;&nbsp;● <b>J. Rivers</b> <em class="num">$2,100</em> Detroit · 2 REPS&nbsp;&nbsp;&nbsp;● <b>M. Cole</b> <em class="num">$1,450</em> Troy · 1 REP&nbsp;&nbsp;&nbsp;● <b>A. Mulder</b> <em class="num">$3,300</em> Gojcaj · 2 REPS</div></div>
       </div>
@@ -559,10 +553,10 @@
 <script>
 (function () {
   var ROLE_META = {
-    agent: { name: 'Jordan Cole', title: 'Agent',                   scope: "TODAY'S TEAM PRODUCTION",  team: false, tools: false },
-    ga:    { name: 'Gabrielle Lead', title: 'CoExecutive Producer', scope: "TODAY'S TEAM PRODUCTION",  team: true,  tools: false },
-    mga:   { name: 'MJ Vantage', title: 'Executive Producer',       scope: "TODAY'S TEAM PRODUCTION",  team: true,  tools: false },
-    rga:   { name: 'MJ Vantage', title: 'Chief Executive Producer', scope: "TODAY'S GLOBAL PRODUCTION", team: true, tools: true }
+    agent: { name: 'Jordan Cole', title: 'Agent',                   scope: "TODAY'S AGENCY PRODUCTION",  team: false, tools: false },
+    ga:    { name: 'Gabrielle Lead', title: 'CoExecutive Producer', scope: "TODAY'S AGENCY PRODUCTION",  team: true,  tools: false },
+    mga:   { name: 'MJ Vantage', title: 'Executive Producer',       scope: "TODAY'S AGENCY PRODUCTION",  team: true,  tools: false },
+    rga:   { name: 'MJ Vantage', title: 'Chief Executive Producer', scope: "TODAY'S AGENCY PRODUCTION", team: true, tools: true }
   };
 
   // Steps mirror the app's real v2 walkthrough registry.
@@ -580,7 +574,6 @@
       st('dashboard', 'dash-period', 'DAILY · WEEKLY · MONTHLY', 'Flip the scoreboard between today, the rolling week, and the month. The production week closes every Wednesday at 2:00 PM, when totals lock and archive.'),
       st('dashboard', 'dash-stats', 'LIVE PRODUCTION', 'Total ALP, Sits, and Sales update live, with the swing versus yesterday. One rule to know everywhere in this app: Close Rate is Sales ÷ Sits. N1 visits (medically unqualified) are tallied separately and already left out of your Sits — they never count against you.'),
       st('dashboard', 'dash-wall', 'THE PLATINUM WALL', 'Top Vets, top Rookies, and Platinum Rule honorees. Tap any name to open their contact card — call or text them straight from the app.'),
-      st('dashboard', 'dash-history', 'PRODUCTION HISTORY', 'Scroll to the bottom of your dashboard for PRODUCTION HISTORY — your last 13 weeks of ALP, sales, and close rate, charted week by week.'),
       st('dashboard', 'dash-ticker', 'THE LIVE WIRE', 'Every sale in the agency scrolls across this ticker as it lands. When you close tonight, the whole team sees it here.'),
       st('dashboard', 'tabbar', 'GETTING AROUND', "Everything lives in these tabs. Next, we'll walk through the ones you'll use every day."),
       st('pulse', 'pulse-stepper', 'YOUR NIGHTLY PULSE', "The one job you own every night: your 14 nightly numbers, entered one at a time — Sets through Gross ALP. Each step tells you exactly what counts. Hit $10K in a day and you join the Player's Club."),
@@ -592,8 +585,7 @@
     var BASICS_BRIEF = [
       st('dashboard', null, 'WELCOME TO VANTAGELIFE', welcome),
       st('dashboard', 'dash-header', 'THE SALES DAY', 'The date pill is the open sales day. The production week locks every Wednesday at 2:00 PM. Tap the pill to review past days read-only.'),
-      st('dashboard', 'dash-stats', 'LIVE ROLLUPS', 'ALP, Sits, and Sales roll up live across everyone visible to you. Close Rate everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close rate down.'),
-      st('dashboard', 'dash-history', 'PRODUCTION HISTORY', 'At the bottom of the dashboard: PRODUCTION HISTORY — 13 weeks of ALP, sales, and close rate, charted week by week.'),
+      st('dashboard', 'dash-stats', 'LIVE ROLLUPS', 'ALP, Sits, and Sales roll up live across the whole agency — the same board for everyone. Close Rate everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close rate down.'),
       st('pulse', 'pulse-stepper', 'YOUR NIGHTLY PULSE', 'Your own 14 nightly numbers still go in here every night — before the 9:00 PM gate, or in the Midnight Miracle window (midnight–6:00 AM) at the latest.')
     ];
     var UPLINE = st('pulse', 'pulse-upline', 'YOUR UPLINE', "Your upline's contact card sits at the bottom of the Pulse screen — one tap to call or text.");
@@ -610,7 +602,7 @@
     var MGA = [
       st('nominations', 'noms-header', 'POST TO THE WALL', 'You close the loop: once a nomination hits the endorsement threshold, POST TO PLATINUM WALL publishes it agency-wide on the Platinum Wall.'),
       st('team', 'team-roster', 'COACH FROM THE TREND', "Open anyone on your roster and read their 13-week production history before the call — ALP, sales, and close rate, charted. History is downline-scoped: you see your whole hierarchy, and nobody above it."),
-      st('dashboard', 'dash-stats', 'FULL-HIERARCHY SCOPE', 'Your dashboard and Team view roll up every leader and agent under you — the numbers here are your whole hierarchy, live.')
+      st('dashboard', 'dash-stats', 'ONE BOARD, YOUR TEAM', "Your dashboard is the whole agency's scoreboard — the same board every agent, leader and office sees. Your hierarchy rolls up in the TEAM tab: every leader and agent under you, live.")
     ];
 
     var RGA = [

@@ -502,13 +502,25 @@ def user_admin_active(user: Dict[str, Any]) -> bool:
     return not user_reads_own_only(user)
 
 
+async def dashboard_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
+    """Who the dashboard covers: everyone. Owner, 2026-09-22: the dashboard is
+    universal — every agent, every leader, every office sees the same page:
+    the Push Month goal, the agency's ALP / Sits / Sales, the Top 3 Vets and
+    Rookies with the Platinum Rule, and Production by Office for all four
+    offices. It does not follow the viewer's tier and it does not follow MJ's
+    More-tab switch; that switch narrows the Team tab only. Returned as None
+    (= no agent filter) from one place so the four dashboard routes — summary,
+    ticker, Platinum Wall, offices — cannot drift apart. This is the one
+    documented read above a tier, next to the Push Month goal: aggregate
+    totals and a Top 3, never a person's day (see /agents/{id}/history)."""
+    return None
+
+
 def dashboard_scope_label(user: Dict[str, Any], ids: Optional[List[str]]) -> str:
-    """One word for what the dashboard summary covers, so every section
-    title and stat label say the same thing (owner, 2026-09-19: the old
-    header mixed "global", "team" and "agency" for one scope). "agency" is
-    the whole company (MJ, finance, a plain RGA, whose summary is agency-wide
-    as before); "office" is MJ's own-RGA view; "team" is a leader's downline;
-    "you" is a level_1, whose summary is their own production."""
+    """One word for what the dashboard summary covers. Since 2026-09-22 the
+    dashboard is universal (dashboard_agent_ids), so this is always "agency";
+    the other words remain for the label's type and for any caller that
+    still passes a narrowed id list."""
     if ids is None:
         return "agency"
     role = user.get("role", "level_1")
@@ -1304,7 +1316,7 @@ async def dashboard_summary(
     period: Optional[str] = None,
     user: Dict[str, Any] = Depends(require_agent_or_finance_admin),
 ):
-    ids = await visible_agent_ids(user)
+    ids = await dashboard_agent_ids(user)  # universal (owner, 2026-09-22)
     today = current_sales_day_str()
 
     # Weekly/monthly: a rolling window (delta vs the previous window). Daily and
@@ -1363,7 +1375,7 @@ async def dashboard_summary(
 @api_router.get("/dashboard/ticker")
 async def dashboard_ticker(user: Dict[str, Any] = Depends(require_agent)):
     """Last 60 minutes of sales activity for the marquee ticker."""
-    ids = await visible_agent_ids(user)
+    ids = await dashboard_agent_ids(user)  # universal (owner, 2026-09-22)
     cutoff = now_utc() - timedelta(minutes=60)
     q: Dict[str, Any] = {"submitted_at": {"$gte": cutoff}, "sales": {"$gt": 0}}
     if ids is not None:
@@ -1397,36 +1409,16 @@ async def dashboard_platinum_wall(
     every historical day and every rolling window came back empty — the wall was
     the one dashboard section the period selector could not reach.
 
-    Scoping intentionally mirrors visible_agent_ids for level_4/finance_admin
-    (full agency) and level_2/level_3 (their own downline — test_wall_is_
-    scoped_to_the_viewers_team locks this in so one office's numbers never
-    leak into a rival office's wall). level_1 is the one case handled
-    differently on purpose: visible_agent_ids gives a level_1 agent read
-    access to themselves alone (there's no downline below an Agent), so
-    reusing it here collapsed their candidate pool to a "team of one" —
-    every rank-and-file agent saw either nothing or only their own row,
-    never the real leaderboard. Only level_4/finance_admin ever saw a
-    working wall, which is how this went unnoticed. level_1 is scoped to
-    their own office instead — the same team boundary already used
-    elsewhere (office_branding, historical_vault) — so they see the same
-    real top performers their upline does.
+    The wall is agency-wide for everyone (owner, 2026-09-22: the dashboard is
+    universal — see dashboard_agent_ids). It used to follow the viewer's tier
+    (own office for an Agent, own downline for a leader, MJ's own team on the
+    More-tab switch), which made the same "Top 3" mean four different things.
     """
     # scoreboard_window resolves daily (optionally historical) and the rolling
     # weekly/monthly ranges identically to the summary above it.
     q, _ = scoreboard_window(period or "daily", sales_day)
-    role = user.get("role", "level_1")
-    if role == "level_4" and user_reads_own_only(user):
-        q["agent_id"] = {"$in": await downline_agent_ids(user["agent_id"])}  # narrow view
-    elif role == "level_4" or role == FINANCE_ADMIN_ROLE:
-        pass  # full agency — no scoping, same as before
-    elif role == "level_1":
-        me = await db.agent_profiles.find_one({"agent_id": user.get("agent_id")}, {"_id": 0, "office": 1})
-        office = (me or {}).get("office")
-        office_ids = [a["agent_id"] async for a in db.agent_profiles.find(
-            {"office": office}, {"_id": 0, "agent_id": 1})] if office else []
-        q["agent_id"] = {"$in": office_ids}
-    else:
-        ids = await downline_agent_ids(user.get("agent_id"))
+    ids = await dashboard_agent_ids(user)
+    if ids is not None:
         q["agent_id"] = {"$in": ids}
     pipeline = [
         {"$match": q},
@@ -1476,7 +1468,7 @@ async def dashboard_platinum_wall(
             s["ts"] = iso_utc(s["ts"])
     # What the wall ranks over, for its subtitle: the agency, the caller's
     # office (level_1, or MJ's own-RGA view), or a leader's downline.
-    wall_scope = "agency" if "agent_id" not in q else ("office" if role == "level_1" else ("office" if role == "level_4" else "team"))
+    wall_scope = dashboard_scope_label(user, ids)
     return {"vets": vets, "rookies": rookies, "unranked": unranked,
             "platinum_rule": platinum, "period": period or "daily", "scope": wall_scope}
 
@@ -1487,7 +1479,7 @@ async def dashboard_offices(
     period: Optional[str] = None,
     user: Dict[str, Any] = Depends(require_agent_or_finance_admin),
 ):
-    ids = await visible_agent_ids(user)
+    ids = await dashboard_agent_ids(user)  # universal (owner, 2026-09-22)
     # Weekly/monthly use a rolling window; daily/default keeps the single-day
     # (optionally historical) behavior.
     window, _ = scoreboard_window(period or "daily", sales_day)
