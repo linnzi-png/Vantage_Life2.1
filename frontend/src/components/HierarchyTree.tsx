@@ -45,6 +45,7 @@ function tierColor(role: Role): string {
   if (lvl >= 4) return COLORS.gold;
   if (lvl === 3) return COLORS.primary;
   if (lvl === 2) return COLORS.secondary;
+  if (role === 'level_sa') return COLORS.teal;
   return COLORS.orange;
 }
 

@@ -37,11 +37,23 @@ async def test_sa_can_remove_their_agent(client, seeded_db):
     assert (await profile(seeded_db, "AG_1"))["archived"] is True
 
 
-async def test_ga_cannot_remove_sa_same_tier(client, seeded_db):
+async def test_ga_removes_their_sa_but_an_sa_cannot_remove_a_peer(client, seeded_db):
+    # SA sits one tier below GA (owner, 2026-09-22), so GA_1 may remove SA_1.
     token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
     r = await client.post("/api/team/remove-person", headers=auth(token), json=remove("SA_1"))
+    assert r.status_code == 200, r.text
+    assert (await profile(seeded_db, "SA_1")).get("archived")
+    # But an SA cannot remove someone at their own tier.
+    await seeded_db.agent_profiles.insert_one(
+        {"agent_id": "SA_2", "name": "Sa Two", "email": "sa2@test.dev", "role": "level_sa",
+         "io_role": "SA", "upline_id": "GA_1", "office": "MCM"})
+    await seeded_db.agent_profiles.update_one({"agent_id": "AG_1"}, {"$set": {"upline_id": "SA_2"}})
+    await seeded_db.agent_profiles.insert_one(
+        {"agent_id": "SA_3", "name": "Sa Three", "email": "sa3@test.dev", "role": "level_sa",
+         "io_role": "SA", "upline_id": "SA_2", "office": "MCM"})
+    token = await make_session(seeded_db, role="level_sa", agent_id="SA_2", email="sa2@test.dev")
+    r = await client.post("/api/team/remove-person", headers=auth(token), json=remove("SA_3"))
     assert r.status_code == 403
-    assert not (await profile(seeded_db, "SA_1")).get("archived")
 
 
 async def test_mga_can_remove_ga(client, seeded_db):
@@ -242,9 +254,14 @@ async def test_ga_can_reassign_within_downline(client, seeded_db):
 
 async def test_ga_cannot_reassign_same_tier_or_outside(client, seeded_db):
     token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
-    # SA_1 is GA_1's downline but the same tier.
-    r = await client.post("/api/team/reassign", headers=auth(token),
-                          json={"agent_id": "SA_1", "new_upline_agent_id": "GA_1"})
+    # SA_1 is one tier below GA_1 now, so a GA may move their SA; an SA may
+    # not move a fellow SA (own tier).
+    await seeded_db.agent_profiles.insert_one(
+        {"agent_id": "SA_2", "name": "Sa Two", "email": "sa2@test.dev", "role": "level_sa",
+         "io_role": "SA", "upline_id": "SA_1", "office": "MCM"})
+    sa = await make_session(seeded_db, role="level_sa", agent_id="SA_1", email="sa1@test.dev")
+    r = await client.post("/api/team/reassign", headers=auth(sa),
+                          json={"agent_id": "SA_2", "new_upline_agent_id": "SA_1"})
     assert r.status_code == 403
     # AG_2 is in a sibling branch.
     r = await client.post("/api/team/reassign", headers=auth(token),

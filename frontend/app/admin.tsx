@@ -79,16 +79,16 @@ const fmtWhen = (iso?: string | null): string => {
   return d.toLocaleDateString(undefined, opts);
 };
 
-const TIERS: Role[] = ['level_1', 'level_2', 'level_3', 'level_4'];
+const TIERS: Role[] = ['level_1', 'level_sa', 'level_2', 'level_3', 'level_4'];
 // A finance_admin actor's own range: level_1..level_3 only. RGA (level_4) and
 // finance_admin itself are untouchable — mirrors the 403s on /api/admin/set-role
 // and /api/admin/add-person (server is the real enforcement; this is convenience).
-const TIERS_FOR_FINANCE_ADMIN: Role[] = ['level_1', 'level_2', 'level_3'];
+const TIERS_FOR_FINANCE_ADMIN: Role[] = ['level_1', 'level_sa', 'level_2', 'level_3'];
 // Granting the Financial Admin role is RGA-only (true level_4, independent of
 // is_admin) — see role_level(user.role) < 4 checks on /api/admin/set-role and
 // /api/admin/add-person.
-const TIERS_FOR_RGA: Role[] = ['level_1', 'level_2', 'level_3', 'level_4', 'finance_admin'];
-const TIER_SHORT: Record<string, string> = { level_1: 'L1', level_2: 'L2', level_3: 'L3', level_4: 'L4', finance_admin: 'FA' };
+const TIERS_FOR_RGA: Role[] = ['level_1', 'level_sa', 'level_2', 'level_3', 'level_4', 'finance_admin'];
+const TIER_SHORT: Record<string, string> = { level_1: 'L1', level_sa: 'SA', level_2: 'L2', level_3: 'L3', level_4: 'L4', finance_admin: 'FA' };
 const IO_ROLES = ['Agent', 'SA', 'GA', 'MGA', 'RGA', 'Partner', 'Senior Partner', 'Builder', 'inTraining'];
 
 export default function AdminScreen() {

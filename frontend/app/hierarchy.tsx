@@ -9,7 +9,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
-import { api, COLORS, useAuth, levelNum, isFinanceAdmin, Role } from '../src/lib/auth';
+import { api, COLORS, useAuth, levelNum, LEADER_MIN, isFinanceAdmin, Role } from '../src/lib/auth';
 import { HierarchyTree, HierarchyAgent } from '../src/components/HierarchyTree';
 import { AgentContactSheet } from '../src/components/AgentContactSheet';
 import { LoadState } from '../src/components/LoadState';
@@ -34,7 +34,7 @@ export default function HierarchyScreen() {
   const agencyWide = isFA || user?.is_admin === true;
   // Same "who may reassign" rule as the Team tab: level_2 and above, with no
   // SA exception (per owner, 2026-09-15 — every SA reassigns).
-  const canMoveAtAll = agencyWide || myLevel >= 2;
+  const canMoveAtAll = agencyWide || myLevel >= LEADER_MIN;
 
   const [agents, setAgents] = useState<HierarchyAgent[]>([]);
   const [teamRows, setTeamRows] = useState<TeamRow[]>([]);
@@ -141,7 +141,8 @@ export default function HierarchyScreen() {
         {([
           ['level_4', 'RGA', COLORS.gold],
           ['level_3', 'MGA', COLORS.primary],
-          ['level_2', 'GA/SA', COLORS.secondary],
+          ['level_2', 'GA', COLORS.secondary],
+          ['level_sa', 'SA', COLORS.teal],
           ['level_1', 'Agent', COLORS.orange],
         ] as const).map(([, label, color]) => (
           <View key={label} style={styles.legendItem}>

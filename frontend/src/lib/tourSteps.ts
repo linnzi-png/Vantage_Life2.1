@@ -440,6 +440,7 @@ export function stepsForRole(role: Role): TourStep[] {
   switch (role) {
     case 'level_1':
       return [...BASICS_FULL, ...AGENT_TEAM_STEPS, OUTRO];
+    case 'level_sa':
     case 'level_2':
       return [
         ...basicsBrief(

@@ -11,7 +11,7 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, A
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { api, COLORS, useAuth, levelNum, roleTitle } from '../src/lib/auth';
+import { api, COLORS, useAuth, levelNum, LEADER_MIN, roleTitle } from '../src/lib/auth';
 import { QuickEntryForm, QuickEntryTarget } from '../src/components/QuickEntryForm';
 import { LoadState } from '../src/components/LoadState';
 
@@ -93,7 +93,7 @@ export default function MissingScreen() {
     );
   }
 
-  if (levelNum(user?.role) < 2) {
+  if (levelNum(user?.role) < LEADER_MIN) {
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <Stack.Screen options={{ title: 'MISSING NUMBERS', headerStyle: { backgroundColor: COLORS.bg }, headerTintColor: '#fff' }} />

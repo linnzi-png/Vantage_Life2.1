@@ -110,7 +110,7 @@
       <ol class="steps">
         <li>Open the <span class="ui">Team</span> tab and tap the person's row to open their card.</li>
         <li>Tap <span class="ui green">Change Tier</span>.</li>
-        <li>Pick the new tier and title in one step: <b>Trainee, Agent, SA, GA</b> or <b>MGA</b>. Their access and their displayed title move together, so nobody ends up with GA access and an Agent title.</li>
+        <li>Pick the new tier and title in one step: <b>Trainee, Agent, SA, GA</b> or <b>MGA</b>. You are only offered tiers below your own. Access and displayed title move together, so nobody ends up with GA access and an Agent title.</li>
         <li>Confirm. It applies right away, without the person signing out and back in.</li>
       </ol>
     </section>
@@ -130,19 +130,19 @@
       <div class="kicker">The rules the app enforces</div>
       <h2>What you can and cannot do</h2>
       <table>
-        <thead><tr><th>Action</th><th>SA / GA</th><th>MGA</th><th>RGA</th><th>Owner / MJ</th></tr></thead>
+        <thead><tr><th>Action</th><th>SA</th><th>GA</th><th>MGA</th><th>RGA</th><th>Owner / MJ</th></tr></thead>
         <tbody>
-          <tr><td>Promote or lower someone in your own downline</td><td><span class="y">Yes</span>, to Trainee or Agent</td><td><span class="y">Yes</span>, up to SA or GA</td><td><span class="y">Yes</span>, up to MGA</td><td><span class="y">Yes</span>, anyone, up to MGA</td></tr>
-          <tr><td>Make someone an RGA, or change an RGA's tier</td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="y">Admin Panel</span> only</td></tr>
-          <tr><td>Move someone within your own downline and office</td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td></tr>
-          <tr><td>Move someone into another office</td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="y">Yes</span>, from the Team tab or Admin Panel</td></tr>
-          <tr><td>Correct an office with no hierarchy change</td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="y">Admin Panel</span> → person → Office</td></tr>
+          <tr><td>Promote or lower someone in your own downline</td><td><span class="y">Yes</span>, to Trainee or Agent</td><td><span class="y">Yes</span>, up to SA</td><td><span class="y">Yes</span>, up to GA</td><td><span class="y">Yes</span>, up to MGA</td><td><span class="y">Yes</span>, anyone, up to MGA</td></tr>
+          <tr><td>Make someone an RGA, or change an RGA's tier</td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="y">Admin Panel</span> only</td></tr>
+          <tr><td>Move someone within your own downline and office</td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td></tr>
+          <tr><td>Move someone into another office</td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="y">Yes</span>, from the Team tab or Admin Panel</td></tr>
+          <tr><td>Correct an office with no hierarchy change</td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="y">Admin Panel</span> → person → Office</td></tr>
         </tbody>
       </table>
       <ul class="rules" style="margin-top:14px">
         <li><b>Your own downline only.</b> You can only promote or move people who report up to you. A row marked <span class="ui">Team</span> is a teammate you can see, not someone you manage.</li>
-        <li><b>Strictly below your own tier.</b> SA and GA are the same tier, so an SA or GA can make an Agent, never an SA or GA. An MGA can make an SA or GA, never another MGA. Nobody can mint a peer who would then read their book.</li>
-        <li class="no"><b>Nobody goes above their own upline.</b> To make a GA who reports to an MGA into an MGA, move the GA under an RGA first, then change the tier.</li>
+        <li><b>Strictly below your own tier.</b> The ladder is Agent, SA, GA, MGA, RGA. An SA makes Agents. A GA makes SAs. An MGA makes GAs. Nobody can mint a peer who would then read their book.</li>
+        <li class="no"><b>Nobody goes above their own upline.</b> An agent who reports to an SA cannot be made a GA while still under that SA: move them under a GA or higher first, then change the tier.</li>
         <li class="no"><b>Nobody with active reports is lowered.</b> Move their people first; otherwise that branch would go dark to them.</li>
         <li><b>Office follows the upline.</b> A person filed under a leader in another office is a data error, so a cross-office move re-homes the person, and with the switch on their whole downline, into the new office. From then on they count toward that office everywhere.</li>
         <li><b>Everything is logged.</b> Every tier change and move is written to the audit log with who did it, when, and what changed.</li>

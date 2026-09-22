@@ -41,7 +41,23 @@ function resolveUrl(path: string): string {
   return `${BACKEND}${path}`;
 }
 
-export type Role = 'level_1' | 'level_2' | 'level_3' | 'level_4' | 'pending' | 'finance_admin';
+// The ladder (owner, 2026-09-22): level_1 (Agent) < level_sa (SA) < level_2 (GA)
+// < level_3 (MGA) < level_4 (RGA). SA is its own tier, ranked 1.5, so every
+// "strictly below your own tier" rule tells SA and GA apart without renumbering.
+export type Role = 'level_1' | 'level_sa' | 'level_2' | 'level_3' | 'level_4' | 'pending' | 'finance_admin';
+
+const ROLE_RANK: Record<string, number> = { level_1: 1, level_sa: 1.5, level_2: 2, level_3: 3, level_4: 4 };
+/** Lowest rank that runs a team — SA and above. Use `levelNum(r) >= LEADER_MIN`,
+ *  never `>= 2`, for "is this a leader" checks; `>= 2` means GA and above. */
+export const LEADER_MIN = ROLE_RANK.level_sa;
+
+/** Short tier badge: L1, SA, L2, L3, L4, FA. */
+export function tierShort(role?: string | null): string {
+  if (!role) return '—';
+  if (role === 'level_sa') return 'SA';
+  if (role === 'finance_admin') return 'FA';
+  return role.replace('level_', 'L');
+}
 
 export interface AppUser {
   user_id: string;
@@ -508,7 +524,7 @@ export function levelNum(role?: Role | null): number {
   // never satisfy a level-N gate (that's what require_agent/require_level
   // enforce server-side too; see FINANCE_ADMIN_ROLE in backend/server.py).
   if (role === 'finance_admin') return 0;
-  return parseInt(role.split('_')[1] || '1', 10);
+  return ROLE_RANK[role] ?? 1;
 }
 
 export function isFinanceAdmin(role?: Role | null): boolean {
@@ -568,6 +584,7 @@ const IO_ROLE_TITLES: Record<string, string> = {
 
 const TIER_TITLES: Record<string, string> = {
   level_1: 'Agent',
+  level_sa: 'Regional Producer',
   level_2: 'CoExecutive Producer',
   level_3: 'Executive Producer',
   level_4: 'Chief Executive Producer',
@@ -606,6 +623,7 @@ export const COLORS = {
   secondary: '#00558C',
   gold: '#FFD700',
   orange: '#FF8C00',
+  teal: '#2BB3A3',      // the SA tier, between Agent (orange) and GA (navy)
   red: '#FF3B30',
   yellow: '#EAB308',
   text: '#FFFFFF',

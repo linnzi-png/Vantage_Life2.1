@@ -41,7 +41,7 @@ ALIASES = [
 ]
 
 # (column, io_role, app role) from lowest tier to highest.
-_TIERS = [("sa", "SA", "level_2"), ("ga", "GA", "level_2"),
+_TIERS = [("sa", "SA", "level_sa"), ("ga", "GA", "level_2"),
           ("mga", "MGA", "level_3"), ("rga", "RGA", "level_4")]
 
 

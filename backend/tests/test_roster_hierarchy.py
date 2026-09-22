@@ -16,7 +16,7 @@ def test_row_count_after_dedup_and_exclusion():
 
 def test_sa_own_column_derives_sa_and_ga_upline():
     e = entry("Snoor Qaradaghi")
-    assert e["io_role"] == "SA" and e["role"] == "level_2"
+    assert e["io_role"] == "SA" and e["role"] == "level_sa"
     assert e["upline_name"] == "Ali Musa"
 
 

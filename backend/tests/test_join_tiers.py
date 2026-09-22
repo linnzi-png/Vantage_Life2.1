@@ -31,9 +31,12 @@ async def test_ga_self_registers_at_level_2_not_level_3(client, seeded_db):
     assert profile["io_role"] == "GA"
 
 
-async def test_sa_and_ga_land_on_the_same_tier(client, seeded_db):
-    """SA and GA have identical permissions — the title is the only difference."""
-    assert server.JOIN_TITLE_TIERS["SA"] == server.JOIN_TITLE_TIERS["GA"] == "level_2"
+async def test_sa_sits_one_tier_below_ga(client, seeded_db):
+    """The ladder is Agent < SA < GA < MGA < RGA (owner, 2026-09-22): SA is
+    its own tier, ranked between level_1 and level_2."""
+    assert server.JOIN_TITLE_TIERS["SA"] == server.SA_ROLE
+    assert server.JOIN_TITLE_TIERS["GA"] == "level_2"
+    assert server.role_level("level_1") < server.role_level(server.SA_ROLE) < server.role_level("level_2")
 
 
 async def test_agent_and_trainee_are_level_1(client, seeded_db):
@@ -43,7 +46,7 @@ async def test_agent_and_trainee_are_level_1(client, seeded_db):
 
 async def test_no_title_can_self_register_above_level_3(client, seeded_db):
     """The cap exists so a public form can never mint a full-agency level_4."""
-    assert all(t in ("level_1", "level_2", "level_3") for t in server.JOIN_TITLE_TIERS.values())
+    assert all(t in ("level_1", server.SA_ROLE, "level_2", "level_3") for t in server.JOIN_TITLE_TIERS.values())
 
 
 async def test_rga_is_capped_and_records_what_was_asked_for(client, seeded_db):

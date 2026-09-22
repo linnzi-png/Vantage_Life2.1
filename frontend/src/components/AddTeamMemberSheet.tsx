@@ -35,7 +35,7 @@ interface Props {
 const ROLE_OPTIONS: { role: Role; io_role: string; label: string }[] = [
   { role: 'level_1', io_role: 'Agent',      label: 'AGENT' },
   { role: 'level_1', io_role: 'inTraining', label: 'TRAINEE' },
-  { role: 'level_2', io_role: 'SA',         label: 'SA' },
+  { role: 'level_sa', io_role: 'SA',        label: 'SA' },
   { role: 'level_2', io_role: 'GA',         label: 'GA' },
 ];
 

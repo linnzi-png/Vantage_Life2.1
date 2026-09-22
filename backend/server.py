@@ -65,6 +65,7 @@ _SEED_OFFICES = ["MCM", "AMP", "Dearborn", "Heritage", "Siren"]  # used only for
 # Senior Partner are io_role titles carried by level_3/level_4 holders.
 LEVELS = {
     "level_1": "Agent",
+    "level_sa": "Regional Producer",
     "level_2": "CoExecutive Producer",
     "level_3": "Executive Producer",
     "level_4": "Chief Executive Producer",
@@ -152,7 +153,7 @@ def _leaderboard_group(row: Dict[str, Any]) -> str:
     rank among themselves, never against the agents they run), otherwise the
     tenure group — "rookie", "veteran", or "unset" for the people nobody has
     recorded a tenure for. Per owner (2026-09-16)."""
-    if role_level(row.get("role")) >= 2 and row.get("role") != FINANCE_ADMIN_ROLE:
+    if is_leader_role(row.get("role")):
         return "leader"
     tenure = row.get("is_rookie")
     if tenure is None:
@@ -195,14 +196,47 @@ def iso_utc(d: datetime) -> str:
     return d.isoformat()
 
 
-def role_level(role: Any) -> int:
-    """Numeric tier for a level_N role string; anything unparseable is tier 1.
-    Permission comparisons use tiers, never io_role titles — a person can hold
-    MGA and RGA titles at once, and only the level_N tier is authoritative."""
-    try:
-        return int(str(role).split("_")[1])
-    except (IndexError, ValueError):
-        return 1
+# The ladder (owner, 2026-09-22): Agent < SA < GA < MGA < RGA. SA is its own
+# tier, level_sa, ranked between level_1 and level_2 — so every "strictly below
+# your own tier" rule does the right thing on its own: a GA makes an SA, an SA
+# makes Agents only, an MGA makes a GA. The rank is 1.5 rather than a renumber
+# so the level_1..level_4 strings and every existing comparison keep their
+# meaning; only "is this person a leader" checks needed to learn the new tier,
+# and they go through is_leader_role / RANK_SA below.
+SA_ROLE = "level_sa"
+ROLE_RANK: Dict[str, float] = {
+    "level_1": 1, SA_ROLE: 1.5, "level_2": 2, "level_3": 3, "level_4": 4,
+}
+RANK_SA = ROLE_RANK[SA_ROLE]
+# Every tier that runs a team: reads a downline, enters for it, promotes and
+# moves inside it. Ordered lowest first.
+LEADER_ROLES = (SA_ROLE, "level_2", "level_3", "level_4")
+# The tiers that owe a nightly pulse and get the 9 PM ladder / Missing Numbers
+# (everyone but MGA/RGA, per the long-standing rule).
+NIGHTLY_PULSE_ROLES = ("level_1", SA_ROLE, "level_2")
+# Titles pinned to one tier, so access and displayed title cannot drift apart
+# for the pair this ladder exists to tell apart (owner, 2026-09-22).
+TITLE_TIER = {"SA": SA_ROLE, "GA": "level_2"}
+
+
+def role_level(role: Any) -> float:
+    """Numeric rank for a role string (see ROLE_RANK); anything unknown is
+    rank 1. Permission comparisons use ranks, never io_role titles — a person
+    can hold MGA and RGA titles at once, and only the tier is authoritative."""
+    return ROLE_RANK.get(str(role), 1)
+
+
+def is_leader_role(role: Any) -> bool:
+    return str(role) in LEADER_ROLES
+
+
+def title_tier_mismatch(role: Optional[str], io_role: Optional[str]) -> Optional[str]:
+    """The error to raise when a title is pinned to a different tier than the
+    one being set; None when the pair is fine or the title is unpinned."""
+    want = TITLE_TIER.get((io_role or "").strip())
+    if want and role != want:
+        return f"The {io_role} title belongs to the {LEVELS[want]} tier — set them to that tier"
+    return None
 
 
 # Removal archives a profile instead of deleting it (sales history must keep
@@ -488,7 +522,7 @@ async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
 def require_level(min_level: int):
     """min_level: 1..4 (higher = more access). level_1 has level=1, level_4 has level=4."""
     async def dep(user: Dict[str, Any] = Depends(require_agent)) -> Dict[str, Any]:
-        lvl = int(user["role"].split("_")[1])
+        lvl = role_level(user["role"])
         if lvl < min_level:
             raise HTTPException(status_code=403, detail=f"Requires level {min_level}+")
         return user
@@ -814,6 +848,7 @@ async def demo_login(payload: DemoLoginIn, response: Response):
     role_label = "Financial Administrator" if payload.level == FINANCE_ADMIN_ROLE else LEVELS[payload.level]
     email_map = {
         "level_1": ("demo.agent@vantagelife.dev", "Demo Agent"),
+        SA_ROLE: ("demo.sa@vantagelife.dev", "Demo SA"),
         "level_2": ("demo.ga@vantagelife.dev", "Demo GA"),
         "level_3": ("demo.mga@vantagelife.dev", "Demo MGA"),
         "level_4": ("demo.rga@vantagelife.dev", "Demo RGA"),
@@ -991,7 +1026,7 @@ async def sa_team_agent_ids(agent_id: str) -> List[str]:
         a["agent_id"]: a.get("role") async for a in db.agent_profiles.find(
             {"agent_id": {"$in": chain}}, {"_id": 0, "agent_id": 1, "role": 1})
     }
-    root = next((aid for aid in chain if roles.get(aid) == "level_2"), chain[0])
+    root = next((aid for aid in chain if roles.get(aid) in (SA_ROLE, "level_2")), chain[0])
     return await downline_agent_ids(root)
 
 
@@ -1116,7 +1151,7 @@ async def can_enter_for(user: Dict[str, Any], target_agent_id: str) -> bool:
     if target_agent_id == own_agent_id:
         return True
     role = user.get("role", "level_1")
-    if role not in ("level_2", "level_3", "level_4"):
+    if not is_leader_role(role):
         return False
     if not own_agent_id:
         return False
@@ -2057,7 +2092,7 @@ async def run_pulse_escalation_check():
     }
     candidates = [
         a async for a in db.agent_profiles.find(
-            {"role": {"$in": ["level_1", "level_2"]}, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1, "name": 1})
+            {"role": {"$in": list(NIGHTLY_PULSE_ROLES)}, **ACTIVE_AGENT}, {"_id": 0, "agent_id": 1, "name": 1})
         if a["agent_id"] not in submitted_ids
     ]
     roles_by_id = {
@@ -2411,7 +2446,7 @@ async def team_view(
     # over the union of the leaders' subtrees, never a BFS per leader: an MGA's
     # downline reaches past their office, so the rows already fetched are not
     # enough to sum it.
-    leaders = [r for r in out if role_level(r["role"]) >= 2 and r["role"] != FINANCE_ADMIN_ROLE]
+    leaders = [r for r in out if is_leader_role(r["role"])]
     if leaders:
         # Every profile, archived included. Removing someone archives them and
         # deliberately keeps their upline_id and their production ("history is
@@ -2552,21 +2587,21 @@ async def team_missing(
         """Nearest level_2 at or above this agent; else the first upline of
         any tier; None only for someone with no upline at all."""
         a = roster.get(agent_id)
-        if a and a.get("role") == "level_2":
+        if a and a.get("role") in (SA_ROLE, "level_2"):
             return agent_id
         seen = set()
         cur = (a or {}).get("upline_id")
         fallback = cur
         while cur and cur not in seen and cur in roster:
             seen.add(cur)
-            if roster[cur].get("role") == "level_2":
+            if roster[cur].get("role") in (SA_ROLE, "level_2"):
                 return cur
             cur = roster[cur].get("upline_id")
         return fallback
 
     candidates = [
         a for a in roster.values()
-        if a.get("role") in ("level_1", "level_2")
+        if a.get("role") in NIGHTLY_PULSE_ROLES
         and not a.get("archived") and not a.get("non_producing")
         and (scope_ids is None or a["agent_id"] in scope_ids)
         and a["agent_id"] != user.get("agent_id")
@@ -3810,14 +3845,23 @@ async def seed_data(request: Request, payload: Optional[Dict[str, Any]] = Body(d
             g = mk_agent("level_2", mga["office"], name_pool(), mga["agent_id"], None, False)
             gas.append(g); agents.append(g)
 
-    # 161 Agents distributed across GAs and offices
+    # 8 SAs (1 per GA) — the SA tier (owner, 2026-09-22), so the demo SA
+    # login has a profile and the ladder shows in the demo hierarchy.
+    sas: List[Dict[str, Any]] = []
+    for ga in gas:
+        sa = mk_agent(SA_ROLE, ga["office"], name_pool(), ga["agent_id"], ga["agent_id"], False)
+        sa["io_role"] = "SA"
+        sas.append(sa); agents.append(sa)
+
+    # Agents distributed across GAs and SAs, and offices
     agents_count = 174 - len(agents)
     for i in range(agents_count):
-        ga = gas[i % len(gas)]
+        leader = (gas + sas)[i % (len(gas) + len(sas))]
+        ga = leader if leader["role"] == "level_2" else next(g for g in gas if g["agent_id"] == leader["upline_id"])
         # vary office: 70% same as GA, 30% any office
         office = ga["office"] if random.random() < 0.7 else random.choice(_SEED_OFFICES)
         is_rookie = random.random() < 0.30
-        a = mk_agent("level_1", office, name_pool(), ga["agent_id"], ga["agent_id"], is_rookie)
+        a = mk_agent("level_1", office, name_pool(), leader["agent_id"], ga["agent_id"], is_rookie)
         agents.append(a)
 
     await db.agent_profiles.insert_many([dict(a) for a in agents])
@@ -3829,8 +3873,8 @@ async def seed_data(request: Request, payload: Optional[Dict[str, Any]] = Body(d
         day_local = today - timedelta(days=d_offset)
         sd = sales_day_for(day_local)
         for a in agents:
-            if a["role"] != "level_1" and a["role"] != "level_2":
-                # GAs/MGAs/RGA also produce some
+            if a["role"] not in NIGHTLY_PULSE_ROLES:
+                # MGAs/RGA also produce some
                 if random.random() < 0.4:
                     pass
                 else:
@@ -3934,7 +3978,7 @@ async def seed_data(request: Request, payload: Optional[Dict[str, Any]] = Body(d
 # source of truth) AND the users doc (so the change is visible immediately,
 # without waiting for the next sign-in).
 
-VALID_ROLES = {"level_1", "level_2", "level_3", "level_4"}
+VALID_ROLES = {"level_1", SA_ROLE, "level_2", "level_3", "level_4"}
 
 
 class AdminSetRoleIn(BaseModel):
@@ -4110,6 +4154,13 @@ async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends
         update["upline_id"] = None  # no place in the ladder
     elif current_role == FINANCE_ADMIN_ROLE:
         update["upline_id"] = upline_agent_id
+    # The SA and GA titles are pinned to their tiers (TITLE_TIER): setting the
+    # SA tier gives the SA title, and moving an SA up to the GA tier gives the
+    # GA title, so the Admin Panel's tier buttons cannot leave a title behind.
+    pinned = {tier: title for title, tier in TITLE_TIER.items()}
+    if payload.role in pinned and (agent.get("io_role") or "") != pinned[payload.role]:
+        if payload.role == SA_ROLE or (agent.get("io_role") or "") in TITLE_TIER:
+            update["io_role"] = pinned[payload.role]
     await db.agent_profiles.update_one(
         {"agent_id": payload.agent_id},
         {"$set": update},
@@ -4133,6 +4184,9 @@ async def admin_set_role(payload: AdminSetRoleIn, user: Dict[str, Any] = Depends
         "original_value": current_role,
         "new_value": payload.role,
     }
+    if "io_role" in update:
+        entry["old_io_role"] = agent.get("io_role")
+        entry["new_io_role"] = update["io_role"]
     if "upline_id" in update:
         # Only the finance_admin transitions move the upline here. Record it so
         # the entry describes the whole edit rather than half of it.
@@ -4261,10 +4315,13 @@ async def team_add_person(payload: TeamAddPersonIn, user: Dict[str, Any] = Depen
     me = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
     if not me:
         raise HTTPException(status_code=404, detail="Your agent profile was not found")
-    my_level = int(str(user.get("role", "level_1")).split("_")[1])
+    my_level = role_level(user.get("role", "level_1"))
     if payload.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
-    new_level = int(payload.role.split("_")[1])
+    mismatch = title_tier_mismatch(payload.role, payload.io_role)
+    if mismatch:
+        raise HTTPException(status_code=400, detail=mismatch)
+    new_level = role_level(payload.role)
     if new_level >= my_level:
         raise HTTPException(
             status_code=403,
@@ -4310,7 +4367,7 @@ async def team_add_person(payload: TeamAddPersonIn, user: Dict[str, Any] = Depen
 JOIN_TITLE_TIERS = {
     "inTraining": "level_1",
     "Agent": "level_1",
-    "SA": "level_2",
+    "SA": SA_ROLE,
     "GA": "level_2",
     "MGA": "level_3",
     "RGA": "level_3",  # capped — see note above; requested_title preserves the ask
@@ -4361,7 +4418,7 @@ async def join_options():
     level_2+ only) and the title list. Name/office/title are already org-visible
     (ticker, shoutouts, directory); no emails, phones, or production data."""
     uplines = [a async for a in db.agent_profiles.find(
-        {**ACTIVE_AGENT, "role": {"$in": ["level_2", "level_3", "level_4"]}},
+        {**ACTIVE_AGENT, "role": {"$in": list(LEADER_ROLES)}},
         {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "io_role": 1},
     ).sort("name", 1)]
     return {"uplines": uplines, "titles": list(JOIN_TITLE_TIERS.keys())}
@@ -4523,7 +4580,7 @@ async def _remove_person_context(user: Dict[str, Any], agent_id: str) -> Dict[st
     is_admin = user_is_admin(user)
     is_finance_admin_actor = user_is_finance_admin(user)
     my_level = role_level(user.get("role"))
-    if not is_admin and not is_finance_admin_actor and (my_level < 2 or not user.get("agent_id")):
+    if not is_admin and not is_finance_admin_actor and (my_level < RANK_SA or not user.get("agent_id")):
         raise HTTPException(status_code=403, detail="Removing team members requires SA level or above")
     target = await db.agent_profiles.find_one({"agent_id": agent_id}, {"_id": 0})
     if not target:
@@ -4747,8 +4804,8 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
     my_level = role_level(user.get("role"))
     my_subtree: Optional[List[str]] = None
     if not is_admin and not is_finance_admin_actor:
-        if my_level < 2 or not user.get("agent_id"):
-            raise HTTPException(status_code=403, detail="Reassigning requires GA level or above")
+        if my_level < RANK_SA or not user.get("agent_id"):
+            raise HTTPException(status_code=403, detail="Reassigning requires SA level or above")
         me = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
         if not me:
             raise HTTPException(status_code=404, detail="Your agent profile was not found")
@@ -4873,7 +4930,7 @@ async def team_set_tier(payload: TeamSetTierIn, user: Dict[str, Any] = Depends(g
     is_fa = user_is_finance_admin(user)
     my_level = role_level(user.get("role"))
     if not is_admin and not is_fa:
-        if my_level < 2 or not user.get("agent_id"):
+        if my_level < RANK_SA or not user.get("agent_id"):
             raise HTTPException(status_code=403, detail="Changing someone's tier requires SA level or above")
 
     if payload.role not in VALID_ROLES:
@@ -4891,6 +4948,9 @@ async def team_set_tier(payload: TeamSetTierIn, user: Dict[str, Any] = Depends(g
         title = payload.io_role.strip()
         if title and title not in IO_ROLE_CODES:
             raise HTTPException(status_code=400, detail="Unknown title")
+        mismatch = title_tier_mismatch(payload.role, title)
+        if mismatch:
+            raise HTTPException(status_code=400, detail=mismatch)
     else:
         title = None
 
@@ -5419,7 +5479,7 @@ _PROTECTED_TITLES = {"partner", "senior partner"}
 
 def _level_of(role: str) -> int:
     try:
-        return int(str(role or "level_1").split("_")[1])
+        return role_level(role or "level_1")
     except (IndexError, ValueError):
         return 1
 
@@ -5750,9 +5810,9 @@ async def admin_merge_agents(
 
 async def _plan_agent_merge(keep: Dict[str, Any], remove: Dict[str, Any]) -> Dict[str, Any]:
     keep_id, remove_id = keep["agent_id"], remove["agent_id"]
-    keep_level = int(str(keep.get("role", "level_1")).split("_")[1])
-    remove_level = int(str(remove.get("role", "level_1")).split("_")[1])
-    final_role = f"level_{max(keep_level, remove_level)}"
+    keep_role = keep.get("role", "level_1")
+    remove_role = remove.get("role", "level_1")
+    final_role = max((keep_role, remove_role), key=role_level)  # the higher tier's role string
 
     # The keeper adopts the duplicate's upline when its own is missing,
     # dangling (points at a profile that no longer exists), or — worse —
@@ -6457,6 +6517,12 @@ async def on_startup():
             logger.info("Auto-seeded mock data on first run.")
         except Exception as e:
             logger.error(f"Auto-seed failed: {e}")
+    try:
+        moved = await migrate_sa_tier()
+        if moved:
+            logger.info(f"SA tier migration: moved {moved} SA-titled profiles from level_2 to {SA_ROLE}.")
+    except Exception as e:
+        logger.error(f"SA tier migration failed: {e}")
     app.state.escalation_task = asyncio.create_task(_escalation_loop())
 
 
@@ -6474,6 +6540,21 @@ async def _escalation_loop():
         except Exception as e:
             logger.error(f"Leader auto-NIF failed: {e}")
         await asyncio.sleep(60)
+
+
+async def migrate_sa_tier() -> int:
+    """One-time, idempotent: everyone on the shared level_2 tier who carries
+    the SA title moves to the SA tier (owner, 2026-09-22), login included, so
+    nobody has to be re-tiered by hand. GA-titled level_2 profiles stay put.
+    Safe to run on every start — once moved, nothing matches the filter."""
+    moved = 0
+    async for a in db.agent_profiles.find({"role": "level_2", "io_role": "SA"}, {"_id": 0, "agent_id": 1, "email": 1}):
+        await db.agent_profiles.update_one({"agent_id": a["agent_id"]}, {"$set": {"role": SA_ROLE, "updated_at": now_utc()}})
+        email = str(a.get("email") or "").lower()
+        if email:
+            await db.users.update_many({"email": email, "role": "level_2"}, {"$set": {"role": SA_ROLE}})
+        moved += 1
+    return moved
 
 
 async def _bootstrap_seed():

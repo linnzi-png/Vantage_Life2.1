@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
-import { useAuth, COLORS, Role } from '../src/lib/auth';
+import { useAuth, COLORS, Role, tierShort } from '../src/lib/auth';
 // Not Alert.alert: react-native-web ships Alert as an empty function, so every
 // sign-in failure was silent in the browser and the button just looked dead.
 import { notify } from '../src/lib/dialog';
@@ -27,6 +27,7 @@ const AUTH0_CONFIGURED = !!(AUTH0_DOMAIN && AUTH0_CLIENT_ID);
 
 const LEVELS: { level: Role; title: string; subtitle: string; tint: string }[] = [
   { level: 'level_1', title: 'AGENT', subtitle: 'Personal stats + Pulse entry', tint: COLORS.primary },
+  { level: 'level_sa', title: 'SA', subtitle: 'Regional Producer · Team view', tint: COLORS.teal },
   { level: 'level_2', title: 'GA', subtitle: 'Co-Executive Producer · Team view', tint: COLORS.secondary },
   { level: 'level_3', title: 'MGA', subtitle: 'Executive Producer · Full agency hierarchy', tint: COLORS.gold },
   { level: 'level_4', title: 'RGA', subtitle: 'Executive · Global view + Eraser + Vault', tint: COLORS.orange },
@@ -236,7 +237,7 @@ export default function LoginScreen() {
             >
               <View style={styles.lvlLeft}>
                 <View style={[styles.badge, { backgroundColor: l.tint + '22', borderColor: l.tint }]}>
-                  <Text style={[styles.badgeTxt, { color: l.tint }]}>{l.level.replace('level_', 'L')}</Text>
+                  <Text style={[styles.badgeTxt, { color: l.tint }]}>{tierShort(l.level)}</Text>
                 </View>
                 <View style={{ marginLeft: 12, flex: 1 }}>
                   <Text style={styles.lvlTitle}>{l.title}</Text>
