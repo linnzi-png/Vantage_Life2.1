@@ -475,5 +475,17 @@ export function stepsForRole(role: Role): TourStep[] {
       return [];
     case 'finance_admin':
       return FINANCE_ADMIN_STEPS;
+    default: {
+      // A role this bundle does not know. The server can introduce a tier
+      // before the OTA that understands it reaches every phone (2026-09-22:
+      // PR #155 migrated 29 profiles to level_sa while the published bundle
+      // predated it; the missing branch returned undefined, `s.length`
+      // threw inside the auto-launch timer, and every SA account crashed on
+      // launch). No tour is the safe answer; TypeScript still flags a Role
+      // member that is not handled above.
+      const unhandled: never = role;
+      void unhandled;
+      return [];
+    }
   }
 }

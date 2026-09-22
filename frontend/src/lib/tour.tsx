@@ -83,7 +83,15 @@ export function TourProvider({ children }: { children: ReactNode }) {
 
   const start = useCallback(
     (role: Role) => {
-      const s = stepsForRole(role);
+      // Defensive against the tier list on the server running ahead of this
+      // bundle: an unknown role must mean "no tour", never a throw — this
+      // runs from a setTimeout, where nothing above it can catch an error.
+      let s: TourStep[];
+      try {
+        s = stepsForRole(role) ?? [];
+      } catch {
+        s = [];
+      }
       if (s.length === 0 || !user) return;
       tourOwner.current = { userId: user.user_id, role };
       setSteps(s);
