@@ -40,7 +40,7 @@ interface DayTotals {
   pos_sits: number; pos_sales: number; vet_sits: number; vet_sales: number;
   gross_alp: number; net_alp: number;
 }
-interface DayEntry { entry_id: string; is_adjustment?: boolean; is_nif?: boolean; gross_alp: number; sales: number; sits: number; refs_obtained: number; submitted_at: string }
+interface DayEntry { entry_id: string; is_adjustment?: boolean; is_nif?: boolean; auto_nif?: boolean; gross_alp: number; sales: number; sits: number; refs_obtained: number; submitted_at: string }
 interface DayData { entries: DayEntry[]; totals: DayTotals; sales_day: string }
 
 // Pre-fill the stepper with a day's current summed totals so the agent edits
@@ -125,8 +125,12 @@ export default function PulseScreen() {
   const [contactOpen, setContactOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<PulseForm>(empty);
-  const [today, setToday] = useState<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string } | null>(null);
+  const [today, setToday] = useState<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string; auto_nif?: boolean } | null>(null);
   const [streak, setStreak] = useState(0);
+  // Leaders (MGA/RGA by tier) get an automatic NIF at 6:30 AM when they enter
+  // nothing (owner, 2026-09-22), so the urgency banner and the streak pill
+  // are not shown to them. The server says so on /pulse/me/today and /streak.
+  const [streakExempt, setStreakExempt] = useState(false);
   const [todayError, setTodayError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [nifSubmitting, setNifSubmitting] = useState(false);
@@ -147,12 +151,13 @@ export default function PulseScreen() {
   const refresh = useCallback(async () => {
     try {
       const [t, s, u] = await Promise.all([
-        api<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string }>('/api/pulse/me/today'),
-        api<{ streak: number }>('/api/pulse/me/streak').catch(() => ({ streak: 0 })),
+        api<{ entries: unknown[]; totals: { gross_alp: number; sales: number; sits: number }; gate: { state: string; message: string; color: string } | null; sales_day: string; auto_nif?: boolean }>('/api/pulse/me/today'),
+        api<{ streak: number; exempt?: boolean }>('/api/pulse/me/streak').catch((): { streak: number; exempt?: boolean } => ({ streak: 0 })),
         api<{ upline: AgentContact | null }>('/api/my-upline').catch(() => ({ upline: null })),
       ]);
       setToday(t);
       setStreak(s.streak);
+      setStreakExempt(s.exempt === true);
       setUpline(u.upline);
       setTodayError(null);
     } catch (e: unknown) {
@@ -336,7 +341,7 @@ export default function PulseScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Midnight–6 AM: simple urgency prompt (entries post immediately).
           Outside that window, defer to the backend-driven gate banner. */}
-      {lateNight ? (
+      {today?.auto_nif ? null : lateNight ? (
         <View style={styles.nightBanner} testID="late-night-banner">
           <Ionicons name="flash" size={16} color="#60A5FA" />
           <Text style={styles.nightBannerText}>Submit your numbers now</Text>
@@ -353,10 +358,12 @@ export default function PulseScreen() {
               {/* TODO copy — placeholder heading for correction mode */}
               <Text style={styles.h1}>{correctionMode ? 'Correct a past day' : 'Log your sales day'}</Text>
             </View>
-            <View style={styles.streakPill}>
-              <Text style={styles.streakEmoji}>{streak >= 5 ? '🔥' : '⚡'}</Text>
-              <Text style={styles.streakTxt}>{streak}d streak</Text>
-            </View>
+            {streakExempt ? null : (
+              <View style={styles.streakPill}>
+                <Text style={styles.streakEmoji}>{streak >= 5 ? '🔥' : '⚡'}</Text>
+                <Text style={styles.streakTxt}>{streak}d streak</Text>
+              </View>
+            )}
           </View>
 
           {/* Self-correction window: today + the last SELF_WINDOW_DAYS-1 days.
@@ -538,7 +545,7 @@ export default function PulseScreen() {
                   <Text style={styles.entryAlp}>${Math.round(e.gross_alp || 0).toLocaleString()}</Text>
                 )}
                 <Text style={styles.entryMeta}>
-                  {e.is_nif ? 'Not in the field' : `${e.sales} sales · ${e.sits} sits · ${e.refs_obtained} refs`}
+                  {e.auto_nif ? 'Not in the field · filed automatically' : e.is_nif ? 'Not in the field' : `${e.sales} sales · ${e.sits} sits · ${e.refs_obtained} refs`}
                 </Text>
                 <Text style={styles.entryTs}>{(new Date(e.submitted_at)).toLocaleTimeString()}</Text>
               </View>

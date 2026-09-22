@@ -212,6 +212,19 @@ def role_level(role: Any) -> int:
 # production remains attributed and renderable forever.
 ACTIVE_AGENT: Dict[str, Any] = {"archived": {"$ne": True}}
 
+# Leaders' pulse is NIF by default (owner, 2026-09-22): an MGA or RGA who does
+# not enter their own numbers gets an automatic "Not In Field" entry for the
+# sales day that just closed, written at 06:30 Detroit, so nothing about the
+# nightly cycle nags them — no yellow banner, no streak, no "no pulse" flag on
+# their row. Decided by access tier, never by title, like every other rule.
+LEADER_AUTO_NIF_ROLES = ("level_3", "level_4")
+LEADER_AUTO_NIF_HOUR = 6
+LEADER_AUTO_NIF_MINUTE = 30
+
+
+def is_leader_auto_nif_role(role: Optional[str]) -> bool:
+    return role in LEADER_AUTO_NIF_ROLES
+
 
 def sales_day_for(dt_local: datetime) -> str:
     """Sales day rolls 6 AM → 6 AM in Detroit time. Pulse Gate at 9 PM, Hard Lock at 6 AM."""
@@ -1626,6 +1639,11 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
         # reconcile/audits can tell app rows from WAR imports without heuristics.
         "source": "app",
     }
+    # A real entry for a day the server had already marked NIF on the
+    # leader's behalf replaces that automatic entry, so the day shows their
+    # numbers alone. Only the automatic one is removed — never a person's.
+    await db.production_entries.delete_many(
+        {"agent_id": target_agent_id, "sales_day": sd, "auto_nif": True})
     await db.production_entries.insert_one(entry)
     entry.pop("_id", None)
 
@@ -1659,7 +1677,13 @@ async def pulse_me_today(agent_id: Optional[str] = None, user: Dict[str, Any] = 
     cur = db.production_entries.find({"agent_id": target_agent_id, "sales_day": sd}, {"_id": 0}).sort("submitted_at", -1)
     entries = [_ser_entry(e) async for e in cur]
     agg = await aggregate_alp({"agent_id": target_agent_id, "sales_day": sd})
-    return {"entries": entries, "totals": agg, "gate": gate_state(), "sales_day": sd}
+    # A leader's own pulse is NIF by default (LEADER_AUTO_NIF_ROLES), so the
+    # 9 PM / midnight urgency banner has nothing to urge: the gate stays open
+    # for them and the client shows no banner.
+    target = await db.agent_profiles.find_one({"agent_id": target_agent_id}, {"_id": 0, "role": 1})
+    auto_nif = is_leader_auto_nif_role((target or {}).get("role"))
+    gate = {"state": "open", "message": "Pulse window open.", "color": "green"} if auto_nif else gate_state()
+    return {"entries": entries, "totals": agg, "gate": gate, "sales_day": sd, "auto_nif": auto_nif}
 
 
 @api_router.get("/pulse/me/day")
@@ -1786,6 +1810,11 @@ async def pulse_streak(agent_id: Optional[str] = None, user: Dict[str, Any] = De
     target_agent_id = agent_id or user["agent_id"]
     if target_agent_id != user["agent_id"] and not await can_enter_for(user, target_agent_id):
         raise HTTPException(status_code=403, detail="You can only view streak for your own downline")
+    target = await db.agent_profiles.find_one({"agent_id": target_agent_id}, {"_id": 0, "role": 1})
+    if is_leader_auto_nif_role((target or {}).get("role")):
+        # No streak for a leader whose pulse is NIF by default — a run of
+        # automatic entries is not a streak, and its absence is not a miss.
+        return {"streak": 0, "exempt": True}
     streak = 0
     d = now_detroit()
     for i in range(0, 30):
@@ -2069,6 +2098,74 @@ async def run_pulse_escalation_check():
     return {"ok": True, "stage": stage["stage"], "agent_notified": agent_notified, "upline_notified": upline_notified}
 
 
+def _leader_auto_nif_due(now_local: datetime) -> bool:
+    """True once the clock has passed the 06:30 mark for the day; the entries
+    themselves are the idempotency guard, so ticking every minute after that
+    fills nothing twice."""
+    return (now_local.hour, now_local.minute) >= (LEADER_AUTO_NIF_HOUR, LEADER_AUTO_NIF_MINUTE)
+
+
+async def run_leader_auto_nif(now_local: Optional[datetime] = None) -> Dict[str, Any]:
+    """File an automatic NIF for every active MGA/RGA who did not enter their
+    own numbers for the sales day that closed at 06:00 (owner, 2026-09-22).
+
+    Runs from the scheduler loop; at or after 06:30 Detroit it looks at the
+    previous sales day only, never further back, and skips anyone who already
+    has any entry for it (their own, a proxy entry, or an earlier automatic
+    one). The entry is all zeros with is_nif and auto_nif set and source
+    "auto", so totals are untouched and the Pulse tab can label it.
+    Non-producing leaders are skipped, matching every other candidate rule."""
+    now_local = now_local or now_detroit()
+    if not _leader_auto_nif_due(now_local):
+        return {"ok": True, "due": False, "filed": 0}
+    sd = previous_sales_day_str()
+    leaders = [
+        a async for a in db.agent_profiles.find(
+            {"role": {"$in": list(LEADER_AUTO_NIF_ROLES)}, "non_producing": {"$ne": True}, **ACTIVE_AGENT},
+            {"_id": 0, "agent_id": 1, "office": 1, "name": 1})
+    ]
+    if not leaders:
+        return {"ok": True, "due": True, "sales_day": sd, "filed": 0}
+    have = {
+        e["agent_id"] async for e in db.production_entries.find(
+            {"sales_day": sd, "agent_id": {"$in": [a["agent_id"] for a in leaders]}},
+            {"_id": 0, "agent_id": 1})
+    }
+    zero = {k: 0 for k in (
+        "sets", "sits", "sales", "ots_sits", "ots_sales", "n1", "refs_obtained", "ref_sits",
+        "ref_sales", "pos_sits", "pos_sales", "vet_sits", "vet_sales", "gross_alp", "net_alp")}
+    filed: List[str] = []
+    for a in leaders:
+        if a["agent_id"] in have:
+            continue
+        await db.production_entries.insert_one({
+            "entry_id": f"pe_{uuid.uuid4().hex[:12]}",
+            "agent_id": a["agent_id"],
+            "office": a.get("office") or UNASSIGNED_OFFICE,
+            "sales_day": sd,
+            **zero,
+            "submitted_at": now_utc(),
+            "submitted_on_time": True,
+            "entered_by": "system",
+            "entered_by_name": "VantageLife (automatic)",
+            "entered_by_role": "system",
+            "is_proxy_entry": False,
+            "client_entry_id": None,
+            "is_nif": True,
+            "auto_nif": True,
+            "source": "auto",
+        })
+        filed.append(a["agent_id"])
+    return {"ok": True, "due": True, "sales_day": sd, "filed": len(filed), "agent_ids": filed}
+
+
+@api_router.post("/admin/run-leader-auto-nif")
+async def admin_run_leader_auto_nif(user: Dict[str, Any] = Depends(require_admin)):
+    """Manual trigger for QA — files the automatic NIF now if the 06:30 mark
+    has passed, still idempotent against existing entries."""
+    return await run_leader_auto_nif()
+
+
 @api_router.post("/admin/run-notification-check")
 async def admin_run_notification_check(user: Dict[str, Any] = Depends(require_admin)):
     """Manual trigger for QA -- fires the check immediately regardless of the
@@ -2276,7 +2373,9 @@ async def team_view(
     listed = {x["agent_id"] for x in out}
     for aid, a in agents.items():
         if aid not in listed and not a.get("archived"):
-            no_entry_alerts = ["no_pulse"]
+            # A leader's missing pulse is not a miss (LEADER_AUTO_NIF_ROLES):
+            # the server files NIF for them at 06:30, so no flag overnight.
+            no_entry_alerts = [] if is_leader_auto_nif_role(a.get("role")) else ["no_pulse"]
             if aid not in reachable_ids:
                 no_entry_alerts.append("notifications_off")
             out.append({
@@ -6370,6 +6469,10 @@ async def _escalation_loop():
             await run_pulse_escalation_check()
         except Exception as e:
             logger.error(f"Escalation check failed: {e}")
+        try:
+            await run_leader_auto_nif()
+        except Exception as e:
+            logger.error(f"Leader auto-NIF failed: {e}")
         await asyncio.sleep(60)
 
 

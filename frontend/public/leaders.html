@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How leaders promote and move people in VantageLife 2.1 — who can do what, where the buttons are, and the rules the app enforces.">
+<title>VantageLife Leader Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  /* VantageLife app tokens — single-theme dark by design (matches the product). */
+  :root {
+    --bg: #0D0D0D; --surface: #141414; --surface2: #1B1B1B;
+    --border: rgba(255,255,255,0.08);
+    --primary: #319842; --secondary: #00558C;
+    --gold: #FFD700; --red: #FF3B30; --yellow: #EAB308;
+    --text: #FFFFFF; --dim: #A1A1AA; --muted: #6B7280;
+    --display: "Barlow Condensed", "Arial Narrow", -apple-system, "Segoe UI", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; line-height: 1.5;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 20px 80px; }
+  .kicker { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: var(--primary); text-transform: uppercase; }
+
+  header.site { display: flex; align-items: center; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--border); }
+  .mark { width: 44px; height: 44px; border-radius: 4px; background: var(--primary); display: grid; place-items: center; font-weight: 900; font-size: 26px; color: #000; }
+  .brand { font-size: 22px; font-weight: 900; letter-spacing: 1.5px; }
+  .brand em { font-style: normal; color: var(--primary); }
+  .tagline { color: var(--dim); font-size: 12px; letter-spacing: .6px; margin-top: 2px; }
+
+  .intro { margin: 28px 0 8px; max-width: 66ch; }
+  .intro h1 { font-family: var(--display); font-weight: 800; font-size: clamp(34px, 6vw, 54px); letter-spacing: .5px; line-height: 1; text-transform: uppercase; margin: 6px 0 12px; }
+  .intro h1 span { color: var(--primary); }
+  .intro p { color: var(--dim); font-size: 15px; }
+  .intro b { color: var(--text); }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 26px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+  section.card { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 8px; padding: 18px 18px 16px; }
+  section.card.move { border-left-color: var(--gold); }
+  section.card.wide { grid-column: 1 / -1; border-left-color: var(--secondary); }
+  section.card h2 { font-family: var(--display); font-weight: 800; font-size: 26px; letter-spacing: 1px; text-transform: uppercase; line-height: 1; margin: 4px 0 12px; }
+  section.card h2 small { display: block; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--dim); margin-top: 6px; }
+
+  ol.steps { list-style: none; counter-reset: step; }
+  ol.steps li { position: relative; padding: 8px 0 8px 40px; border-top: 1px solid var(--border); font-size: 14px; }
+  ol.steps li:first-child { border-top: 0; }
+  ol.steps li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: 9px; width: 26px; height: 26px; border-radius: 4px; background: var(--surface2); border: 1px solid var(--border); display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: 15px; color: var(--gold); }
+  .ui { display: inline-block; font-size: 10.5px; font-weight: 900; letter-spacing: 1.2px; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); vertical-align: 1px; white-space: nowrap; }
+  .ui.gold { background: var(--gold); color: #000; border-color: var(--gold); }
+  .ui.green { background: var(--primary); color: #000; border-color: var(--primary); }
+
+  ul.rules { list-style: none; margin-top: 4px; }
+  ul.rules li { padding: 7px 0 7px 22px; position: relative; font-size: 14px; border-top: 1px solid var(--border); }
+  ul.rules li:first-child { border-top: 0; }
+  ul.rules li::before { content: ""; position: absolute; left: 4px; top: 14px; width: 8px; height: 8px; border-radius: 2px; background: var(--primary); }
+  ul.rules li.no::before { background: var(--red); }
+  ul.rules b { color: var(--text); }
+  ul.rules { color: var(--dim); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 6px; }
+  th, td { text-align: left; padding: 9px 10px; border-top: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 10.5px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); border-top: 0; }
+  td:first-child { font-weight: 800; white-space: nowrap; }
+  td .y { color: var(--primary); font-weight: 800; }
+  td .n { color: var(--muted); }
+
+  .note { margin-top: 18px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--dim); font-size: 13.5px; }
+  .note b { color: var(--text); }
+  footer { margin-top: 30px; color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  footer a { color: var(--dim); }
+
+  @media print {
+    html, body { background: #fff; color: #000; }
+    :root { --bg: #fff; --surface: #fff; --surface2: #f2f2f2; --border: #ddd; --text: #000; --dim: #444; --muted: #666; }
+    .wrap { padding: 0; max-width: none; }
+    section.card { break-inside: avoid; }
+    .ui.gold, .ui.green { color: #000; }
+    footer a[href]::after { content: " (" attr(href) ")"; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <div class="mark">V</div>
+    <div>
+      <div class="brand">VANTAGE<em>LIFE</em></div>
+      <div class="tagline">AO Premier · Leader Guide</div>
+    </div>
+  </header>
+
+  <div class="intro">
+    <div class="kicker">For SA, GA, MGA and RGA</div>
+    <h1>How to <span>promote</span> and <span>move</span> people</h1>
+    <p>Both happen on the <b>Team tab</b>, from the person's card. You do it yourself, for your own downline, and the app checks every rule before it goes through. Nothing here needs an admin unless the page says so.</p>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <div class="kicker">Promote or change a tier</div>
+      <h2>Change Tier<small>Also used to lower a tier. The title changes with it.</small></h2>
+      <ol class="steps">
+        <li>Open the <span class="ui">Team</span> tab and tap the person's row to open their card.</li>
+        <li>Tap <span class="ui green">Change Tier</span>.</li>
+        <li>Pick the new tier and title in one step: <b>Trainee, Agent, SA, GA</b> or <b>MGA</b>. Their access and their displayed title move together, so nobody ends up with GA access and an Agent title.</li>
+        <li>Confirm. It applies right away, without the person signing out and back in.</li>
+      </ol>
+    </section>
+
+    <section class="card move">
+      <div class="kicker">Move to a new upline or office</div>
+      <h2>Move<small>The person's office follows their new upline.</small></h2>
+      <ol class="steps">
+        <li>Open the <span class="ui">Team</span> tab, tap the person's row, then tap <span class="ui gold">Move to a New Upline</span>.</li>
+        <li>Decide whether <b>their downline goes with them</b>. The switch is on by default. Switched off, the people who report to them stay behind under the moved person's current upline.</li>
+        <li>Pick the new upline. A pick in another office is marked <b>Moves them to …</b> and is only open to the owner and MJ.</li>
+        <li>Read the confirmation, which says exactly who moves where, then tap <b>Move</b>.</li>
+      </ol>
+    </section>
+
+    <section class="card wide">
+      <div class="kicker">The rules the app enforces</div>
+      <h2>What you can and cannot do</h2>
+      <table>
+        <thead><tr><th>Action</th><th>SA / GA</th><th>MGA</th><th>RGA</th><th>Owner / MJ</th></tr></thead>
+        <tbody>
+          <tr><td>Promote or lower someone in your own downline</td><td><span class="y">Yes</span>, to Trainee or Agent</td><td><span class="y">Yes</span>, up to SA or GA</td><td><span class="y">Yes</span>, up to MGA</td><td><span class="y">Yes</span>, anyone, up to MGA</td></tr>
+          <tr><td>Make someone an RGA, or change an RGA's tier</td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="y">Admin Panel</span> only</td></tr>
+          <tr><td>Move someone within your own downline and office</td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td><td><span class="y">Yes</span></td></tr>
+          <tr><td>Move someone into another office</td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="y">Yes</span>, from the Team tab or Admin Panel</td></tr>
+          <tr><td>Correct an office with no hierarchy change</td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="n">No</span></td><td><span class="y">Admin Panel</span> → person → Office</td></tr>
+        </tbody>
+      </table>
+      <ul class="rules" style="margin-top:14px">
+        <li><b>Your own downline only.</b> You can only promote or move people who report up to you. A row marked <span class="ui">Team</span> is a teammate you can see, not someone you manage.</li>
+        <li><b>Strictly below your own tier.</b> SA and GA are the same tier, so an SA or GA can make an Agent, never an SA or GA. An MGA can make an SA or GA, never another MGA. Nobody can mint a peer who would then read their book.</li>
+        <li class="no"><b>Nobody goes above their own upline.</b> To make a GA who reports to an MGA into an MGA, move the GA under an RGA first, then change the tier.</li>
+        <li class="no"><b>Nobody with active reports is lowered.</b> Move their people first; otherwise that branch would go dark to them.</li>
+        <li><b>Office follows the upline.</b> A person filed under a leader in another office is a data error, so a cross-office move re-homes the person, and with the switch on their whole downline, into the new office. From then on they count toward that office everywhere.</li>
+        <li><b>Everything is logged.</b> Every tier change and move is written to the audit log with who did it, when, and what changed.</li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="note">
+    <b>Also for MGAs and RGAs:</b> your own nightly pulse is filed as <b>Not In Field</b> automatically at 6:30 AM if you have not entered numbers, so there is no 9 PM banner, no streak and no missing-pulse flag on your row. Enter your own numbers any time and they replace the automatic entry. Agents, SAs and GAs still enter every night.
+  </div>
+
+  <footer>
+    <span>VantageLife 2.1 · AO Premier · Leader Guide</span>
+    <span><a href="https://www.app.aovantagelife.com">Open the app</a> · <a href="https://www.app.aovantagelife.com/tour">Interactive tour</a></span>
+  </footer>
+</div>
+</body>
+</html>
