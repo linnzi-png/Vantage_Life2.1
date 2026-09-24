@@ -351,7 +351,7 @@
         </div>
         <div class="chips" data-t="team-weeks"><span class="chip live">LIVE</span><span class="chip num">8/5</span><span class="chip num">7/29</span><span class="chip num">7/22</span><span class="chip num">7/15</span><span class="chip num">7/8</span></div>
         <div class="missing" data-t="team-missing"><span>⚠️</span><div><div class="k">MISSING TONIGHT · 3</div><small>A. Mulder, J. Marquez, T. Fields</small></div><div class="act">ENTER ALL ›</div></div>
-        <div class="sortbar"><span class="on">Gross ALP</span><span>Net ALP</span><span>Sales</span><span>Close %</span><span>Avg Deal</span></div>
+        <div class="sortbar"><span class="on">ALP</span><span>Sales</span><span>Close Ratio</span><span>Avg Deal</span></div>
         <div class="search" data-t="team-roster">🔍 Search name, office, title</div>
         <div class="row"><div><b>Hussein Habhab</b><span class="rk">R</span><div class="meta">Detroit · Agent</div></div><div><div class="alp num">$2,150</div><div class="m2 num">1 sale · 100%</div></div></div>
         <div class="row"><div><b>Trey Munn</b><div class="meta">Gojcaj · Agent</div><span class="alert-chip">NO PULSE</span></div><div><div class="alp num">$1,433</div><div class="m2 num">1 sale · 50%</div></div></div>
@@ -419,7 +419,7 @@
         <div class="kpis">
           <div class="kpi"><div class="lab">PERIOD ALP</div><div class="val num">$318k</div></div>
           <div class="kpi"><div class="lab">AVG / WEEK</div><div class="val num">$24.5k</div></div>
-          <div class="kpi"><div class="lab">CLOSE RATE</div><div class="val num">51.4%</div><div class="hint">Sales / Sits</div></div>
+          <div class="kpi"><div class="lab">CLOSE RATIO</div><div class="val num">51.4%</div><div class="hint">Sales / Sits</div></div>
         </div>
         <div class="card chart-line">
           <div class="sect">GROSS ALP BY WEEK</div>
@@ -500,7 +500,7 @@
           <li>Submission streaks &amp; Player's Club ($10K day) recognition</li>
           <li>Platinum Wall — top Vets, top Rookies, Platinum Rule honorees with tap-to-call contact cards</li>
           <li>Live agency sales ticker</li>
-          <li>Production History — personal 13-week ALP, sales &amp; close-rate charts</li>
+          <li>Production History — personal 13-week ALP, sales &amp; close-ratio charts</li>
           <li>Premier Shoutouts feed + nominate anyone for the Platinum Rule</li>
           <li>One-tap upline contact card</li>
         </ul>
@@ -510,7 +510,7 @@
         <div class="tier">LEVEL 2</div><h3>GA / SA</h3><div class="title">CoExecutive Producer · Regional Producer</div>
         <div class="plus">EVERYTHING IN AGENT, PLUS</div>
         <ul>
-          <li>TEAM tab — full downline roster with Gross/Net ALP, sales, close rate, avg deal &amp; coaching alert flags</li>
+          <li>TEAM tab — full downline roster with ALP, sales, close ratio, avg deal &amp; coaching alert flags</li>
           <li>Sort, search, and per-agent contact cards with their 13-week production history</li>
           <li>Past-week picker — rewind the board to any archived reporting week</li>
           <li>MISSING TONIGHT queue — see who hasn't pulsed and ENTER ALL on their behalf (up to 7 days back)</li>
@@ -535,7 +535,7 @@
           <li>Global scope — the entire agency on every screen</li>
           <li>Manager Command Panel — Net ALP Eraser with mandatory written reason; Gross ALP stays locked on the wall</li>
           <li>Audit Log — immutable ledger of every adjustment: who, whom, how much, why, when</li>
-          <li>Company Health — per-office trend dashboard: 8–26-week ranges, KPI grid, ALP / sales / close-rate charts</li>
+          <li>Company Health — per-office trend dashboard: 8–26-week ranges, KPI grid, ALP / sales / close-ratio charts</li>
           <li>Archived week snapshots — side-by-side comparison &amp; WAR-format export</li>
           <li>Wednesday 2:00 PM weekly lock — the reset that archives each production week</li>
         </ul>
@@ -543,7 +543,7 @@
     </div>
 
     <div class="rule-note">
-      <b>One rule, everywhere:</b> Close Rate = <b>Sales ÷ Sits</b>. N1 visits (medically unqualified) are tallied separately and already excluded from Sits — they never count against an agent. · Reporting cycle runs 6:00 AM–5:59 AM Detroit time. · Admin tools (roster management, WAR report import, office merge) are a separate permission independent of level.
+      <b>One rule, everywhere:</b> Close Ratio = <b>Sales ÷ Sits</b>. N1 visits (medically unqualified) are tallied separately and already excluded from Sits — they never count against an agent. · Reporting cycle runs 6:00 AM–5:59 AM Detroit time. · Admin tools (roster management, WAR report import, office merge) are a separate permission independent of level.
     </div>
   </section>
 
@@ -572,7 +572,7 @@
       st('dashboard', null, 'WELCOME TO VANTAGELIFE', welcome),
       st('dashboard', 'dash-header', 'YOUR DASHBOARD', 'Your name and producer title live up here. The date pill is the open sales day. Tap the pill anytime to look back at a past day, read-only.'),
       st('dashboard', 'dash-period', 'DAILY · WEEKLY · MONTHLY', 'Flip the scoreboard between today, the rolling week, and the month. The production week closes every Wednesday at 2:00 PM, when totals lock and archive.'),
-      st('dashboard', 'dash-stats', 'LIVE PRODUCTION', 'Total ALP, Sits, and Sales update live, with the swing versus yesterday. One rule to know everywhere in this app: Close Rate is Sales ÷ Sits. N1 visits (medically unqualified) are tallied separately and already left out of your Sits — they never count against you.'),
+      st('dashboard', 'dash-stats', 'LIVE PRODUCTION', 'Total ALP, Sits, and Sales update live, with the swing versus yesterday. One rule to know everywhere in this app: Close Ratio is Sales ÷ Sits. N1 visits (medically unqualified) are tallied separately and already left out of your Sits — they never count against you.'),
       st('dashboard', 'dash-wall', 'THE PLATINUM WALL', 'Top Vets, top Rookies, and Platinum Rule honorees. Tap any name to open their contact card — call or text them straight from the app.'),
       st('dashboard', 'dash-ticker', 'THE LIVE WIRE', 'Every sale in the agency scrolls across this ticker as it lands. When you close tonight, the whole team sees it here.'),
       st('dashboard', 'tabbar', 'GETTING AROUND', "Everything lives in these tabs. Next, we'll walk through the ones you'll use every day."),
@@ -585,14 +585,14 @@
     var BASICS_BRIEF = [
       st('dashboard', null, 'WELCOME TO VANTAGELIFE', welcome),
       st('dashboard', 'dash-header', 'THE SALES DAY', 'The date pill is the open sales day. The production week locks every Wednesday at 2:00 PM. Tap the pill to review past days read-only.'),
-      st('dashboard', 'dash-stats', 'LIVE ROLLUPS', 'ALP, Sits, and Sales roll up live across the whole agency — the same board for everyone. Close Rate everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close rate down.'),
+      st('dashboard', 'dash-stats', 'LIVE ROLLUPS', 'ALP, Sits, and Sales roll up live across the whole agency — the same board for everyone. Close Ratio everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close ratio down.'),
       st('pulse', 'pulse-stepper', 'YOUR NIGHTLY PULSE', 'Your own 14 nightly numbers still go in here every night — before the 9:00 PM gate, or in the Midnight Miracle window (midnight–6:00 AM) at the latest.')
     ];
     var UPLINE = st('pulse', 'pulse-upline', 'YOUR UPLINE', "Your upline's contact card sits at the bottom of the Pulse screen — one tap to call or text.");
     var SHOUT_BRIEF = st('shoutouts', 'shout-nominate', 'PREMIER SHOUTOUTS', 'The victory feed. Tap NOMINATE to put anyone up for Platinum Rule honors.');
 
     var TEAM = [
-      st('team', 'team-roster', 'YOUR TEAM, LIVE', "Your full downline rolls up in the TEAM tab — Gross and Net ALP, sales, close rate, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row for a contact card with that agent's 13-week production history."),
+      st('team', 'team-roster', 'YOUR TEAM, LIVE', "Your full downline rolls up in the TEAM tab — ALP, sales, close ratio, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row for a contact card with that agent's 13-week production history."),
       st('team', 'team-weeks', 'REWIND THE WEEK', 'These chips pin any past reporting week — LIVE is now; tap a date to see the board exactly as that week closed. A pinned week is a static snapshot; tap LIVE to come back.'),
       st('team', 'team-missing', 'MISSING TONIGHT', "Agents who haven't submitted their Pulse show up in the MISSING TONIGHT card. Tap ENTER ALL to walk their entries back-to-back — as their upline you can submit for anyone on your team, up to 7 sales days back."),
       st('team', 'team-noms', 'NOMINATIONS INBOX', 'Platinum Rule nominations from your team land behind this button — the badge counts the ones that have hit the endorsement threshold.'),
@@ -601,7 +601,7 @@
 
     var MGA = [
       st('nominations', 'noms-header', 'POST TO THE WALL', 'You close the loop: once a nomination hits the endorsement threshold, POST TO PLATINUM WALL publishes it agency-wide on the Platinum Wall.'),
-      st('team', 'team-roster', 'COACH FROM THE TREND', "Open anyone on your roster and read their 13-week production history before the call — ALP, sales, and close rate, charted. History is downline-scoped: you see your whole hierarchy, and nobody above it."),
+      st('team', 'team-roster', 'COACH FROM THE TREND', "Open anyone on your roster and read their 13-week production history before the call — ALP, sales, and close ratio, charted. History is downline-scoped: you see your whole hierarchy, and nobody above it."),
       st('dashboard', 'dash-stats', 'ONE BOARD, YOUR TEAM', "Your dashboard is the whole agency's scoreboard — the same board every agent, leader and office sees. Your hierarchy rolls up in the TEAM tab: every leader and agent under you, live.")
     ];
 
@@ -609,7 +609,7 @@
       st('more', 'more-tools', 'EXECUTIVE TOOLS', 'Your command deck lives in MORE: the Manager Command Panel, the Audit Log, and Company Health.'),
       st('manager', 'manager-intro', 'NET ALP ERASER', "Post a Net ALP correction against any agent's sales day — pick the agent, set the new Net ALP, and give a reason of 10+ characters. Gross ALP on the Platinum Wall stays untouched."),
       st('audit', 'audit-intro', 'THE AUDIT LOG', 'Nothing here is silent: every adjustment is recorded — original value, new value, delta, reason, who made it, and when.'),
-      st('vault', 'vault-health', 'COMPANY HEALTH', 'Your per-office pulse: pick an office, pick a window (8 to 26 weeks or all time), and read the KPIs — period ALP, Close Rate (Sales ÷ Sits), ALP per sale — with ALP, sales, and close-rate trends charted below.'),
+      st('vault', 'vault-health', 'COMPANY HEALTH', 'Your per-office pulse: pick an office, pick a window (8 to 26 weeks or all time), and read the KPIs — period ALP, Close Ratio (Sales ÷ Sits), ALP per sale — with ALP, sales, and close-ratio trends charted below.'),
       st('vault', 'vault-weeks', 'ARCHIVED WEEK SNAPSHOTS', 'Below the charts live the archived week snapshots, created by each Wednesday reset. Tap two to compare them side-by-side with deltas, and EXPORT any week as a WAR-format backup.'),
       st('vault', null, 'THE WEDNESDAY RESET', "Every Wednesday at 2:00 PM Detroit time the production week locks: entries archive into the week snapshots and a fresh week opens. The reset itself is a Chief-Executive-level platform operation — there's no in-app button to trigger it."),
       st('more', 'more-walkthrough', 'REPLAY ANYTIME', "That's the full command deck. Replay this walkthrough anytime from right here.")

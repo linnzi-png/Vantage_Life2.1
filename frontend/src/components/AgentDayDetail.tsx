@@ -95,8 +95,8 @@ export function AgentDayDetail({ agentId }: { agentId: string }) {
             <View style={styles.dayStatRow}>
               <MiniStat label="ALP" value={money(day.totals.gross_alp)} />
               <MiniStat label="SALES" value={`${day.totals.sales ?? 0}`} />
-              <MiniStat label="CLOSE" value={`${day.close_rate.toFixed(1)}%`} />
-              <MiniStat label="SIT RATE" value={`${day.show_rate.toFixed(1)}%`} />
+              <MiniStat label="CLOSE RATIO" value={`${day.close_rate.toFixed(1)}%`} />
+              <MiniStat label="SHOW RATIO" value={`${day.show_rate.toFixed(1)}%`} />
             </View>
             <View style={styles.fieldList}>
               {PULSE_FIELDS.map((f, i) => (
