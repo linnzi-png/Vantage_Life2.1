@@ -103,14 +103,14 @@ export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?:
   const totalSits = series.reduce((n, w) => n + w.sits, 0);
   const totalSets = series.reduce((n, w) => n + w.sets, 0);
   const totalN1 = series.reduce((n, w) => n + w.n1, 0);
-  // Close Rate = Sales / Sits. N1 (medically unqualified) is already left out
+  // Close Ratio = Sales / Sits. N1 (medically unqualified) is already left out
   // of Sits at entry, so subtracting it again would exclude them twice.
   const closeRate = totalSits > 0 ? (totalSales / totalSits) * 100 : 0;
-  // Sit Rate ("show rate") = (Sits + N1) / Sets — mirrors backend/metrics.py's
+  // Show Ratio ("show rate") = (Sits + N1) / Sets — mirrors backend/metrics.py's
   // show_rate() exactly: N1 people DID show up, so they belong back in the
   // numerator here even though close_rate leaves them out. Summed from raw
   // counts across the window rather than averaging each week's own rate, same
-  // methodology as Close Rate above.
+  // methodology as Close Ratio above.
   const sitRate = totalSets > 0 ? ((totalSits + totalN1) / totalSets) * 100 : 0;
   const alpPerSale = totalSales > 0 ? totalAlp / totalSales : 0;
   const best = series.reduce((m, w) => (w.gross_alp > m.gross_alp ? w : m), series[0]);
@@ -125,11 +125,11 @@ export function AgentHistory({ agentId, weeks = 13 }: { agentId: string; weeks?:
       <View style={styles.statRow}>
         <Stat label="ALP" value={money(totalAlp)} />
         <Stat label="SALES" value={`${totalSales}`} />
-        <Stat label="CLOSE" value={`${closeRate.toFixed(1)}%`} />
+        <Stat label="CLOSE RATIO" value={`${closeRate.toFixed(1)}%`} />
         <Stat label="BEST WK" value={compact(best.gross_alp)} />
       </View>
       <View style={[styles.statRow, styles.statRow2]}>
-        <Stat label="SIT RATE" value={`${sitRate.toFixed(1)}%`} />
+        <Stat label="SHOW RATIO" value={`${sitRate.toFixed(1)}%`} />
         <Stat label="SITS/APPTS" value={`${totalSits} / ${totalSets}`} />
         <Stat label="AVG ALP/SALE" value={money(alpPerSale)} />
       </View>

@@ -176,3 +176,26 @@ async def test_a_removed_members_production_still_rolls_up(client, seeded_db):
     assert rows["SA_1"]["team_gross_alp"] == 600.0   # … so the rollup counts it
     # Head count is who is on the team today: AG_1 alone, not the archived row.
     assert rows["SA_1"]["team_size"] == 1
+
+
+# ---------------- archived people and the unset group ----------------
+
+async def test_archived_person_never_lands_in_tenure_not_set(client, seeded_db):
+    """A removed member's production stays on the board for its window
+    ("history is history"), but TENURE NOT SET is a prompt to go record
+    someone's tenure, and nobody sets tenure on a person who has been removed
+    (owner, 2026-09-24). They file with the veterans instead."""
+    token = await make_session(seeded_db, role="level_4", agent_id="RGA_1", email="rga1@test.dev")
+    await add_agent(seeded_db, "GONE_A", upline="SA_1", tenure=None)
+    await seeded_db.agent_profiles.update_one({"agent_id": "GONE_A"}, {"$set": {"archived": True}})
+    await add_agent(seeded_db, "UNSET_B", upline="SA_1", tenure=None)
+    await entry(seeded_db, agent_id="GONE_A", gross_alp=700)
+    await entry(seeded_db, agent_id="UNSET_B", gross_alp=300)
+
+    rows = await board(client, token)
+    assert rows["GONE_A"]["archived"] is True
+    assert rows["GONE_A"]["leaderboard_group"] == "veteran"
+    assert rows["GONE_A"]["rank"] == 1
+    # The live person with no tenure still gets the nudge group, ranked alone.
+    assert rows["UNSET_B"]["leaderboard_group"] == "unset"
+    assert (rows["UNSET_B"]["rank"], rows["UNSET_B"]["rank_of"]) == (1, 1)

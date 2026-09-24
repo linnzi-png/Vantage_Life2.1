@@ -106,7 +106,7 @@ const BASICS_FULL: TourStep[] = [
     screen: '/',
     anchor: 'dash-stats',
     title: 'LIVE PRODUCTION',
-    body: 'Total ALP, Sits, and Sales update live, with the swing versus yesterday. One rule to know everywhere in this app: Close Rate is Sales ÷ Sits. N1 visits (medically unqualified) are tallied separately and already left out of your Sits — they never count against you.',
+    body: 'Total ALP, Sits, and Sales update live, with the swing versus yesterday. One rule to know everywhere in this app: Close Ratio is Sales ÷ Sits. N1 visits (medically unqualified) are tallied separately and already left out of your Sits — they never count against you.',
   },
   {
     id: 'platinum-wall',
@@ -182,7 +182,7 @@ const basicsBrief = (welcomeBody: string, includeUpline: boolean): TourStep[] =>
     screen: '/',
     anchor: 'dash-stats',
     title: 'LIVE ROLLUPS',
-    body: 'ALP, Sits, and Sales roll up live across the whole agency — the same board for everyone. Close Rate everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close rate down.',
+    body: 'ALP, Sits, and Sales roll up live across the whole agency — the same board for everyone. Close Ratio everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close ratio down.',
   },
   {
     id: 'nightly-pulse',
@@ -234,7 +234,7 @@ const TEAM_STEPS: TourStep[] = [
     screen: '/team',
     anchor: 'team-roster',
     title: 'YOUR TEAM, LIVE',
-    body: "Your full downline rolls up in the TEAM tab — Gross and Net ALP, sales, close rate, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row to open their contact card and reach out — call, text, or email, straight from the app. Bringing someone new onto your team directly? Tap ADD, top right.",
+    body: "Your full downline rolls up in the TEAM tab — ALP, sales, close ratio, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row to open their contact card and reach out — call, text, or email, straight from the app. Bringing someone new onto your team directly? Tap ADD, top right.",
   },
   teamWeeksStep,
   {
@@ -273,7 +273,7 @@ const AGENT_TEAM_STEPS: TourStep[] = [
     screen: '/team',
     anchor: 'team-roster',
     title: 'YOUR TEAM, LIVE',
-    body: "Your SA team rolls up here — you, your teammates and the SA or GA who runs the team, with Gross and Net ALP, sales, and close rate, live. Sort by any column, search by name or title, and tap a row for a contact card with that person's 13-week production history and any single day's numbers. Your uplines above the team are listed as contacts to reach, not numbers to read. You still enter your own Nightly Numbers only, back on the PULSE tab.",
+    body: "Your SA team rolls up here — you, your teammates and the SA or GA who runs the team, with ALP, sales, and close ratio, live. Sort by any column, search by name or title, and tap a row for a contact card with that person's 13-week production history and any single day's numbers. Your uplines above the team are listed as contacts to reach, not numbers to read. You still enter your own Nightly Numbers only, back on the PULSE tab.",
   },
   teamWeeksStep,
 ];
@@ -291,7 +291,7 @@ const MGA_STEPS: TourStep[] = [
     screen: '/team',
     anchor: 'team-roster',
     title: 'COACH FROM THE TREND',
-    body: "Open anyone on your roster and read their 13-week production history before the call — ALP, sales, and close rate, charted. History is downline-scoped: you see your whole hierarchy, and nobody above it.",
+    body: "Open anyone on your roster and read their 13-week production history before the call — ALP, sales, and close ratio, charted. History is downline-scoped: you see your whole hierarchy, and nobody above it.",
   },
   {
     id: 'hierarchy-scope',
@@ -329,7 +329,7 @@ const RGA_STEPS: TourStep[] = [
     screen: '/vault',
     anchor: 'vault-health',
     title: 'COMPANY HEALTH',
-    body: 'Your per-office pulse: pick an office, pick a window (8 to 26 weeks or all time), and read the KPIs — period ALP, Close Rate (Sales ÷ Sits), ALP per sale — with ALP, sales, and close-rate trends charted below.',
+    body: 'Your per-office pulse: pick an office, pick a window (8 to 26 weeks or all time), and read the KPIs — period ALP, Close Ratio (Sales ÷ Sits), ALP per sale — with ALP, sales, and close-ratio trends charted below.',
   },
   {
     id: 'vault-snapshots',

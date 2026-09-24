@@ -157,7 +157,12 @@ def _leaderboard_group(row: Dict[str, Any]) -> str:
         return "leader"
     tenure = row.get("is_rookie")
     if tenure is None:
-        return "unset"
+        # "unset" is a nudge to go record someone's tenure. A removed person
+        # (archived, kept on the board for their window's production) is not
+        # going to have it set, so they never land in that group (owner,
+        # 2026-09-24); they file with the veterans, where a rank on past
+        # production means the same thing it does for anyone else.
+        return "veteran" if row.get("archived") else "unset"
     return "rookie" if tenure else "veteran"
 MIN_SALES_FOR_DEAL_ALERT = 3
 
@@ -1449,8 +1454,15 @@ async def dashboard_platinum_wall(
             "io_role": agent.get("io_role", ""),
             "phone": agent.get("phone", ""),
             "email": agent.get("email", ""),
+            "archived": bool(agent.get("archived")),
         }
         if tenure is None:
+            # A removed person's production still counts on the wall, but the
+            # TENURE NOT SET panel is a prompt to go set it, and nobody is
+            # going to set tenure on someone who has been removed (owner,
+            # 2026-09-24). They never appear there.
+            if agent.get("archived"):
+                continue
             bucket = unranked
         elif tenure:
             bucket = rookies

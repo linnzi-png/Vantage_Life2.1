@@ -198,3 +198,20 @@ async def test_exclusion_flag_false_changes_nothing(client, seeded_db):
 
     vets = (await client.get("/api/dashboard/platinum-wall", headers=auth(token))).json()["vets"]
     assert [v["agent_id"] for v in vets] == ["VET_4", "VET_3", "VET_2"]
+
+
+async def test_archived_person_never_lands_in_tenure_not_set(client, seeded_db):
+    """TENURE NOT SET is a prompt to go set it, and nobody sets tenure on a
+    removed person (owner, 2026-09-24). Their production still counts for the
+    window, but they never appear in that panel."""
+    token = await rga(seeded_db)
+    day = server.current_sales_day_str()
+    await seeded_db.agent_profiles.update_one(
+        {"agent_id": "AG_1"}, {"$unset": {"is_rookie": ""}, "$set": {"archived": True}})
+    await seeded_db.agent_profiles.update_one({"agent_id": "AG_2"}, {"$unset": {"is_rookie": ""}})
+    await entry(seeded_db, day=day, agent_id="AG_1", gross_alp=9000)
+    await entry(seeded_db, day=day, agent_id="AG_2", gross_alp=100)
+
+    body = (await client.get("/api/dashboard/platinum-wall", headers=auth(token))).json()
+    assert [u["agent_id"] for u in body["unranked"]] == ["AG_2"]
+    assert body["unranked"][0]["archived"] is False

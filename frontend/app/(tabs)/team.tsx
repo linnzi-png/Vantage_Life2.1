@@ -271,9 +271,6 @@ export default function TeamScreen() {
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={styles.alp}>${Math.round(r.gross_alp).toLocaleString()}</Text>
               <Text style={styles.metric}>{r.sales} sales · {r.close_ratio}%</Text>
-              {Math.abs(r.gross_alp - r.net_alp) > 0.01 ? (
-                <Text style={styles.netAlp}>NET ${Math.round(r.net_alp).toLocaleString()}</Text>
-              ) : null}
               {/* A leader is ranked on what they sold themselves, which is
                   usually nothing — the rollup is what they are actually
                   accountable for, so both sit on the row. */}
@@ -471,10 +468,12 @@ export default function TeamScreen() {
       ) : null}
 
       <View style={styles.sortBar}>
-        {sortBtn('gross_alp', 'Gross ALP')}
-        {sortBtn('net_alp', 'Net ALP')}
+        {/* ALP only on this tab (owner, from MJ, 2026-09-24): the value is
+            Gross ALP, labelled ALP, and Net ALP appears nowhere here. Rank
+            stays on Gross ALP, matching the Platinum Wall. */}
+        {sortBtn('gross_alp', 'ALP')}
         {sortBtn('sales', 'Sales')}
-        {sortBtn('close_ratio', 'Close %')}
+        {sortBtn('close_ratio', 'Close Ratio')}
         {sortBtn('avg_deal', 'Avg Deal')}
       </View>
       <TourAnchor id="team-roster">
@@ -623,7 +622,6 @@ const styles = StyleSheet.create({
   meta:          { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
   alp:           { color: COLORS.primary, fontWeight: '900', fontSize: 16, fontVariant: ['tabular-nums' as any] },
   metric:        { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
-  netAlp:        { color: COLORS.orange, fontSize: 10, fontWeight: '800', marginTop: 2, letterSpacing: 0.5 },
   alert:         { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3 },
   alertTxt:      { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   rookie:        { backgroundColor: COLORS.orange, paddingHorizontal: 4, borderRadius: 2 },

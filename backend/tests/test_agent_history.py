@@ -378,3 +378,32 @@ async def test_level_1_gets_the_numbers_but_never_the_coaching_card(client, seed
     now read in full."""
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     assert await coaching(client, token, "SA_1") is False
+
+
+# ---------------- "what they submitted on a specific day", every leader tier ----------------
+# MJ's ask (2026-09-24): an SA and a GA must reach a downline agent's day the
+# same way an MGA or RGA does. The route runs on team_scope_agent_ids, so
+# level_sa and level_2 land on their own downline and nothing sideways.
+
+async def test_sa_can_read_a_downline_agents_day(client, seeded_db):
+    token = await make_session(seeded_db, role="level_sa", agent_id="SA_1", email="sa1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sales=3, sits=6, gross_alp=750.0)
+    r = await client.get("/api/agents/AG_1/day?sales_day=2026-02-18", headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["totals"]["sales"] == 3
+
+
+async def test_ga_can_read_a_day_two_levels_down(client, seeded_db):
+    token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_1", sales=2, sits=4, gross_alp=400.0)
+    r = await client.get("/api/agents/AG_1/day?sales_day=2026-02-18", headers=auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["totals"]["gross_alp"] == 400.0
+
+
+async def test_sa_and_ga_cannot_read_a_day_outside_their_downline(client, seeded_db):
+    sa = await make_session(seeded_db, role="level_sa", agent_id="SA_1", email="sa1@test.dev")
+    ga = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
+    await entry(seeded_db, day="2026-02-18", agent_id="AG_2", sales=1)
+    assert (await client.get("/api/agents/AG_2/day?sales_day=2026-02-18", headers=auth(sa))).status_code == 403
+    assert (await client.get("/api/agents/AG_2/day?sales_day=2026-02-18", headers=auth(ga))).status_code == 403

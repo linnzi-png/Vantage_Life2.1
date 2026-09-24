@@ -1,7 +1,7 @@
 // Static coaching reference for uplines/leaders, shown at the bottom of an
 // agent's card. Deliberately NOT wired to this agent's live numbers (per
 // owner decision, 2026-09) — it's a fixed toolkit a leader can read straight
-// off the four stats above (Close Rate, Sit Rate, Sits/Appointments, ALP per
+// off the four stats above (Close Ratio, Show Ratio, Sits/Appointments, ALP per
 // Sale) and decide for themselves which apply. Dynamic "your close rate is
 // low, try X" recommendations are a later phase, not this one.
 import React from 'react';
@@ -15,19 +15,19 @@ interface TipGroup {
 
 const GROUPS: TipGroup[] = [
   {
-    metric: 'CLOSE RATE (Sales ÷ Sits)',
+    metric: 'CLOSE RATIO (Sales ÷ Sits)',
     tips: [
       "Trending low? Sit in on 2-3 live presentations before assuming it's a lead problem — it usually isn't.",
       'Role-play the actual close, not the whole pitch. Most reps who know the product still fumble the exact moment they ask for the sale.',
-      "Split close rate by lead source (referral vs. cold vs. response card). A lopsided drop tells you it's one source, not the agent's overall skill.",
+      "Split close ratio by lead source (referral vs. cold vs. response card). A lopsided drop tells you it's one source, not the agent's overall skill.",
     ],
   },
   {
-    metric: 'SIT RATE ((Sits + N1) ÷ Sets)',
+    metric: 'SHOW RATIO ((Sits + N1) ÷ Sets)',
     tips: [
-      "A low sit rate is usually a confirmation problem, not a selling problem — check whether appointments get confirmed the day before AND morning-of.",
-      'Look at who set the appointment (the agent vs. a dialer vs. a referral). Sit rate often splits sharply by who booked it.',
-      "Sits strong but sales weak? That's a close-rate issue — don't coach the wrong stage of the funnel.",
+      "A low show ratio is usually a confirmation problem, not a selling problem — check whether appointments get confirmed the day before AND morning-of.",
+      'Look at who set the appointment (the agent vs. a dialer vs. a referral). Show ratio often splits sharply by who booked it.',
+      "Sits strong but sales weak? That's a close-ratio issue — don't coach the wrong stage of the funnel.",
     ],
   },
   {
@@ -40,7 +40,7 @@ const GROUPS: TipGroup[] = [
   {
     metric: 'AVERAGE ALP PER SALE',
     tips: [
-      'Low ALP/sale with a healthy close rate often means the agent is closing but underselling — check whether they run a full needs analysis or default to the cheapest plan.',
+      'Low ALP/sale with a healthy close ratio often means the agent is closing but underselling — check whether they run a full needs analysis or default to the cheapest plan.',
       "Compare this agent's ALP/sale against a top performer's. The gap is usually in how thoroughly needs get uncovered, not in “better closing.”",
       'High ALP/sale but low volume can mean the agent is cherry-picking bigger cases and passing on smaller, faster closes — worth a pipeline-balance conversation.',
     ],
@@ -70,8 +70,8 @@ export function CoachingTips() {
       ))}
       <View style={styles.footerNote}>
         <Text style={styles.footerTxt}>
-          Look at two metrics together before drawing a conclusion — e.g. low close rate + high sit rate usually
-          means a presentation problem, while low close rate + low sit rate usually means a lead-quality or
+          Look at two metrics together before drawing a conclusion — e.g. low close ratio + high show ratio usually
+          means a presentation problem, while low close ratio + low show ratio usually means a lead-quality or
           scheduling problem. Confirm with the agent directly before assuming which stage needs work.
         </Text>
       </View>

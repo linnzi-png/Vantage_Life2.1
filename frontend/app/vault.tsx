@@ -352,7 +352,7 @@ export default function VaultScreen() {
               <Kpi label="PERIOD ALP" value={money(kpi.totalAlp)} />
               <Kpi label="AVG / WEEK" value={money(kpi.avgWeek)} />
               <Kpi label="SALES" value={kpi.totalSales.toLocaleString()} />
-              <Kpi label="CLOSE RATE" value={`${kpi.closeRate.toFixed(1)}%`} hint="Sales / Sits" />
+              <Kpi label="CLOSE RATIO" value={`${kpi.closeRate.toFixed(1)}%`} hint="Sales / Sits" />
               <Kpi label="ALP / SALE" value={money(kpi.alpPerSale)} />
               <Kpi label="BEST WEEK" value={compact(kpi.best.gross_alp)} hint={kpi.best.week_start} />
             </View>
@@ -368,7 +368,7 @@ export default function VaultScreen() {
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>CLOSE RATE BY WEEK</Text>
+              <Text style={styles.cardTitle}>CLOSE RATIO BY WEEK</Text>
               <Text style={styles.cardNote}>Sales ÷ Sits.</Text>
               <LineChart data={closePoints} width={chartW} color={COLORS.gold} formatValue={(n) => `${n}%`} />
             </View>

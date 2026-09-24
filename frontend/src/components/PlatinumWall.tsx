@@ -7,6 +7,8 @@ export interface WallItem {
   agent_id: string; name: string; office: string; gross_alp: number; sales: number;
   // null = tenure never recorded, which is most of the roster.
   is_rookie?: boolean | null; role?: string; io_role?: string; phone?: string; email?: string;
+  // A removed person whose logged production still counts for the window.
+  archived?: boolean;
 }
 export interface PlatinumRulePost { shoutout_id: string; agent_name: string; office: string; reason: string; posted_by?: string; }
 
@@ -27,6 +29,10 @@ export default function PlatinumWall(
     onPress?: (item: WallItem) => void;
   },
 ) {
+  // The panel is a prompt to go set someone's tenure, and nobody sets tenure
+  // on a person who has been removed (owner, 2026-09-24). The server already
+  // leaves them out; this guard keeps an older backend from showing one.
+  const tenureNotSet = unranked.filter((i) => !i.archived);
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
@@ -39,13 +45,13 @@ export default function PlatinumWall(
         <View style={{ width: 8 }} />
         <Panel title="TOP 3 ROOKIES" color={COLORS.orange} icon="rocket" items={rookies} testID="platinum-rookies" onPress={onPress} />
       </View>
-      {unranked.length ? (
+      {tenureNotSet.length ? (
         <View style={{ marginTop: 8 }}>
           <Panel
             title="TOP 3 — TENURE NOT SET"
             color={COLORS.textDim}
             icon="help-circle"
-            items={unranked}
+            items={tenureNotSet}
             testID="platinum-unranked"
             onPress={onPress}
           />
