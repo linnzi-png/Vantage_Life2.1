@@ -115,24 +115,27 @@ async def test_each_bucket_caps_at_three_by_alp(client, seeded_db):
     assert [v["agent_id"] for v in vets] == ["VET_4", "VET_3", "VET_2"]  # top 3, descending
 
 
-# ---------------- RBAC ----------------
+# ---------------- Scope ----------------
+# Owner, 2026-09-22: the dashboard is universal. Every agent, leader and office
+# sees the same agency-wide wall, whatever the More-tab view switch says (that
+# switch narrows the Team tab only).
 
-async def test_wall_is_scoped_to_the_viewers_team(client, seeded_db):
+async def test_wall_is_agency_wide_for_a_ga(client, seeded_db):
     token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
     day = server.current_sales_day_str()
     await seeded_db.agent_profiles.update_one({"agent_id": "AG_2"}, {"$set": {"is_rookie": False}})
-    await entry(seeded_db, day=day, agent_id="AG_2", gross_alp=9999)  # another GA's downline
+    await entry(seeded_db, day=day, agent_id="AG_2", gross_alp=9999)  # another GA's downline, other office
 
     body = (await client.get("/api/dashboard/platinum-wall", headers=auth(token))).json()
-    assert all(v["agent_id"] != "AG_2" for v in body["vets"] + body["unranked"])
+    assert "AG_2" in [v["agent_id"] for v in body["vets"]]
+    assert body["scope"] == "agency"
 
 
-async def test_level_1_sees_their_office_not_just_themselves(client, seeded_db):
-    """Regression: a level_1 agent has no downline, so scoping the wall by
-    visible_agent_ids (built for personal Nightly Numbers privacy) reduced
-    their candidate pool to just their own agent_id — a "team of one." An
-    Agent should see the same real office leaderboard their upline does,
-    not just their own row."""
+async def test_level_1_sees_the_whole_agency_not_just_themselves(client, seeded_db):
+    """Regression: scoping the wall by visible_agent_ids (built for personal
+    Nightly Numbers privacy) once reduced an Agent's candidate pool to just
+    their own agent_id — a "team of one." An Agent sees the same agency-wide
+    leaderboard everyone else does."""
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     day = server.current_sales_day_str()
     # AG_3: same office (MCM) as AG_1, but not AG_1's upline or downline.
@@ -145,13 +148,17 @@ async def test_level_1_sees_their_office_not_just_themselves(client, seeded_db):
     assert "AG_3" in [v["agent_id"] for v in body["vets"]]
 
 
-async def test_level_1_still_excluded_from_a_different_office(client, seeded_db):
-    """The office scope for level_1 must still keep rival offices apart —
-    it broadens a level_1 agent's pool to their own office, not the company."""
+async def test_level_1_sees_the_other_offices_too(client, seeded_db):
+    """The wall no longer stops at the viewer's office: an MCM Agent sees an
+    AMP producer on the same board."""
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     day = server.current_sales_day_str()
     await seeded_db.agent_profiles.update_one({"agent_id": "AG_2"}, {"$set": {"is_rookie": False}})
     await entry(seeded_db, day=day, agent_id="AG_2", gross_alp=9999)  # office AMP, not AG_1's MCM
 
     body = (await client.get("/api/dashboard/platinum-wall", headers=auth(token))).json()
-    assert all(v["agent_id"] != "AG_2" for v in body["vets"] + body["unranked"])
+    assert "AG_2" in [v["agent_id"] for v in body["vets"]]
+    # And the office roll-up is the whole agency for an Agent as well.
+    offices = (await client.get("/api/dashboard/offices", headers=auth(token))).json()
+    names = {o["office"] for o in offices["offices"]}
+    assert {"MCM", "AMP"} <= names

@@ -1,6 +1,9 @@
 """The More-tab view switch (owner, 2026-09-19): a level_4 admin narrows to
 their own team, an admin below level_4 reads as the agent they are. A
-preference on the users doc; never a change to the is_admin grant."""
+preference on the users doc; never a change to the is_admin grant.
+
+Owner, 2026-09-22: the switch narrows the Team tab only. The dashboard is
+universal — the same agency-wide numbers for everyone, in either view."""
 import server
 from conftest import make_session, auth
 
@@ -54,7 +57,7 @@ async def test_bad_value_is_refused(client, seeded_db):
     assert r.status_code == 400
 
 
-async def test_level4_admin_own_view_narrows_reads_to_their_downline(client, seeded_db):
+async def test_level4_admin_own_view_narrows_the_team_tab_not_the_dashboard(client, seeded_db):
     # A rival office with its own RGA, outside RGA_1's tree.
     await add_rga(seeded_db, "RGA_2", "Rival")
     await entry(seeded_db, agent_id="AG_1", gross_alp=1000)   # RGA_1's tree
@@ -66,22 +69,32 @@ async def test_level4_admin_own_view_narrows_reads_to_their_downline(client, see
 
     r = await client.post("/api/me/view-mode", json={"view_mode": "own"}, headers=auth(mj))
     assert r.status_code == 200
+    # The dashboard does not move: Push Month, Agency ALP/Sits/Sales, the
+    # wall and the office tiles are the same board for everyone.
     own = (await client.get("/api/dashboard/summary", headers=auth(mj))).json()
-    assert own["is_full_agency"] is False and own["total_alp"] == 1000.0
+    assert own["is_full_agency"] is True and own["total_alp"] == 6000.0
 
+    wall = (await client.get("/api/dashboard/platinum-wall", headers=auth(mj))).json()
+    wall_ids = {w["agent_id"] for w in wall["vets"] + wall["rookies"] + wall.get("unranked", [])}
+    assert "RGA_2" in wall_ids and "AG_1" in wall_ids
+    assert wall["scope"] == "agency"
+
+    offices = (await client.get("/api/dashboard/offices", headers=auth(mj))).json()["offices"]
+    by_office = {o["office"]: o["alp"] for o in offices}
+    assert by_office["Rival"] == 5000.0
+
+    # The Team tab is what narrows.
     team = (await client.get("/api/team", headers=auth(mj))).json()["team"]
     ids = {row["agent_id"] for row in team}
     assert "AG_1" in ids and "AG_2" in ids  # the whole downline, across offices
     assert "RGA_2" not in ids
 
-    wall = (await client.get("/api/dashboard/platinum-wall", headers=auth(mj))).json()
-    wall_ids = {w["agent_id"] for w in wall["vets"] + wall["rookies"] + wall.get("unranked", [])}
-    assert "RGA_2" not in wall_ids and "AG_1" in wall_ids
-
-    # Flipping back restores the agency without a re-login.
+    # Flipping back changes nothing on the dashboard and widens the Team tab.
     await client.post("/api/me/view-mode", json={"view_mode": "full"}, headers=auth(mj))
     back = (await client.get("/api/dashboard/summary", headers=auth(mj))).json()
     assert back["is_full_agency"] is True and back["total_alp"] == 6000.0
+    team = (await client.get("/api/team", headers=auth(mj))).json()["team"]
+    assert "RGA_2" in {row["agent_id"] for row in team}
 
 
 async def test_level1_admin_own_view_reads_the_board_as_a_plain_agent(client, seeded_db):
