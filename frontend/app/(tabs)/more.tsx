@@ -107,7 +107,7 @@ export default function MoreScreen() {
                 </Text>
                 <Text style={styles.viewNote}>
                   {viewSwitchIsTeam
-                    ? 'On: every office. Off: only the team under you — dashboard, Platinum Wall, offices and Team tab all follow it.'
+                    ? 'On: every office. Off: only the team under you. This changes the Team tab only; the dashboard always shows the whole agency.'
                     : 'On: the admin tools and agency-wide actions. Off: your own numbers and your team, as any agent sees them.'}
                 </Text>
               </View>
