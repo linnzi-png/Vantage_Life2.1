@@ -51,7 +51,8 @@ export default function Ticker({ items }: { items: TickerItem[] }) {
               <Text style={styles.agent} numberOfLines={1}>{it.agent_name}</Text>
               <Text style={styles.alp}>${Math.round(it.alp).toLocaleString()}</Text>
               <Text style={styles.market}>{it.market}</Text>
-              <Text style={styles.reps}>· {it.reps} REPS</Text>
+              {/* `reps` carries refs_obtained (Referrals) — the label is REFS. */}
+              <Text style={styles.reps}>· {it.reps} REFS</Text>
             </View>
           ))}
         </Animated.View>
