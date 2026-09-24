@@ -70,6 +70,13 @@ the dashboard that word is always "Agency". The old PRODUCTION HISTORY block
 (the viewer's own 13-week chart at the foot of the dashboard) is gone; that
 chart lives on the contact card the Team tab opens.
 
+**Top 3 Veterans exclusion (per owner, 2026-09-23):** an `agent_profiles`
+record with `exclude_from_platinum_vets: true` is skipped when
+`/dashboard/platinum-wall` fills the TOP 3 VETS slots, and the next veteran
+moves up. It is a record flag, never a name or id check, and it reaches
+nothing else — the person's team, their own numbers and card, the Team tab,
+the Hierarchy Map, the ticker and the office roll-ups all still count them.
+
 The Team tab still reads as a leaderboard — agents ranked inside their tenure
 group (ROOKIES, VETERANS, and TENURE NOT SET for the people nobody has
 recorded one for), leaders ranked among leaders with their own production and

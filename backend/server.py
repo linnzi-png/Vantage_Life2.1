@@ -1455,6 +1455,13 @@ async def dashboard_platinum_wall(
         elif tenure:
             bucket = rookies
         else:
+            # Per owner, 2026-09-23: a veteran flagged
+            # exclude_from_platinum_vets is skipped for the Top 3 Veterans
+            # slots only, so the next veteran moves up. A flag on the record,
+            # never a name check. It touches nothing else — their team, their
+            # own numbers, the Team tab and the Hierarchy Map all still count them.
+            if agent.get("exclude_from_platinum_vets"):
+                continue
             bucket = vets
         if len(bucket) < 3:
             bucket.append(item)

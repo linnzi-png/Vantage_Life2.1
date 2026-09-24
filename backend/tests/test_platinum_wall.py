@@ -162,3 +162,39 @@ async def test_level_1_sees_the_other_offices_too(client, seeded_db):
     offices = (await client.get("/api/dashboard/offices", headers=auth(token))).json()
     names = {o["office"] for o in offices["offices"]}
     assert {"MCM", "AMP"} <= names
+
+
+# ---------------- Top 3 Veterans exclusion ----------------
+# Owner, 2026-09-23: a record flag, exclude_from_platinum_vets, keeps a veteran
+# out of the Top 3 Veterans slots only. The next veteran moves up; nothing else
+# about the person changes.
+
+async def _five_vets(db, day):
+    for i in range(5):
+        aid = f"VET_{i}"
+        await db.agent_profiles.insert_one(
+            {"agent_id": aid, "name": f"Vet {i}", "office": "MCM",
+             "role": "level_1", "upline_id": "GA_1", "is_rookie": False})
+        await entry(db, day=day, agent_id=aid, gross_alp=100 * (i + 1))
+
+
+async def test_excluded_vet_is_skipped_and_the_next_moves_up(client, seeded_db):
+    token = await rga(seeded_db)
+    day = server.current_sales_day_str()
+    await _five_vets(seeded_db, day)
+    await seeded_db.agent_profiles.update_one(
+        {"agent_id": "VET_4"}, {"$set": {"exclude_from_platinum_vets": True}})
+
+    vets = (await client.get("/api/dashboard/platinum-wall", headers=auth(token))).json()["vets"]
+    assert [v["agent_id"] for v in vets] == ["VET_3", "VET_2", "VET_1"]
+
+
+async def test_exclusion_flag_false_changes_nothing(client, seeded_db):
+    token = await rga(seeded_db)
+    day = server.current_sales_day_str()
+    await _five_vets(seeded_db, day)
+    await seeded_db.agent_profiles.update_one(
+        {"agent_id": "VET_4"}, {"$set": {"exclude_from_platinum_vets": False}})
+
+    vets = (await client.get("/api/dashboard/platinum-wall", headers=auth(token))).json()["vets"]
+    assert [v["agent_id"] for v in vets] == ["VET_4", "VET_3", "VET_2"]
