@@ -673,6 +673,15 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
     agent = await db.agent_profiles.find_one({"email": email, **ACTIVE_AGENT}, {"_id": 0})
     role = agent["role"] if agent else "pending"
     agent_id = agent["agent_id"] if agent else None
+    # The name the app shows is the roster's, not the identity provider's
+    # (owner, 2026-09-25): a Google account titled "Ashton Veteran Rep" is
+    # still Afnan Al-fatlawy on the More tab, in the audit log and on push
+    # summaries once it is linked to her profile. The provider's own label is
+    # kept alongside, so nothing is lost; an unrostered (pending) login keeps
+    # showing what the provider sent.
+    provider_name = (name or "").strip()
+    roster_name = str((agent or {}).get("name") or "").strip()
+    name = roster_name or provider_name
 
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user:
@@ -682,6 +691,7 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
             "user_id": user_id,
             "email": email,
             "name": name,
+            "provider_name": provider_name,
             "picture": picture or "",
             "role": role,
             "agent_id": agent_id,
@@ -696,6 +706,7 @@ async def upsert_user_and_session(email: str, name: str, picture: Optional[str],
         # role/agent_id always re-synced from the agent roster, the source of truth
         updates = {
             "name": name,
+            "provider_name": provider_name,
             "picture": picture or user.get("picture", ""),
             "role": role,
             "agent_id": agent_id,
