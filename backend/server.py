@@ -1147,8 +1147,19 @@ async def team_uplines(agent_id: str) -> List[Dict[str, Any]]:
 
 
 async def visible_agent_ids(user: Dict[str, Any]) -> Optional[List[str]]:
-    """Return list of agent_ids visible to this user, or None for full access (level_4)."""
+    """Return list of agent_ids visible to this user, or None for full access
+    (level_4, finance_admin, and the admin grant in the admin view).
+
+    The admin grant reads the company here exactly as it does in
+    team_scope_agent_ids: an admin below level_4 (Afnan) gets the whole
+    company in the admin view and her own reach in the agent view
+    (user_admin_active). Before 2026-09-25 this helper only knew level_4, so
+    the Team tab counted 135 missing for her while /api/team/missing — which
+    reads through here — scoped her to her own downline and answered
+    "everyone submitted"."""
     role = user.get("role", "level_1")
+    if user_admin_active(user) and not user_reads_own_only(user):
+        return None  # the admin grant reads the company (MJ, Afnan in the admin view)
     if role == "level_4" and user_reads_own_only(user):
         # The narrow view (see VIEW_MODE_OWN): a level_4 admin reading only
         # the team under them, which is their office.
@@ -1200,10 +1211,18 @@ async def can_enter_for(user: Dict[str, Any], target_agent_id: str) -> bool:
     Any upline (level_2+ — SA/GA, MGA, RGA) may submit on someone else's
     behalf, and only for their own downline — never for a sibling branch or
     a peer at the same level. Everyone may always enter for themselves.
-    (Per owner 2026-07-28: entry starts at level_2, same tier as viewing.)"""
+    (Per owner 2026-07-28: entry starts at level_2, same tier as viewing.)
+
+    The admin grant (is_admin — MJ, and Afnan as in-house admin) enters for
+    anyone, agency-wide (owner, 2026-09-25: MJ's 2.2 request gives her the
+    follow-up on people who have not submitted, and Missing Numbers exists
+    to enter on their behalf). This reads user_is_admin, not the view
+    switch: the switch is what she is looking at, never a permission."""
     own_agent_id = user.get("agent_id")
     if target_agent_id == own_agent_id:
         return True
+    if user_is_admin(user) and own_agent_id:
+        return True  # agency-wide, like level_4
     role = user.get("role", "level_1")
     if not is_leader_role(role):
         return False
@@ -2616,7 +2635,8 @@ async def team_missing(
     this panel exists to enter numbers on people's behalf, and that write path
     is downline-only (can_enter_for), so a leader sees exactly the people they
     can act on. level_4 sees every team, so MJ reads the whole company here
-    as everywhere else. Same candidate rule as the 9 PM escalation
+    as everywhere else; so does an admin below level_4 (Afnan) in the admin
+    view, since the admin grant enters agency-wide (can_enter_for). Same candidate rule as the 9 PM escalation
     (run_pulse_escalation_check): active level_1 and level_2 producers, minus
     non-producing staff, who have no entry for that sales day.
     """
@@ -2624,7 +2644,7 @@ async def team_missing(
     today = date.fromisoformat(current_sales_day_str())
     day_keys = [(today - timedelta(days=i)).isoformat() for i in range(days)]
 
-    scope_ids = await visible_agent_ids(user)  # None = level_4, whole company
+    scope_ids = await visible_agent_ids(user)  # None = level_4 / admin view, whole company
     roster: Dict[str, Dict[str, Any]] = {
         a["agent_id"]: a async for a in db.agent_profiles.find(
             {}, {"_id": 0, "agent_id": 1, "name": 1, "role": 1, "io_role": 1,
