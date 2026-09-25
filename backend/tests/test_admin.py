@@ -101,6 +101,26 @@ async def test_login_stamps_first_login_and_refreshes_last_seen(client, seeded_d
     assert as_utc(u2["last_seen_at"]) == later
 
 
+async def test_login_takes_its_display_name_from_the_roster(client, seeded_db):
+    """Afnan (2026-09-25): her Google account is titled "Ashton Veteran Rep",
+    and that label was what the More tab, the audit log and push summaries
+    showed. A rostered login is named after its profile; the provider's
+    label is kept in provider_name; an unrostered login keeps the label."""
+    await server.upsert_user_and_session("sa1@test.dev", "Ashton Veteran Rep", None, "st_n1")
+    u = await seeded_db.users.find_one({"email": "sa1@test.dev"})
+    assert u["name"] == "Sa One" and u["provider_name"] == "Ashton Veteran Rep"
+    # Re-login keeps following the roster, even if the provider label changes.
+    await server.upsert_user_and_session("sa1@test.dev", "Something Else", None, "st_n2")
+    u = await seeded_db.users.find_one({"email": "sa1@test.dev"})
+    assert u["name"] == "Sa One" and u["provider_name"] == "Something Else"
+    r = await client.get("/api/auth/me", headers={"Authorization": "Bearer st_n2"})
+    assert r.json()["user"]["name"] == "Sa One"
+
+    await server.upsert_user_and_session("nobody@test.dev", "Not Rostered", None, "st_n3")
+    u = await seeded_db.users.find_one({"email": "nobody@test.dev"})
+    assert u["name"] == "Not Rostered" and u["role"] == "pending"
+
+
 async def test_activity_refreshes_last_seen_when_stale(client, seeded_db, monkeypatch):
     # An authenticated request refreshes a stale last_seen_at (sessions last 7
     # days, so login time alone would lag real activity by up to a week).
