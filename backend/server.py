@@ -2470,6 +2470,9 @@ async def team_view(
             # owner, 2026-09-16), so the gap is visible and gets fixed.
             "is_rookie": a.get("is_rookie"),
             "upline_id": a.get("upline_id"),
+            # States they are licensed to sell in (owner, 2026-09-24); display
+            # only on this tab, no filtering by state yet.
+            "licensed_states": list(a.get("licensed_states") or []),
             # A removed member's already-logged production stays on the board
             # for its window ("history is history") — flagged so the UI can
             # badge the row and withhold team actions.
@@ -2495,6 +2498,7 @@ async def team_view(
                 "agent_id": aid, "name": a["name"], "office": a["office"], "role": a["role"],
                 "io_role": a.get("io_role") or "", "phone": a.get("phone") or "", "email": a.get("email") or "",
                 "is_rookie": a.get("is_rookie"), "upline_id": a.get("upline_id"), "archived": False,
+                "licensed_states": list(a.get("licensed_states") or []),
                 "gross_alp": 0, "net_alp": 0, "sits": 0, "sales": 0,
                 "close_ratio": 0, "avg_deal": 0, "alerts": no_entry_alerts,
             })
@@ -3258,10 +3262,11 @@ async def agent_history(
     # does instead of a misleading "not in your team".
     profile = await db.agent_profiles.find_one(
         {"agent_id": agent_id},
-        {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1},
+        {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1, "licensed_states": 1},
     )
     if not profile:
         raise HTTPException(status_code=404, detail="Agent not found")
+    profile["licensed_states"] = list(profile.get("licensed_states") or [])
     ids = await team_scope_agent_ids(user)
     if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
         raise HTTPException(status_code=403, detail="Not in your team")
@@ -4969,6 +4974,102 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
         "downline_moved": moved["downline_moved"],
         "downline_left": moved["downline_left"],
     }
+
+
+# States an agent may be licensed to sell in (owner, 2026-09-24). This is the
+# ONE place the list lives: the agency writes in 47 or 48 states and Linnzi
+# is supplying that exact list, so swapping it is a one-line change here and
+# nowhere else. Seeded with the 50 states plus DC until then. No territories.
+# `licensed_states` is a separate field from the single resident `state`
+# (WAR-parity export, /admin/set-state), which is untouched by any of this.
+LICENSED_STATE_CODES = {
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID",
+    "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO",
+    "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA",
+    "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+}
+
+
+def normalize_licensed_states(codes: List[str]) -> List[str]:
+    """Uppercase, trim, deduplicate and sort a list of two-letter codes; 400 on
+    anything not in LICENSED_STATE_CODES. An empty list is valid (no licenses
+    recorded), never an error."""
+    cleaned: List[str] = []
+    bad: List[str] = []
+    for raw in codes:
+        code = str(raw or "").strip().upper()
+        if not code:
+            continue
+        if code not in LICENSED_STATE_CODES:
+            bad.append(code)
+        elif code not in cleaned:
+            cleaned.append(code)
+    if bad:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown state code(s): {', '.join(sorted(set(bad)))}. Use two-letter codes such as MI or OH.")
+    return sorted(cleaned)
+
+
+class LicensedStatesIn(BaseModel):
+    licensed_states: List[str]
+
+
+class TeamLicensedStatesIn(BaseModel):
+    agent_id: str
+    licensed_states: List[str]
+
+
+async def _write_licensed_states(target: Dict[str, Any], codes: List[str], user: Dict[str, Any], action: str) -> Dict[str, Any]:
+    """Shared by the self and team routes: one write, one audit_log entry in
+    the same shape /admin/set-tenure and /admin/set-state use."""
+    await db.agent_profiles.update_one(
+        {"agent_id": target["agent_id"]},
+        {"$set": {"licensed_states": codes, "updated_at": now_utc()}},
+    )
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now_utc(),
+        "action": action,
+        "agent_id": target["agent_id"],
+        "agent_name": target.get("name"),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "original_value": list(target.get("licensed_states") or []),
+        "new_value": codes,
+    })
+    return {"ok": True, "agent_id": target["agent_id"], "licensed_states": codes}
+
+
+@api_router.post("/me/licensed-states")
+async def me_set_licensed_states(payload: LicensedStatesIn, user: Dict[str, Any] = Depends(require_agent)):
+    """An agent records the states they are licensed to sell in (owner,
+    2026-09-24, from MJ's "dropdown" / "exact states"). Self only: the
+    downline-scoped manager path is /team/set-licensed-states."""
+    codes = normalize_licensed_states(payload.licensed_states)
+    target = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return await _write_licensed_states(target, codes, user, "set_licensed_states_self")
+
+
+@api_router.post("/team/set-licensed-states")
+async def team_set_licensed_states(payload: TeamLicensedStatesIn, user: Dict[str, Any] = Depends(require_leader)):
+    """A leader records licensed states for someone in their hierarchy (owner,
+    2026-09-24). Scope follows the other Team tab writes (set-tier, reassign,
+    can_enter_for): an SA, GA or MGA reaches their own downline only; level_4
+    is agency-wide, matching visible_agent_ids. Setting your own goes through
+    /me/licensed-states so the audit trail says which path was used."""
+    codes = normalize_licensed_states(payload.licensed_states)
+    target = await db.agent_profiles.find_one({"agent_id": payload.agent_id, **ACTIVE_AGENT}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if target["agent_id"] == user.get("agent_id"):
+        raise HTTPException(status_code=400, detail="Set your own licensed states from your profile")
+    if role_level(user.get("role")) < 4:
+        if target["agent_id"] not in await downline_agent_ids(user["agent_id"]):
+            raise HTTPException(status_code=403, detail="You can only set licensed states for someone in your own downline")
+    return await _write_licensed_states(target, codes, user, "set_licensed_states")
 
 
 # Field titles the roster uses. Mirrors IO_ROLES in frontend/app/admin.tsx and
