@@ -73,3 +73,50 @@ async def test_days_is_clamped_and_level1_is_refused(client, seeded_db):
     ag = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     r = await client.get("/api/team/missing", headers=auth(ag))
     assert r.status_code == 403
+
+
+async def admin_session(db, *, role, agent_id, email):
+    token = await make_session(db, role=role, agent_id=agent_id, email=email)
+    await db.users.update_one({"email": email}, {"$set": {"is_admin": True}})
+    return token
+
+
+async def test_in_house_admin_below_level4_reads_every_team_in_the_admin_view(client, seeded_db):
+    """Afnan (2026-09-25): an SA with the in-house admin grant saw MISSING
+    TONIGHT · 135 on the Team tab and "everyone submitted" on Missing
+    Numbers, because this route read her own downline while the Team tab
+    read the company. The admin view reads the company here too."""
+    afnan = await admin_session(seeded_db, role="level_sa", agent_id="SA_1", email="sa1@test.dev")
+    body = (await client.get("/api/team/missing?days=1", headers=auth(afnan))).json()
+    assert body["scope"] == "company"
+    tonight = by_leader(body["days"][0])
+    assert "GA_2" in tonight  # a branch nowhere near her own
+    assert [p["agent_id"] for p in tonight["GA_2"]["missing"]] == ["AG_2", "GA_2"]
+    assert "SA_1" not in [p["agent_id"] for t in tonight.values() for p in t["missing"]]  # never herself
+
+    # Agent view: her own downline, as before the grant.
+    await client.post("/api/me/view-mode", json={"view_mode": "own"}, headers=auth(afnan))
+    body = (await client.get("/api/team/missing?days=1", headers=auth(afnan))).json()
+    assert body["scope"] == "downline"
+    tonight = by_leader(body["days"][0])
+    assert set(tonight) == {"SA_1"}
+    assert [p["agent_id"] for p in tonight["SA_1"]["missing"]] == ["AG_1"]
+
+
+async def test_in_house_admin_enters_numbers_outside_her_own_downline(client, seeded_db):
+    """Missing Numbers exists to enter on people's behalf, so the admin grant
+    enters agency-wide, in either view — the switch is not a permission."""
+    afnan = await admin_session(seeded_db, role="level_sa", agent_id="SA_1", email="sa1@test.dev")
+    today = server.current_sales_day_str()
+    payload = {"target_agent_id": "AG_2", "sales_day": today, "sets": 2, "sits": 1, "sales": 1,
+               "ots_sits": 0, "ots_sales": 0, "n1": 0, "refs_obtained": 0, "ref_sits": 0,
+               "ref_sales": 0, "pos_sits": 0, "pos_sales": 0, "vet_sits": 0, "vet_sales": 0,
+               "gross_alp": 500.0}
+    r = await client.post("/api/pulse", json=payload, headers=auth(afnan))
+    assert r.status_code == 200, r.text
+    assert await seeded_db.production_entries.find_one({"agent_id": "AG_2", "sales_day": today})
+
+    # A leader with no grant is still refused outside their downline.
+    ga2 = await make_session(seeded_db, role="level_2", agent_id="GA_2", email="ga2@test.dev")
+    r = await client.post("/api/pulse", json={**payload, "target_agent_id": "AG_1"}, headers=auth(ga2))
+    assert r.status_code == 403

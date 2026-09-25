@@ -103,9 +103,14 @@ not submitted, grouped by team — every producer filed under the nearest
 SA or GA in their chain (an SA or GA heads their own section; someone straight
 under an MGA/RGA files under that upline). It is a grouping of the hierarchy,
 never a permission, and no access decision reads a title. Scope is the
-caller's own **downline** (SA and above; level_4 sees every team), because
-the panel exists to enter numbers on people's behalf and that write is
-downline-only. Same candidate rule as the 9 PM escalation: active Agent, SA
+caller's own **downline** (SA and above; level_4 sees every team, and so
+does the admin grant in the admin view — `visible_agent_ids` honours
+`user_admin_active` the same way `team_scope_agent_ids` does, per owner
+2026-09-25 after Afnan saw 135 missing on the Team tab and none here),
+because the panel exists to enter numbers on people's behalf and that write
+is downline-only — except for `is_admin`, which `can_enter_for` lets enter
+for anyone, agency-wide, in either view (the switch is what she is looking
+at, never a permission). Same candidate rule as the 9 PM escalation: active Agent, SA
 and GA producers (`NIGHTLY_PULSE_ROLES`), minus non-producing staff. The screen is
 `frontend/app/missing.tsx`, opened from the Team tab's MISSING TONIGHT card;
 tapping a person opens `QuickEntryForm` aimed at that night
