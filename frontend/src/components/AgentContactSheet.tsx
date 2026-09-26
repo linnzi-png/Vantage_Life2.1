@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, roleTitle } from '../lib/auth';
 import { notify } from '../lib/dialog';
+import { formatLicensedStates } from '../lib/licensedStates';
 import { AgentHistory } from './AgentHistory';
 
 export interface AgentContact {
@@ -21,6 +22,10 @@ export interface AgentContact {
   phone?: string;
   email?: string;
   office?: string;
+  // States they are licensed to sell in (owner, 2026-09-24). Present on rows
+  // from /api/team and /api/agents/{id}/history; shown on the card, edited
+  // through onEditLicensedStates when the caller may set it.
+  licensed_states?: string[];
 }
 
 interface Props {
@@ -38,6 +43,9 @@ interface Props {
   // Tier change (promotion or demotion) for someone strictly below the viewer
   // in their own downline — gated by the caller, re-checked by /api/team/set-tier.
   onChangeTier?: () => void;
+  // Licensed-states picker for someone in the viewer's downline — gated by the
+  // caller, re-checked by /api/team/set-licensed-states. Omitted = read-only line.
+  onEditLicensedStates?: () => void;
 }
 
 export function formatPhone(raw: string | undefined | null): string {
@@ -54,7 +62,7 @@ function openLink(url: string, errorMessage: string) {
   });
 }
 
-export function AgentContactSheet({ agent, onClose, onEnterNumbers, onMove, onRemove, onChangeTier }: Props) {
+export function AgentContactSheet({ agent, onClose, onEnterNumbers, onMove, onRemove, onChangeTier, onEditLicensedStates }: Props) {
   if (!agent) return null;
 
   const label = roleTitle(agent.io_role, agent.role);
@@ -152,6 +160,27 @@ export function AgentContactSheet({ agent, onClose, onEnterNumbers, onMove, onRe
             </View>
           </View>
         )}
+
+        {agent.licensed_states !== undefined || onEditLicensedStates ? (
+          <TouchableOpacity
+            style={[styles.contactRow, !onEditLicensedStates && styles.contactRowStatic]}
+            onPress={onEditLicensedStates}
+            disabled={!onEditLicensedStates}
+            activeOpacity={0.7}
+            testID="licensed-states-row"
+          >
+            <View style={styles.iconWrap}>
+              <Ionicons name="map" size={18} color={COLORS.secondary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.contactLabel}>LICENSED IN</Text>
+              <Text style={agent.licensed_states?.length ? styles.contactValue : styles.contactMissing}>
+                {formatLicensedStates(agent.licensed_states)}
+              </Text>
+            </View>
+            {onEditLicensedStates ? <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} /> : null}
+          </TouchableOpacity>
+        ) : null}
 
         {onEnterNumbers ? (
           <TouchableOpacity
@@ -333,6 +362,10 @@ const styles = StyleSheet.create({
   },
   contactRowMissing: {
     opacity: 0.55,
+  },
+  // A read-only line for a viewer who cannot edit it: no chevron, no dimming.
+  contactRowStatic: {
+    opacity: 0.9,
   },
   enterNumbersRow: {
     borderLeftWidth: 3,

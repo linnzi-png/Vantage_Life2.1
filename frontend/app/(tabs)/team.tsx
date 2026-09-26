@@ -10,6 +10,7 @@ import { ChangeTierSheet } from '../../src/components/ChangeTierSheet';
 import { QuickEntryForm, QuickEntryTarget } from '../../src/components/QuickEntryForm';
 import { AddTeamMemberSheet } from '../../src/components/AddTeamMemberSheet';
 import { MoveMemberSheet } from '../../src/components/MoveMemberSheet';
+import { LicensedStatesSheet } from '../../src/components/LicensedStatesSheet';
 import { PeriodSelector, usePersistedPeriod } from '../../src/components/PeriodSelector';
 import { SearchBar } from '../../src/components/SearchBar';
 import { TourAnchor } from '../../src/components/TourAnchor';
@@ -21,6 +22,7 @@ interface TeamRow {
   phone: string; email: string; is_rookie: boolean | null;
   upline_id?: string | null;
   archived: boolean; // removed from the team; production shown for history only
+  licensed_states?: string[]; // states they are licensed to sell in (owner, 2026-09-24)
   gross_alp: number; net_alp: number; sits: number; sales: number; close_ratio: number; avg_deal: number; alerts: string[];
   // Server-computed: is this person in MY downline, as opposed to elsewhere in
   // my office? The office is visible to everyone in it, but every write path
@@ -60,6 +62,7 @@ export default function TeamScreen() {
   // entering numbers rather than when competing.
   const [scope, setScope] = useState<'team' | 'mine'>('team');
   const [tierTarget, setTierTarget] = useState<TeamRow | null>(null);
+  const [statesTarget, setStatesTarget] = useState<TeamRow | null>(null);
   // The chain above the caller, nearest first, as contacts only — no
   // production (owner, 2026-09-19). Comes back with the board itself.
   const [uplines, setUplines] = useState<AgentContact[]>([]);
@@ -164,6 +167,14 @@ export default function TeamScreen() {
   const canChangeTierRow = (r: TeamRow) =>
     !r.archived && r.agent_id !== user?.agent_id && r.role !== 'level_4' &&
     (agencyWide || canRemoveRow(r));
+  // Licensed states (owner, 2026-09-24): a leader records them for anyone in
+  // their own downline; level_4 reaches the agency, and so do the admin grant
+  // and finance_admin (agencyWide, same as tier changes) whatever tier their
+  // own login carries. Your own list is set from the More tab, which is the
+  // one place /api/team/set-licensed-states refuses.
+  const canSetStatesRow = (r: TeamRow) =>
+    !r.archived && r.agent_id !== user?.agent_id &&
+    (agencyWide || (canEnter && (myLevel >= 4 || mine(r))));
 
   const removeMember = async (row: TeamRow) => {
     setSelected(null);
@@ -541,6 +552,21 @@ export default function TeamScreen() {
         onChangeTier={selected && canChangeTierRow(selected)
           ? () => { const t = selected; setSelected(null); setTierTarget(t); }
           : undefined}
+        onEditLicensedStates={selected && canSetStatesRow(selected)
+          ? () => { const t = selected; setSelected(null); setStatesTarget(t); }
+          : undefined}
+      />
+      <LicensedStatesSheet
+        target={statesTarget}
+        onClose={() => setStatesTarget(null)}
+        onSave={async (codes) => {
+          if (!statesTarget) return;
+          await api('/api/team/set-licensed-states', {
+            method: 'POST',
+            body: JSON.stringify({ agent_id: statesTarget.agent_id, licensed_states: codes }),
+          });
+          await fetchAll();
+        }}
       />
       <ChangeTierSheet
         target={tierTarget}

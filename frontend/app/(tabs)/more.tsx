@@ -4,7 +4,9 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useAuth, COLORS, levelNum, adminActive, Role } from '../../src/lib/auth';
+import { useAuth, COLORS, levelNum, adminActive, Role, api } from '../../src/lib/auth';
+import { LicensedStatesSheet } from '../../src/components/LicensedStatesSheet';
+import { formatLicensedStates } from '../../src/lib/licensedStates';
 import { useTour } from '../../src/lib/tour';
 import { TourAnchor } from '../../src/components/TourAnchor';
 import { confirmAsync, notify } from '../../src/lib/dialog';
@@ -19,7 +21,10 @@ const SWITCH_TIERS: { role: Role; label: string }[] = [
 
 export default function MoreScreen() {
   const router = useRouter();
-  const { user, agent, roleLabel, signOut, deleteAccount, switchRole, setViewMode, accountBusy } = useAuth();
+  const { user, agent, roleLabel, signOut, deleteAccount, switchRole, setViewMode, accountBusy, reload } = useAuth();
+  // Licensed states (owner, 2026-09-24): the one place a person sets their
+  // own list. Leaders set a downline member's from the Team tab card.
+  const [statesOpen, setStatesOpen] = React.useState(false);
   const { start: startTour } = useTour();
   const lvl = levelNum(user?.role);
   const [switching, setSwitching] = React.useState(false);
@@ -92,8 +97,25 @@ export default function MoreScreen() {
               {agent ? <Text style={styles.dot}> · </Text> : null}
               {agent ? <Text style={styles.office}>{agent.office}</Text> : null}
             </View>
+            {agent && !agent.non_producing ? (
+              <TouchableOpacity style={styles.statesRow} onPress={() => setStatesOpen(true)} testID="profile-licensed-states">
+                <Text style={styles.statesLabel}>LICENSED IN </Text>
+                <Text style={agent.licensed_states?.length ? styles.statesValue : styles.statesEmpty} numberOfLines={2}>
+                  {formatLicensedStates(agent.licensed_states, 'Tap to add your states')}
+                </Text>
+                <Ionicons name="create-outline" size={14} color={COLORS.textDim} style={{ marginLeft: 6 }} />
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
+        <LicensedStatesSheet
+          target={statesOpen && agent ? { name: agent.name, licensed_states: agent.licensed_states } : null}
+          onClose={() => setStatesOpen(false)}
+          onSave={async (codes) => {
+            await api('/api/me/licensed-states', { method: 'POST', body: JSON.stringify({ licensed_states: codes }) });
+            await reload();
+          }}
+        />
 
         {user?.can_toggle_view ? (
           <>
@@ -253,6 +275,10 @@ const styles = StyleSheet.create({
   name: { color: '#fff', fontWeight: '900', fontSize: 16 },
   email: { color: COLORS.textDim, fontSize: 12, marginTop: 2 },
   roleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  statesRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, flexWrap: 'wrap' },
+  statesLabel: { color: COLORS.textDim, fontSize: 9, fontWeight: '900', letterSpacing: 1.5 },
+  statesValue: { color: '#fff', fontSize: 11, fontWeight: '700', flexShrink: 1 },
+  statesEmpty: { color: COLORS.textMuted, fontSize: 11, fontStyle: 'italic', flexShrink: 1 },
   role: { color: COLORS.primary, fontWeight: '900', fontSize: 11, letterSpacing: 1.4 },
   office: { color: COLORS.textDim, fontSize: 11 },
   dot: { color: COLORS.textDim },

@@ -96,6 +96,9 @@ export interface AppAgent {
   // support). They keep their RBAC tier and every read path, but the app must
   // not ask them for Nightly Numbers or file them into the production tiers.
   non_producing?: boolean;
+  // States they are licensed to sell in (owner, 2026-09-24); set from the
+  // More tab (self) or a leader's Team tab card. Absent = never recorded.
+  licensed_states?: string[];
 }
 
 /**
