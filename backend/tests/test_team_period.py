@@ -45,12 +45,16 @@ def row_for(payload, agent_id="AG_1"):
     return next(r for r in payload["team"] if r["agent_id"] == agent_id)
 
 
-async def test_default_period_is_weekly(client, seeded_db, detroit_now):
+async def test_default_window_is_month_to_date(client, seeded_db, detroit_now):
+    """Owner, 2026-09-24: with no window asked for, the Team tab reads month
+    to date. An explicit period still works (test_weekly_window_is_by_sales_day)."""
     detroit_now(2026, 7, 2, 10, 0)  # Thursday
     token = await rga_token(seeded_db)
     r = await client.get("/api/team", headers=auth(token))
     assert r.status_code == 200, r.text
-    assert r.json()["period"] == "weekly"
+    body = r.json()
+    assert body["period"] is None
+    assert (body["start_day"], body["end_day"]) == ("2026-07-01", "2026-07-02")
 
 
 async def test_invalid_period_rejected(client, seeded_db, detroit_now):

@@ -2272,6 +2272,71 @@ async def run_leader_auto_nif(now_local: Optional[datetime] = None) -> Dict[str,
     return {"ok": True, "due": True, "sales_day": sd, "filed": len(filed), "agent_ids": filed}
 
 
+TENURE_NUDGE_STAGE = "tenure_nudge_upline"
+TENURE_NUDGE_TITLE = "VantageLife"
+
+
+def _format_tenure_nudge(names: List[str]) -> str:
+    """Owner-approved copy (2026-09-24): one consolidated push per upline."""
+    return f"Tenure not set: {', '.join(names)}. Open their card on the Team tab to mark Rookie or Veteran."
+
+
+async def run_tenure_nudge(now_local: Optional[datetime] = None) -> Dict[str, Any]:
+    """Once a day, with the 06:30 morning job, remind each upline of the
+    people under them whose tenure nobody has recorded (owner, 2026-09-24).
+
+    Candidates: active, producing level_1 profiles with no is_rookie (the
+    same people the TENURE NOT SET group holds; leaders are never in it, and
+    archived or non-producing profiles are skipped). Each one files under
+    the nearest SA or GA in their chain, otherwise the MGA or RGA they
+    report to directly — the Missing Numbers grouping (nearest_team_leader)
+    — so nobody with no tenure is silently dropped. ONE push per upline
+    naming everyone, never one per person, repeated every morning until the
+    tenure is set. notification_log's unique index on (agent_id, sales_day,
+    stage) is what makes a day's send idempotent across scheduler ticks."""
+    now_local = now_local or now_detroit()
+    if not _leader_auto_nif_due(now_local):
+        return {"ok": True, "due": False, "notified": 0}
+    sd = sales_day_for(now_local)
+    roster: Dict[str, Dict[str, Any]] = {
+        a["agent_id"]: a async for a in db.agent_profiles.find(
+            {}, {"_id": 0, "agent_id": 1, "name": 1, "role": 1, "upline_id": 1,
+                 "archived": 1, "non_producing": 1, "is_rookie": 1})
+    }
+    by_upline: Dict[str, List[str]] = {}
+    for a in roster.values():
+        if a.get("role") != "level_1" or a.get("archived") or a.get("non_producing"):
+            continue
+        if a.get("is_rookie") is not None:
+            continue
+        upline_id = nearest_team_leader(roster, a["agent_id"])
+        if not upline_id or upline_id == a["agent_id"]:
+            continue
+        if roster.get(upline_id, {}).get("archived"):
+            continue
+        by_upline.setdefault(upline_id, []).append(a.get("name") or a["agent_id"])
+    notified = 0
+    skipped_no_token = 0
+    for upline_id, names in by_upline.items():
+        if not await _log_and_check(upline_id, sd, TENURE_NUDGE_STAGE):
+            continue
+        tokens = [t["push_token"] async for t in db.push_tokens.find({"agent_id": upline_id}, {"_id": 0, "push_token": 1})]
+        if not tokens:
+            skipped_no_token += 1
+            continue
+        await send_expo_push(tokens, TENURE_NUDGE_TITLE, _format_tenure_nudge(sorted(names)))
+        notified += 1
+    return {"ok": True, "due": True, "sales_day": sd, "uplines": len(by_upline),
+            "notified": notified, "skipped_no_token": skipped_no_token}
+
+
+@api_router.post("/admin/run-tenure-nudge")
+async def admin_run_tenure_nudge(user: Dict[str, Any] = Depends(require_admin)):
+    """Manual trigger for QA — sends the morning tenure nudge now if the 06:30
+    mark has passed, still idempotent for the day through notification_log."""
+    return await run_tenure_nudge()
+
+
 @api_router.post("/admin/run-leader-auto-nif")
 async def admin_run_leader_auto_nif(user: Dict[str, Any] = Depends(require_admin)):
     """Manual trigger for QA — files the automatic NIF now if the 06:30 mark
@@ -2373,14 +2438,47 @@ def scoreboard_window(period: str, sales_day: Optional[str] = None) -> Tuple[Dic
             start_local.astimezone(timezone.utc))
 
 
+def resolve_day_range(start_day: Optional[str], end_day: Optional[str]) -> Tuple[str, str]:
+    """Validate an inclusive sales-day range (owner, 2026-09-24: the Team tab's
+    date button picks any range, one day being start == end). Each bound goes
+    through resolve_history_day, so neither may be in the future and the 6 AM
+    Detroit boundary stays defined solely by sales_day_for(). A missing end
+    runs through the current sales day; a missing start is a single day.
+    Start after end is a 400."""
+    end = resolve_history_day(end_day)
+    start = resolve_history_day(start_day) if start_day else end
+    if start > end:
+        raise HTTPException(status_code=400, detail="start_day must be on or before end_day")
+    return start, end
+
+
+def month_to_date_range() -> Tuple[str, str]:
+    """The 1st of the current SALES day's month through the current sales day.
+    Keyed on the sales day rather than the clock so that at 1 AM on the 1st
+    (still the previous sales day) the window does not run backwards."""
+    today = current_sales_day_str()
+    return f"{today[:7]}-01", today
+
+
 @api_router.get("/team")
 async def team_view(
-    period: str = DEFAULT_SCOREBOARD_PERIOD,
+    period: Optional[str] = None,
     week_start: Optional[str] = None,
+    start_day: Optional[str] = None,
+    end_day: Optional[str] = None,
     user: Dict[str, Any] = Depends(require_level(1)),
 ):
-    """Team rollup. `week_start` (a Wednesday) pulls up a specific past week
-    instead of a rolling window.
+    """Team rollup for a window of sales days.
+
+    Window selection (owner, 2026-09-24), first match wins:
+      * `start_day` / `end_day` — any inclusive range of sales days, validated
+        by resolve_day_range; one day is start == end.
+      * `week_start` (a Wednesday) — a specific past reporting week (kept for
+        builds that predate the range picker).
+      * `period` daily / weekly / monthly — the old rolling windows (same).
+      * nothing — month to date, the Team tab's default.
+    The response echoes `start_day` and `end_day` for every path so the
+    client labels exactly what the server answered.
 
     A historical week matches on sales_day rather than submitted_at: the rolling
     windows key off submission time, which is right for "since the last reset",
@@ -2397,12 +2495,22 @@ async def team_view(
     """
     ids = await team_scope_agent_ids(user)
     today = current_sales_day_str()
-    if week_start:
-        day_from, day_to = week_day_range(week_start)
+    window_start = None
+    if start_day or end_day:
+        day_from, day_to = resolve_day_range(start_day, end_day)
         q: Dict[str, Any] = {"sales_day": {"$gte": day_from, "$lte": day_to}}
-        window_start = None
-    else:
+        period = None
+        week_start = None
+    elif week_start:
+        day_from, day_to = week_day_range(week_start)
+        q = {"sales_day": {"$gte": day_from, "$lte": day_to}}
+    elif period:
         q, window_start = scoreboard_window(period)
+        sd = q["sales_day"]
+        day_from, day_to = (sd, sd) if isinstance(sd, str) else (sd["$gte"], sd["$lte"])
+    else:
+        day_from, day_to = month_to_date_range()
+        q = {"sales_day": {"$gte": day_from, "$lte": day_to}}
     if ids is not None:
         q["agent_id"] = {"$in": ids}
     pipeline = [
@@ -2600,6 +2708,23 @@ async def team_view(
         r["leaderboard_group"] = _leaderboard_group(r)
         r.setdefault("rank", None)
         r.setdefault("rank_of", None)
+    # One list per office (owner, from MJ, 2026-09-24): everyone ranked
+    # together on their own Gross ALP — rookies, veterans, people with no
+    # tenure set and leaders alike, a leader on what they sold themselves.
+    # Still per office, still gross_alp > 0 only. `rank` / `rank_of` /
+    # `leaderboard_group` stay in the payload for builds that predate this.
+    office_pools: Dict[str, List[Dict[str, Any]]] = {}
+    for r in out:
+        if r["gross_alp"] > 0:
+            office_pools.setdefault(r.get("office") or "", []).append(r)
+    for members in office_pools.values():
+        members.sort(key=lambda r: r["gross_alp"], reverse=True)
+        for i, r in enumerate(members, start=1):
+            r["overall_rank"] = i
+            r["overall_rank_of"] = len(members)
+    for r in out:
+        r.setdefault("overall_rank", None)
+        r.setdefault("overall_rank_of", None)
 
     my_downline: Optional[set] = None  # None = everyone (level_4 / admin reach)
     # user_admin_active, not user_is_admin: an admin below level_4 who has
@@ -2621,12 +2746,34 @@ async def team_view(
         "sales_day": today,
         "period": None if week_start else period,
         "week_start": week_start,
+        "start_day": day_from,
+        "end_day": day_to,
         "window_start": iso_utc(window_start) if window_start else None,
     }
 
 
 MISSING_DAYS_DEFAULT = MAX_UPLINE_BUFFER_DAYS  # the window an upline may still fill
 MISSING_DAYS_MAX = 14
+
+
+def nearest_team_leader(roster: Dict[str, Dict[str, Any]], agent_id: str) -> Optional[str]:
+    """The team a person files under: the nearest SA or GA (level_sa /
+    level_2, by tier) at or above them in the chain; failing that, their
+    first upline of any tier; None only for someone with no upline at all.
+    One definition shared by Missing Numbers and the tenure nudge (owner,
+    2026-09-24), never re-derived per route."""
+    a = roster.get(agent_id)
+    if a and a.get("role") in (SA_ROLE, "level_2"):
+        return agent_id
+    seen = set()
+    cur = (a or {}).get("upline_id")
+    fallback = cur
+    while cur and cur not in seen and cur in roster:
+        seen.add(cur)
+        if roster[cur].get("role") in (SA_ROLE, "level_2"):
+            return cur
+        cur = roster[cur].get("upline_id")
+    return fallback
 
 
 @api_router.get("/team/missing")
@@ -2667,20 +2814,7 @@ async def team_missing(
     }
 
     def team_leader_of(agent_id: str) -> Optional[str]:
-        """Nearest level_2 at or above this agent; else the first upline of
-        any tier; None only for someone with no upline at all."""
-        a = roster.get(agent_id)
-        if a and a.get("role") in (SA_ROLE, "level_2"):
-            return agent_id
-        seen = set()
-        cur = (a or {}).get("upline_id")
-        fallback = cur
-        while cur and cur not in seen and cur in roster:
-            seen.add(cur)
-            if roster[cur].get("role") in (SA_ROLE, "level_2"):
-                return cur
-            cur = roster[cur].get("upline_id")
-        return fallback
+        return nearest_team_leader(roster, agent_id)
 
     candidates = [
         a for a in roster.values()
@@ -3288,10 +3422,19 @@ async def agent_history(
 async def agent_day(
     agent_id: str,
     sales_day: Optional[str] = None,
+    start_day: Optional[str] = None,
+    end_day: Optional[str] = None,
     user: Dict[str, Any] = Depends(require_agent_or_finance_admin),
 ):
-    """What one agent submitted for one sales_day — read-only drill-down from
-    the agent card's date picker.
+    """What one agent submitted for one sales_day, or summed over a range of
+    sales days (owner, 2026-09-24: the card's date control is the same range
+    calendar the Team tab uses) — read-only drill-down from the agent card.
+
+    `start_day` / `end_day` select an inclusive range (resolve_day_range).
+    Without them the call is exactly what it always was: one `sales_day`,
+    defaulting to the current one — never month to date, so builds that
+    predate the range see nothing different. `sales_day` in the response is
+    the end of whatever window was answered, beside `start_day` / `end_day`.
 
     Same RBAC as agent_history (team_scope_agent_ids — downline for level_2+,
     own office for level_1), and same day validation as
@@ -3320,14 +3463,19 @@ async def agent_day(
     if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
         raise HTTPException(status_code=403, detail="Not in your team")
 
-    sd = resolve_history_day(sales_day)
-    q = {"agent_id": agent_id, "sales_day": sd}
+    if start_day or end_day:
+        day_from, day_to = resolve_day_range(start_day, end_day)
+    else:
+        day_from = day_to = resolve_history_day(sales_day)
+    q = {"agent_id": agent_id, "sales_day": (day_from if day_from == day_to else {"$gte": day_from, "$lte": day_to})}
     totals = await aggregate_full_pulse(q)
     entry_count = await db.production_entries.count_documents(q)
 
     return {
         "agent": profile,
-        "sales_day": sd,
+        "sales_day": day_to,
+        "start_day": day_from,
+        "end_day": day_to,
         "totals": totals,
         "close_rate": round(metrics.close_rate(totals["sales"], totals["sits"]), 1),
         "show_rate": round(metrics.show_rate(totals["sits"], totals["n1"], totals["sets"]), 1),
@@ -5081,6 +5229,54 @@ async def team_set_licensed_states(payload: TeamLicensedStatesIn, user: Dict[str
     return await _write_licensed_states(target, codes, user, "set_licensed_states")
 
 
+class TeamSetTenureIn(BaseModel):
+    agent_id: str
+    is_rookie: bool  # True = Rookie, False = Veteran; always an explicit choice
+
+
+@api_router.post("/team/set-tenure")
+async def team_set_tenure(payload: TeamSetTenureIn, user: Dict[str, Any] = Depends(get_current_user)):
+    """A leader records Rookie / Veteran tenure for someone in their own
+    downline from the Team tab (owner, 2026-09-24): the SET TENURE badge and
+    the morning nudge are pointless if the person receiving them cannot act.
+    Same gate as set-tier and set-licensed-states — is_admin and
+    finance_admin agency-wide, leaders SA and above inside their own
+    downline, level_4 agency-wide — and the same audit_log shape as
+    /admin/set-tenure, which stays as the admin panel's path. Your own tenure
+    is your upline's call, not yours, unless you hold the admin grant."""
+    is_admin = user_is_admin(user)
+    is_fa = user_is_finance_admin(user)
+    my_level = role_level(user.get("role"))
+    if not is_admin and not is_fa:
+        if my_level < RANK_SA or not user.get("agent_id"):
+            raise HTTPException(status_code=403, detail="Setting someone's tenure requires SA level or above")
+    target = await db.agent_profiles.find_one({"agent_id": payload.agent_id, **ACTIVE_AGENT}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if not is_admin and not is_fa:
+        if target["agent_id"] == user.get("agent_id"):
+            raise HTTPException(status_code=400, detail="Your own tenure is set by your upline")
+        if my_level < 4 and target["agent_id"] not in await downline_agent_ids(user["agent_id"]):
+            raise HTTPException(status_code=403, detail="You can only set tenure for someone in your own downline")
+    await db.agent_profiles.update_one(
+        {"agent_id": target["agent_id"]},
+        {"$set": {"is_rookie": payload.is_rookie, "updated_at": now_utc()}},
+    )
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now_utc(),
+        "action": "set_tenure",
+        "agent_id": target["agent_id"],
+        "agent_name": target.get("name"),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "original_value": target.get("is_rookie"),  # None = was unknown
+        "new_value": payload.is_rookie,
+        "via": "team",
+    })
+    return {"ok": True, "agent_id": target["agent_id"], "is_rookie": payload.is_rookie}
+
+
 # Field titles the roster uses. Mirrors IO_ROLES in frontend/app/admin.tsx and
 # the titles AddTeamMemberSheet hands out; kept here so a tier change cannot
 # write a title the rest of the app has never heard of.
@@ -6732,6 +6928,10 @@ async def _escalation_loop():
             await run_leader_auto_nif()
         except Exception as e:
             logger.error(f"Leader auto-NIF failed: {e}")
+        try:
+            await run_tenure_nudge()
+        except Exception as e:
+            logger.error(f"Tenure nudge failed: {e}")
         await asyncio.sleep(60)
 
 
