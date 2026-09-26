@@ -116,6 +116,24 @@ async def test_rga_is_agency_wide(client, seeded_db):
     assert (await set_theirs(client, token, "AG_2", ["FL"])).status_code == 200
 
 
+async def test_in_house_admin_on_a_level_1_profile_is_agency_wide(client, seeded_db):
+    """The admin grant sits on Afnan's level_1 profile. Like set-tier and
+    reassign, it acts agency-wide here; require_leader would have turned
+    her away (review, 2026-09-26)."""
+    token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
+    await seeded_db.users.update_one({"email": "ag1@test.dev"}, {"$set": {"is_admin": True}})
+    assert (await set_theirs(client, token, "AG_2", ["MI"])).status_code == 200, "admin grant should reach AG_2"
+    assert (await profile(seeded_db, "AG_2"))["licensed_states"] == ["MI"]
+    # Still their own list from the profile, never the team path.
+    assert (await set_theirs(client, token, "AG_1", ["MI"])).status_code == 400
+
+
+async def test_finance_admin_is_agency_wide(client, seeded_db):
+    token = await make_session(seeded_db, role="finance_admin", agent_id=None, email="fa@test.dev")
+    assert (await set_theirs(client, token, "AG_2", ["OH"])).status_code == 200
+    assert (await profile(seeded_db, "AG_2"))["licensed_states"] == ["OH"]
+
+
 async def test_leader_sets_their_own_from_the_profile_not_the_team_path(client, seeded_db):
     token = await make_session(seeded_db, role="level_2", agent_id="GA_1", email="ga1@test.dev")
     assert (await set_theirs(client, token, "GA_1", ["MI"])).status_code == 400

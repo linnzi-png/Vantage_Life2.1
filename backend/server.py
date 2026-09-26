@@ -5054,19 +5054,28 @@ async def me_set_licensed_states(payload: LicensedStatesIn, user: Dict[str, Any]
 
 
 @api_router.post("/team/set-licensed-states")
-async def team_set_licensed_states(payload: TeamLicensedStatesIn, user: Dict[str, Any] = Depends(require_leader)):
+async def team_set_licensed_states(payload: TeamLicensedStatesIn, user: Dict[str, Any] = Depends(get_current_user)):
     """A leader records licensed states for someone in their hierarchy (owner,
     2026-09-24). Scope follows the other Team tab writes (set-tier, reassign,
     can_enter_for): an SA, GA or MGA reaches their own downline only; level_4
-    is agency-wide, matching visible_agent_ids. Setting your own goes through
+    is agency-wide, matching visible_agent_ids; is_admin and finance_admin
+    act agency-wide whatever tier their own login carries (the in-house
+    admin grant sits on a level_1 profile), which is why this is gated on
+    get_current_user and not require_leader. Setting your own goes through
     /me/licensed-states so the audit trail says which path was used."""
+    is_admin = user_is_admin(user)
+    is_fa = user_is_finance_admin(user)
+    my_level = role_level(user.get("role"))
+    if not is_admin and not is_fa:
+        if my_level < RANK_SA or not user.get("agent_id"):
+            raise HTTPException(status_code=403, detail="Setting someone's licensed states requires SA level or above")
     codes = normalize_licensed_states(payload.licensed_states)
     target = await db.agent_profiles.find_one({"agent_id": payload.agent_id, **ACTIVE_AGENT}, {"_id": 0})
     if not target:
         raise HTTPException(status_code=404, detail="Agent not found")
-    if target["agent_id"] == user.get("agent_id"):
+    if user.get("agent_id") and target["agent_id"] == user.get("agent_id"):
         raise HTTPException(status_code=400, detail="Set your own licensed states from your profile")
-    if role_level(user.get("role")) < 4:
+    if not is_admin and not is_fa and my_level < 4:
         if target["agent_id"] not in await downline_agent_ids(user["agent_id"]):
             raise HTTPException(status_code=403, detail="You can only set licensed states for someone in your own downline")
     return await _write_licensed_states(target, codes, user, "set_licensed_states")

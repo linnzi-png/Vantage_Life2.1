@@ -168,10 +168,13 @@ export default function TeamScreen() {
     !r.archived && r.agent_id !== user?.agent_id && r.role !== 'level_4' &&
     (agencyWide || canRemoveRow(r));
   // Licensed states (owner, 2026-09-24): a leader records them for anyone in
-  // their own downline; level_4 reaches the agency. Your own list is set from
-  // the More tab, which is the one place /api/team/set-licensed-states refuses.
+  // their own downline; level_4 reaches the agency, and so do the admin grant
+  // and finance_admin (agencyWide, same as tier changes) whatever tier their
+  // own login carries. Your own list is set from the More tab, which is the
+  // one place /api/team/set-licensed-states refuses.
   const canSetStatesRow = (r: TeamRow) =>
-    canEnter && !r.archived && r.agent_id !== user?.agent_id && (myLevel >= 4 || mine(r));
+    !r.archived && r.agent_id !== user?.agent_id &&
+    (agencyWide || (canEnter && (myLevel >= 4 || mine(r))));
 
   const removeMember = async (row: TeamRow) => {
     setSelected(null);
