@@ -7,10 +7,11 @@
 // screen and the Manager Eraser, both untouched by this component. The
 // calendar is the Team tab's own TeamDateSheet; "today" is the server's
 // sales_day, never the device clock.
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
+import { notify } from '../lib/dialog';
 import { PULSE_FIELDS } from '../lib/cycle';
 import { TeamDateSheet, DateWindow, describeWindow } from './TeamDateSheet';
 
@@ -34,17 +35,28 @@ export function AgentDayDetail({ agentId }: { agentId: string }) {
   const [day, setDay] = useState<AgentDay | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // The server's current sales day, read once from the route itself (no
-  // dates = the current day) so the calendar never trusts the device clock.
+  // The server's current sales day, read from the route itself (no dates =
+  // the current day) so the calendar never trusts the device clock. Fetched
+  // every time the picker opens, not once per mount: a card left open across
+  // the 6 AM Detroit boundary would otherwise keep yesterday as "today" and
+  // refuse the day that just opened, and one failed request would leave the
+  // button dead for the rest of the mount.
   const [salesDay, setSalesDay] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    api<AgentDay>(`/api/agents/${encodeURIComponent(agentId)}/day`)
-      .then((r) => { if (!cancelled) setSalesDay(r.sales_day); })
-      .catch(() => { /* the button stays disabled until the day is known */ });
-    return () => { cancelled = true; };
-  }, [agentId]);
+  const openPicker = async () => {
+    if (opening) return;
+    setOpening(true);
+    try {
+      const r = await api<AgentDay>(`/api/agents/${encodeURIComponent(agentId)}/day`);
+      setSalesDay(r.sales_day);
+      setPickerOpen(true);
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'Could not open the calendar. Try again.');
+    } finally {
+      setOpening(false);
+    }
+  };
 
   // Picking a second window before the first request lands would otherwise
   // race: whichever response arrived last won, so a slow connection could
@@ -76,14 +88,14 @@ export function AgentDayDetail({ agentId }: { agentId: string }) {
     <View style={styles.section}>
       <Text style={styles.kicker}>WHAT THEY SUBMITTED</Text>
       <TouchableOpacity
-        style={[styles.dayPill, !salesDay && { opacity: 0.5 }]}
-        onPress={() => { if (salesDay) setPickerOpen(true); }}
-        disabled={!salesDay}
+        style={[styles.dayPill, opening && { opacity: 0.6 }]}
+        onPress={openPicker}
+        disabled={opening}
         testID="agent-day-picker-open"
       >
         <Ionicons name="calendar-outline" size={13} color={COLORS.gold} />
         <Text style={styles.dayPillTxt}>{label}</Text>
-        <Ionicons name="chevron-down" size={11} color={COLORS.textDim} />
+        {opening ? <ActivityIndicator size="small" color={COLORS.textDim} /> : <Ionicons name="chevron-down" size={11} color={COLORS.textDim} />}
       </TouchableOpacity>
 
       {loading ? <View style={styles.loading}><ActivityIndicator color={COLORS.primary} /></View> : null}
