@@ -113,6 +113,14 @@ export function TeamDateSheet({ visible, salesDay, value, allowMonthToDate = tru
 
   const pending = start ? (end ? `${start === end ? start : `${start} to ${end}`}` : `${start} · tap the last day`) : 'Tap a day, then the last day of the range';
 
+  // The sheet is mounted from the first render of the Team tab and the agent
+  // card, before /api/team has answered, so salesDay is still '' and `today`
+  // is NaN. Building the calendar JSX below would then index MONTHS with NaN
+  // and crash the whole screen (seen on the web build, 2026-09-26) even
+  // though the Modal was hidden — React evaluates the children eagerly.
+  // Nothing is worth drawing until the sheet is open with a real day.
+  if (!visible || !salesDay) return null;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
