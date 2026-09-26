@@ -1,22 +1,24 @@
-// Single-day drill-down for the agent card — lets a leader pick any recent
-// sales day and see exactly what that agent submitted that day, field by
-// field. Reads GET /api/agents/{id}/day, which mirrors agent_history's RBAC
-// (self or downline only, via visible_agent_ids()) and is read-only: there is
-// no correction path here — that stays on the self-correction screen and the
-// Manager Eraser, both untouched by this component.
+// Day-or-range drill-down for the agent card — lets a leader pick any sales
+// day, or any range of days, and see exactly what that agent submitted,
+// field by field, summed over the window. Reads GET /api/agents/{id}/day
+// (start_day / end_day, owner 2026-09-24), which mirrors agent_history's
+// RBAC (self or downline only, via team_scope_agent_ids()) and is read-only:
+// there is no correction path here — that stays on the self-correction
+// screen and the Manager Eraser, both untouched by this component. The
+// calendar is the Team tab's own TeamDateSheet; "today" is the server's
+// sales_day, never the device clock.
 import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS } from '../lib/auth';
-import { PULSE_FIELDS, recentSalesDaysDetroit, currentSalesDayDetroit } from '../lib/cycle';
-
-// How far back the picker reaches. Matches the window AgentHistory already
-// pulls (13 weeks ≈ 91 days) so a leader can drill into any day the chart
-// above is already showing.
-const DAY_WINDOW = 90;
+import { notify } from '../lib/dialog';
+import { PULSE_FIELDS } from '../lib/cycle';
+import { TeamDateSheet, DateWindow, describeWindow } from './TeamDateSheet';
 
 interface AgentDay {
   sales_day: string;
+  start_day?: string;
+  end_day?: string;
   totals: Record<string, number>;
   close_rate: number;
   show_rate: number;
@@ -27,63 +29,73 @@ interface AgentDay {
 
 const money = (n: number) => `$${Math.round(n || 0).toLocaleString()}`;
 
-function fmtDay(d: string): string {
-  const [y, m, dd] = d.split('-').map(Number);
-  const date = new Date(y, (m || 1) - 1, dd || 1);
-  return `${d} · ${date.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}`;
-}
-
 export function AgentDayDetail({ agentId }: { agentId: string }) {
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickedDay, setPickedDay] = useState<string | null>(null);
+  const [picked, setPicked] = useState<DateWindow | null>(null);
   const [day, setDay] = useState<AgentDay | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The server's current sales day, read from the route itself (no dates =
+  // the current day) so the calendar never trusts the device clock. Fetched
+  // every time the picker opens, not once per mount: a card left open across
+  // the 6 AM Detroit boundary would otherwise keep yesterday as "today" and
+  // refuse the day that just opened, and one failed request would leave the
+  // button dead for the rest of the mount.
+  const [salesDay, setSalesDay] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
 
-  // Newest-first, anchored on the currently open sales day in Detroit — the
-  // zone the backend defines a sales_day in, not the device's. Rebuilt every
-  // time the picker opens rather than memoized once: a card left open across
-  // the 6 AM boundary would otherwise keep labelling yesterday as TODAY and
-  // never offer the day that just opened.
-  const [dayOptions, setDayOptions] = useState<string[]>(() => recentSalesDaysDetroit(DAY_WINDOW));
-  const [today, setToday] = useState<string>(() => currentSalesDayDetroit());
-
-  const openPicker = () => {
-    setDayOptions(recentSalesDaysDetroit(DAY_WINDOW));
-    setToday(currentSalesDayDetroit());
-    setPickerOpen(true);
+  const openPicker = async () => {
+    if (opening) return;
+    setOpening(true);
+    try {
+      const r = await api<AgentDay>(`/api/agents/${encodeURIComponent(agentId)}/day`);
+      setSalesDay(r.sales_day);
+      setPickerOpen(true);
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'Could not open the calendar. Try again.');
+    } finally {
+      setOpening(false);
+    }
   };
 
-  // Picking a second date before the first request lands would otherwise race:
-  // whichever response arrived last won, so a slow connection could show one
-  // day's production under another day's label. Only the newest request may
-  // write state.
+  // Picking a second window before the first request lands would otherwise
+  // race: whichever response arrived last won, so a slow connection could
+  // show one window's production under another's label. Only the newest
+  // request may write state.
   const reqRef = useRef(0);
 
-  const pick = async (d: string) => {
-    setPickerOpen(false);
-    setPickedDay(d);
+  const pick = async (w: DateWindow) => {
+    if (w.mode !== 'range') return;
+    setPicked(w);
     setDay(null);
     setError(null);
     setLoading(true);
     const seq = ++reqRef.current;
     try {
-      const r = await api<AgentDay>(`/api/agents/${encodeURIComponent(agentId)}/day?sales_day=${d}`);
+      const r = await api<AgentDay>(
+        `/api/agents/${encodeURIComponent(agentId)}/day?start_day=${w.start}&end_day=${w.end}`);
       if (seq === reqRef.current) setDay(r);
     } catch (e: unknown) {
-      if (seq === reqRef.current) setError(e instanceof Error ? e.message : 'Could not load that day.');
+      if (seq === reqRef.current) setError(e instanceof Error ? e.message : 'Could not load those days.');
     } finally {
       if (seq === reqRef.current) setLoading(false);
     }
   };
 
+  const label = picked && salesDay ? describeWindow(picked, salesDay).toUpperCase() : 'PICK A DAY OR RANGE';
+
   return (
     <View style={styles.section}>
-      <Text style={styles.kicker}>WHAT THEY SUBMITTED ON A SPECIFIC DAY</Text>
-      <TouchableOpacity style={styles.dayPill} onPress={openPicker} testID="agent-day-picker-open">
+      <Text style={styles.kicker}>WHAT THEY SUBMITTED</Text>
+      <TouchableOpacity
+        style={[styles.dayPill, opening && { opacity: 0.6 }]}
+        onPress={openPicker}
+        disabled={opening}
+        testID="agent-day-picker-open"
+      >
         <Ionicons name="calendar-outline" size={13} color={COLORS.gold} />
-        <Text style={styles.dayPillTxt}>{pickedDay ? fmtDay(pickedDay) : 'PICK A DATE'}</Text>
-        <Ionicons name="chevron-down" size={11} color={COLORS.textDim} />
+        <Text style={styles.dayPillTxt}>{label}</Text>
+        {opening ? <ActivityIndicator size="small" color={COLORS.textDim} /> : <Ionicons name="chevron-down" size={11} color={COLORS.textDim} />}
       </TouchableOpacity>
 
       {loading ? <View style={styles.loading}><ActivityIndicator color={COLORS.primary} /></View> : null}
@@ -113,41 +125,25 @@ export function AgentDayDetail({ agentId }: { agentId: string }) {
             </View>
             {day.entry_count > 1 ? (
               <Text style={styles.note}>
-                {day.entry_count} submissions make up this total — likely a correction or an upline proxy entry on top of the original.
+                {day.entry_count} submissions make up this total{day.start_day && day.end_day && day.start_day !== day.end_day
+                  ? ' across these days.'
+                  : ' — likely a correction or an upline proxy entry on top of the original.'}
               </Text>
             ) : null}
           </View>
         ) : (
-          <Text style={styles.empty}>Nothing submitted for {pickedDay}.</Text>
+          <Text style={styles.empty}>Nothing submitted for {label.toLowerCase()}.</Text>
         )
       ) : null}
 
-      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setPickerOpen(false)}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>PICK A DAY · LAST {DAY_WINDOW} DAYS</Text>
-            <ScrollView style={{ maxHeight: 420 }}>
-              {dayOptions.map((d) => {
-                const isToday = d === today;
-                const isPicked = pickedDay === d;
-                return (
-                  <TouchableOpacity
-                    key={d}
-                    style={styles.dayRow}
-                    onPress={() => pick(d)}
-                    testID={`agent-day-option-${d}`}
-                  >
-                    <Text style={[styles.dayRowTxt, isToday && { color: COLORS.primary, fontWeight: '900' }]}>
-                      {fmtDay(d)}{isToday ? ' · TODAY' : ''}
-                    </Text>
-                    {isPicked ? <Ionicons name="checkmark" size={14} color={COLORS.gold} /> : null}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <TeamDateSheet
+        visible={pickerOpen && !!salesDay}
+        salesDay={salesDay || ''}
+        value={picked ?? { mode: 'mtd' }}
+        allowMonthToDate={false}
+        onChange={pick}
+        onClose={() => setPickerOpen(false)}
+      />
     </View>
   );
 }
@@ -187,12 +183,4 @@ const styles = StyleSheet.create({
   fieldLabel: { color: COLORS.textDim, fontSize: 12, flex: 1, paddingRight: 8 },
   fieldValue: { color: '#fff', fontSize: 13, fontWeight: '800' },
   note: { color: COLORS.textMuted, fontSize: 11, marginTop: 8, fontStyle: 'italic' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 24 },
-  modalCard: { backgroundColor: '#1A1A1A', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: COLORS.border },
-  modalTitle: { color: COLORS.primary, fontWeight: '900', fontSize: 12, letterSpacing: 1, marginBottom: 10 },
-  dayRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border,
-  },
-  dayRowTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });

@@ -77,13 +77,46 @@ moves up. It is a record flag, never a name or id check, and it reaches
 nothing else — the person's team, their own numbers and card, the Team tab,
 the Hierarchy Map, the ticker and the office roll-ups all still count them.
 
-The Team tab still reads as a leaderboard — agents ranked inside their tenure
-group (ROOKIES, VETERANS, and TENURE NOT SET for the people nobody has
-recorded one for), leaders ranked among leaders with their own production and
-their team's rollup side by side. Rank always runs on Gross ALP, the same
-measure the Platinum Wall ranks on, and nobody who produced nothing in the
-window is ranked. The secondary filter, REPORTS TO ME, is the caller's
+**The Team tab is one ranked list (owner, from MJ, 2026-09-24).** Everyone
+the viewer can see is ranked together, per office, on their own Gross ALP —
+rookies, veterans, people with no tenure set and leaders alike, a leader on
+what they sold themselves with their team's rollup beside it. That number is
+`overall_rank` / `overall_rank_of` on each `/api/team` row; `rank`,
+`rank_of` and `leaderboard_group` (the old per-group boards) stay in the
+payload for builds that predate this and are retired once the fleet is on
+the new build. Rank always runs on Gross ALP, the same measure the Platinum
+Wall ranks on, never on the column the list is sorted by, and nobody who
+produced nothing in the window is ranked ($0 rows sit unranked at the
+bottom). The value shown is Gross ALP labelled **ALP**; Net ALP appears
+nowhere on this tab. The metric buttons read ALP, Sales, Close Ratio, Avg
+Deal. An **All / Rookies / Veterans** dropdown narrows the list by recorded
+tenure (leaders by their own tenure like everyone else); a filtered list
+keeps every person's full-list rank number, and people with no tenure set
+appear under All only, with a SET TENURE badge for whoever may set it
+(`POST /api/team/set-tenure`: an upline for their own downline, level_4,
+`is_admin` and `finance_admin` agency-wide; `/admin/set-tenure` stays the
+Admin Panel's path). Their nearest SA or GA — else the MGA or RGA they
+report to — gets one consolidated push each morning with the 06:30 job
+(`run_tenure_nudge`, stage `tenure_nudge_upline` in `notification_log`)
+until it is set. The secondary filter, REPORTS TO ME, is the caller's
 downline — what an upline wants for entry, not for competing.
+
+**The Team tab's window is a date range (owner, 2026-09-24).** One date
+button replaces the Daily / Weekly / Monthly selector and the week chips.
+`GET /api/team` takes `start_day` / `end_day` (any inclusive range of sales
+days through `resolve_day_range`, one day being start == end; future days
+and start after end are 400) and defaults to **month to date** — the 1st of
+the current *sales* day's month through the current sales day
+(`month_to_date_range`) — when nothing is asked for; `period` and
+`week_start` keep working for old builds, and every response echoes
+`start_day` / `end_day`. The client resets to month to date every time the
+tab opens and never persists the choice; its calendar reads the server's
+`sales_day`, never the device date. `GET /api/agents/{id}/day` takes the
+same range and sums the 14 fields over it; without it the call is the
+single current day it always was (never month to date). The upline card,
+the Missing Tonight card, the search bar and the office headings are
+unchanged; the SA / GA / MGA team views and the team dashboard row wait on
+the owner's meeting with MJ.
 
 Three things stay exactly as they were:
 
@@ -257,7 +290,8 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
   excluded them twice and inflated every score — the WAR spreadsheets' own
   Close Rate column matched `Sales / Sits` in all 54 rows where the two differ
   and `Sales / (Sits - N1)` in none; office-wide 57.2% vs 68.0%.)
-- Sit Rate (a.k.a. Show Rate) formula: `(Sits + N1) / Sets` — implemented in
+- Show Ratio (formerly "Sit Rate"; the label everywhere is Show Ratio, and
+  Close Rate is labelled Close Ratio — owner, 2026-09-24) formula: `(Sits + N1) / Sets` — implemented in
   `backend/metrics.py` as `show_rate()`. This is the mirror image of Close Rate
   on the N1 question and for the opposite reason: an N1 person **did** keep the
   appointment and sit through the presentation, they simply could not be
