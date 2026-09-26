@@ -1,8 +1,8 @@
 // Team View — Level 2+
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, useAuth, levelNum, LEADER_MIN, roleTitle, isFinanceAdmin, adminActive, Role } from '../../src/lib/auth';
 import { AgentContactSheet, AgentContact, formatPhone } from '../../src/components/AgentContactSheet';
@@ -11,7 +11,8 @@ import { QuickEntryForm, QuickEntryTarget } from '../../src/components/QuickEntr
 import { AddTeamMemberSheet } from '../../src/components/AddTeamMemberSheet';
 import { MoveMemberSheet } from '../../src/components/MoveMemberSheet';
 import { LicensedStatesSheet } from '../../src/components/LicensedStatesSheet';
-import { PeriodSelector, usePersistedPeriod } from '../../src/components/PeriodSelector';
+import { TeamDateSheet, DateWindow, MONTH_TO_DATE, describeWindow } from '../../src/components/TeamDateSheet';
+import { SetTenureSheet } from '../../src/components/SetTenureSheet';
 import { SearchBar } from '../../src/components/SearchBar';
 import { TourAnchor } from '../../src/components/TourAnchor';
 import { LoadState } from '../../src/components/LoadState';
@@ -36,6 +37,12 @@ interface TeamRow {
   leaderboard_group?: 'leader' | 'rookie' | 'veteran' | 'unset';
   rank?: number | null;
   rank_of?: number | null;
+  // One list per office (owner, from MJ, 2026-09-24): everyone ranked
+  // together on their own Gross ALP, leaders included. This is the number
+  // the row shows; a filtered list keeps it, so a rookies-only list reads
+  // 8, 9, 12. Null for anyone at $0.
+  overall_rank?: number | null;
+  overall_rank_of?: number | null;
   team_gross_alp?: number;
   team_sales?: number;
   team_size?: number;
@@ -63,6 +70,12 @@ export default function TeamScreen() {
   const [scope, setScope] = useState<'team' | 'mine'>('team');
   const [tierTarget, setTierTarget] = useState<TeamRow | null>(null);
   const [statesTarget, setStatesTarget] = useState<TeamRow | null>(null);
+  const [tenureTarget, setTenureTarget] = useState<TeamRow | null>(null);
+  // All / Rookies / Veterans (owner, from MJ, 2026-09-24). Leaders filter by
+  // their own tenure like everyone else; people with no tenure set appear
+  // under All only, with a badge for whoever may set it.
+  const [tenureFilter, setTenureFilter] = useState<'all' | 'rookie' | 'veteran'>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
   // The chain above the caller, nearest first, as contacts only — no
   // production (owner, 2026-09-19). Comes back with the board itself.
   const [uplines, setUplines] = useState<AgentContact[]>([]);
@@ -71,36 +84,44 @@ export default function TeamScreen() {
   const [sortKey, setSortKey] = useState<keyof TeamRow>('gross_alp');
   const [selected, setSelected] = useState<TeamRow | null>(null);
   const [readyNoms, setReadyNoms] = useState(0);
-  const [period, changePeriod] = usePersistedPeriod('vl_team_period', 'weekly');
+  // The window (owner, 2026-09-24): month to date by default, or any range
+  // of sales days from the calendar sheet. Never persisted — every time the
+  // tab opens it is month to date again.
+  const [dateWindow, setDateWindow] = useState<DateWindow>(MONTH_TO_DATE);
+  const [dateOpen, setDateOpen] = useState(false);
+  // The server's current sales day and the window it actually answered; the
+  // calendar and the button label read these, never the device date.
+  const [salesDay, setSalesDay] = useState<string | null>(null);
+  const [echoedStart, setEchoedStart] = useState<string | null>(null);
   const [quickEntryTarget, setQuickEntryTarget] = useState<QuickEntryTarget | null>(null);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [missingQueue, setMissingQueue] = useState<TeamRow[]>([]); // remaining "no_pulse" agents queued for auto-advance
-  // null = live rolling window (period). A week_start pins the view to that
-  // past reporting week instead, so a manager can review it as it stood.
-  const [weekStart, setWeekStart] = useState<string | null>(null);
-  const [weekOptions, setWeekOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Which reporting window the rows currently on screen were fetched for.
-  // Without it, switching Daily/Weekly/Monthly or pinning a past week kept
-  // the previous window's rows on screen while the controls described the
-  // new one — and if the new request failed, the masking below hid the
-  // failure and those stale figures read as the selected window.
+  // Which window the rows currently on screen were fetched for. Without it,
+  // changing the dates kept the previous window's rows on screen while the
+  // button described the new one — and if the new request failed, the
+  // masking below hid the failure and those stale figures read as the
+  // selected window.
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
-  const scopeKey = weekStart ? `week:${weekStart}` : `period:${period}`;
+  const scopeKey = dateWindow.mode === 'mtd' ? 'mtd' : `range:${dateWindow.start}:${dateWindow.end}`;
   const rowsMatchScope = loadedScope === scopeKey;
 
   const fetchAll = async () => {
-    const scope = weekStart ? `week:${weekStart}` : `period:${period}`;
+    const scope = scopeKey;
+    const path = dateWindow.mode === 'mtd'
+      ? '/api/team'
+      : `/api/team?start_day=${dateWindow.start}&end_day=${dateWindow.end}`;
     try {
       const [r, n] = await Promise.all([
-        api<{ team: TeamRow[]; uplines?: AgentContact[] }>(
-          weekStart ? `/api/team?week_start=${weekStart}` : `/api/team?period=${period}`),
+        api<{ team: TeamRow[]; uplines?: AgentContact[]; sales_day: string; start_day?: string; end_day?: string }>(path),
         api<{ nominations: any[] }>('/api/nominations?status=threshold_met').catch(() => ({ nominations: [] })),
       ]);
       setRows(r.team);
       setUplines(r.uplines ?? []);
       setReadyNoms(n.nominations.length);
+      setSalesDay(r.sales_day);
+      setEchoedStart(r.start_day ?? null);
       setLoadedScope(scope);
       setError(null);
     } catch (e: unknown) {
@@ -109,27 +130,33 @@ export default function TeamScreen() {
       setLoading(false);
     }
   };
-  // Re-fetch whenever the period changes; keep the 30s live refresh going.
+  // Re-fetch whenever the window changes; keep the 30s live refresh going
+  // while the window reaches the current sales day.
   useEffect(() => {
     // Fetching + polling an external API, not deriving local state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAll();
-    // A pinned past week is static — no point polling it every 30s.
-    if (weekStart) return;
+    // A range that ended in the past is static — no point polling it.
+    if (dateWindow.mode === 'range' && salesDay && dateWindow.end < salesDay) return;
     const i = setInterval(fetchAll, 30000);
     return () => clearInterval(i);
-  }, [period, weekStart]);
+  }, [scopeKey]);
 
-  useEffect(() => {
-    let cancelled = false;
-    api<{ weeks: string[] }>('/api/team/weeks')
-      .then((r) => { if (!cancelled) setWeekOptions(r.weeks); })
-      .catch(() => { if (!cancelled) setWeekOptions([]); });
-    return () => { cancelled = true; };
-  }, []);
+  // Month to date every time the tab opens (owner, 2026-09-24); the choice
+  // is never persisted.
+  useFocusEffect(useCallback(() => {
+    setDateWindow(MONTH_TO_DATE);
+    setTenureFilter('all');
+  }, []));
 
   const [query, setQuery] = useState('');
-  const sorted = [...rows].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
+  // Sort by whichever metric is chosen, but people at $0 (unranked) always
+  // sit at the bottom, and the rank number never follows the sort.
+  const bySort = (a: TeamRow, b: TeamRow) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0);
+  const sorted = [
+    ...rows.filter((r) => r.overall_rank != null).sort(bySort),
+    ...rows.filter((r) => r.overall_rank == null).sort(bySort),
+  ];
   const q = query.trim().toLowerCase();
   // Any upline (SA/GA and above, level 2+) may enter Nightly Numbers on a
   // downline teammate's behalf, matching can_enter_for on the backend.
@@ -173,6 +200,12 @@ export default function TeamScreen() {
   // own login carries. Your own list is set from the More tab, which is the
   // one place /api/team/set-licensed-states refuses.
   const canSetStatesRow = (r: TeamRow) =>
+    !r.archived && r.agent_id !== user?.agent_id &&
+    (agencyWide || (canEnter && (myLevel >= 4 || mine(r))));
+  // Tenure (owner, 2026-09-24): the SET TENURE badge goes to whoever may set
+  // it — an upline for their own downline, level_4, the admin grant and
+  // finance_admin agency-wide. /api/team/set-tenure re-checks every part.
+  const canSetTenureRow = (r: TeamRow) =>
     !r.archived && r.agent_id !== user?.agent_id &&
     (agencyWide || (canEnter && (myLevel >= 4 || mine(r))));
 
@@ -233,9 +266,15 @@ export default function TeamScreen() {
   const scoped = scope === 'mine' && hasDownline
     ? sorted.filter((r) => r.in_my_downline !== false || r.agent_id === user?.agent_id)
     : sorted;
+  // Rookies / Veterans filter by recorded tenure, leaders included; people
+  // with no tenure set are in All only (owner, 2026-09-24).
+  const tenured = tenureFilter === 'all'
+    ? scoped
+    : scoped.filter((r) => r.is_rookie === (tenureFilter === 'rookie'));
   const visible = q
-    ? scoped.filter((r) => `${r.name} ${r.office} ${roleTitle(r.io_role, r.role)}`.toLowerCase().includes(q))
-    : scoped;
+    ? tenured.filter((r) => `${r.name} ${r.office} ${roleTitle(r.io_role, r.role)}`.toLowerCase().includes(q))
+    : tenured;
+  const FILTER_LABEL = { all: 'ALL', rookie: 'ROOKIES', veteran: 'VETERANS' } as const;
 
   // `user` is null while AuthProvider restores the session, and
   // levelNum(undefined) is 0 — so without this every GA and above was shown
@@ -251,14 +290,27 @@ export default function TeamScreen() {
             activeOpacity={0.75}
           >
             <View style={styles.rankWrap}>
-              <Text style={[styles.rankTxt, r.rank === 1 && styles.rankTxtTop]}>
-                {r.rank ? `${r.rank}` : '—'}
+              <Text style={[styles.rankTxt, r.overall_rank === 1 && styles.rankTxtTop]}>
+                {r.overall_rank ? `${r.overall_rank}` : '—'}
               </Text>
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={styles.name} numberOfLines={1}>{r.name}</Text>
                 {r.is_rookie ? <View style={styles.rookie}><Text style={styles.rookieTxt}>R</Text></View> : null}
+                {levelNum(r.role) >= LEADER_MIN ? (
+                  <View style={styles.leaderTag}><Text style={styles.leaderTagTxt}>LEADER</Text></View>
+                ) : null}
+                {r.is_rookie == null && !r.archived && canSetTenureRow(r) ? (
+                  <TouchableOpacity
+                    style={styles.tenureBadge}
+                    onPress={() => setTenureTarget(r)}
+                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                    testID={`set-tenure-${r.agent_id}`}
+                  >
+                    <Text style={styles.tenureBadgeTxt}>SET TENURE</Text>
+                  </TouchableOpacity>
+                ) : null}
                 {r.archived ? <View style={styles.removed}><Text style={styles.removedTxt}>REMOVED</Text></View> : null}
                 {r.in_my_downline === false && r.agent_id !== user?.agent_id ? (
                   <View style={styles.officeBadge}><Text style={styles.officeBadgeTxt}>TEAM</Text></View>
@@ -285,7 +337,7 @@ export default function TeamScreen() {
               {/* A leader is ranked on what they sold themselves, which is
                   usually nothing — the rollup is what they are actually
                   accountable for, so both sit on the row. */}
-              {r.leaderboard_group === 'leader' && r.team_size ? (
+              {levelNum(r.role) >= LEADER_MIN && r.team_size ? (
                 <Text style={styles.teamRollup}>
                   TEAM ${Math.round(r.team_gross_alp || 0).toLocaleString()} · {r.team_sales || 0} sales · {r.team_size}
                 </Text>
@@ -293,16 +345,6 @@ export default function TeamScreen() {
             </View>
           </TouchableOpacity>
   );
-
-  // The four boards, in the order they read best: the leaders first, then the
-  // people they run. TENURE NOT SET only appears when someone is in it, which
-  // is the nudge to go set it.
-  const BOARDS: { key: NonNullable<TeamRow['leaderboard_group']>; label: string }[] = [
-    { key: 'leader', label: 'LEADERS' },
-    { key: 'rookie', label: 'ROOKIES' },
-    { key: 'veteran', label: 'VETERANS' },
-    { key: 'unset', label: 'TENURE NOT SET' },
-  ];
 
   if (authLoading) {
     return (
@@ -401,7 +443,20 @@ export default function TeamScreen() {
       ) : null}
 
       <View style={styles.periodBar}>
-        <PeriodSelector value={period} onChange={changePeriod} testID="team-period" />
+        <TourAnchor id="team-weeks">
+          <TouchableOpacity
+            style={styles.dateBtn}
+            onPress={() => { if (salesDay) setDateOpen(true); }}
+            activeOpacity={0.75}
+            testID="team-date-button"
+          >
+            <Ionicons name="calendar-outline" size={14} color={COLORS.gold} />
+            <Text style={styles.dateBtnTxt} numberOfLines={1}>
+              {salesDay ? describeWindow(dateWindow, salesDay, echoedStart) : 'Month to date'}
+            </Text>
+            <Ionicons name="chevron-down" size={12} color={COLORS.textDim} />
+          </TouchableOpacity>
+        </TourAnchor>
         {hasDownline ? (
           <View style={styles.scopeRow}>
             <TouchableOpacity
@@ -419,35 +474,6 @@ export default function TeamScreen() {
               <Text style={[styles.weekChipTxt, scope === 'mine' && styles.weekChipTxtOn]}>REPORTS TO ME</Text>
             </TouchableOpacity>
           </View>
-        ) : null}
-        {weekOptions.length > 0 ? (
-          <TourAnchor id="team-weeks">
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.weekPicker}
-          >
-            <TouchableOpacity
-              onPress={() => setWeekStart(null)}
-              style={[styles.weekChip, !weekStart && styles.weekChipOn]}
-              testID="team-week-live"
-            >
-              <Text style={[styles.weekChipTxt, !weekStart && styles.weekChipTxtOn]}>LIVE</Text>
-            </TouchableOpacity>
-            {weekOptions.map((w) => (
-              <TouchableOpacity
-                key={w}
-                onPress={() => setWeekStart(w === weekStart ? null : w)}
-                style={[styles.weekChip, w === weekStart && styles.weekChipOn]}
-                testID={`team-week-${w}`}
-              >
-                <Text style={[styles.weekChipTxt, w === weekStart && styles.weekChipTxtOn]}>
-                  {(() => { const [, m, d] = w.split('-'); return `${Number(m)}/${Number(d)}`; })()}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          </TourAnchor>
         ) : null}
       </View>
 
@@ -479,6 +505,18 @@ export default function TeamScreen() {
       ) : null}
 
       <View style={styles.sortBar}>
+        {/* The tenure filter takes less room than the metric buttons (MJ:
+            it is used far less), so it is a dropdown beside them. */}
+        <TourAnchor id="team-filter">
+          <TouchableOpacity
+            style={[styles.filterBtn, tenureFilter !== 'all' && styles.filterBtnOn]}
+            onPress={() => setFilterOpen(true)}
+            testID="team-filter-button"
+          >
+            <Text style={[styles.filterTxt, tenureFilter !== 'all' && styles.filterTxtOn]}>{FILTER_LABEL[tenureFilter]}</Text>
+            <Ionicons name="chevron-down" size={11} color={tenureFilter !== 'all' ? '#000' : COLORS.textDim} />
+          </TouchableOpacity>
+        </TourAnchor>
         {/* ALP only on this tab (owner, from MJ, 2026-09-24): the value is
             Gross ALP, labelled ALP, and Net ALP appears nowhere here. Rank
             stays on Gross ALP, matching the Platinum Wall. */}
@@ -487,6 +525,24 @@ export default function TeamScreen() {
         {sortBtn('close_ratio', 'Close Ratio')}
         {sortBtn('avg_deal', 'Avg Deal')}
       </View>
+      <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
+        <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={() => setFilterOpen(false)}>
+          <View style={styles.menu}>
+            {(['all', 'rookie', 'veteran'] as const).map((k) => (
+              <TouchableOpacity
+                key={k}
+                style={styles.menuItem}
+                onPress={() => { setTenureFilter(k); setFilterOpen(false); }}
+                testID={`team-filter-${k}`}
+              >
+                <Text style={[styles.menuTxt, tenureFilter === k && { color: COLORS.gold }]}>{FILTER_LABEL[k]}</Text>
+                {tenureFilter === k ? <Ionicons name="checkmark" size={14} color={COLORS.gold} /> : null}
+              </TouchableOpacity>
+            ))}
+            <Text style={styles.menuNote}>Ranks stay the same on a filtered list.</Text>
+          </View>
+        </TouchableOpacity>
+      </Modal>
       <TourAnchor id="team-roster">
         <SearchBar value={query} onChange={setQuery} placeholder="Search name, office, title" testID="team-search" />
       </TourAnchor>
@@ -505,7 +561,7 @@ export default function TeamScreen() {
           error={rowsMatchScope && rows.length > 0 ? null : error}
           onRetry={fetchAll}
           isEmpty={visible.length === 0}
-          emptyText={q ? 'No matches for your search.' : 'No team data yet.'}
+          emptyText={q ? 'No matches for your search.' : tenureFilter !== 'all' ? `No ${FILTER_LABEL[tenureFilter].toLowerCase()} in this window.` : 'No team data yet.'}
           loadingText="Loading your team…"
           testID="team"
         >
@@ -521,22 +577,18 @@ export default function TeamScreen() {
                 {offices.length > 1 ? (
                   <Text style={styles.officeHead}>{office || 'UNASSIGNED'}</Text>
                 ) : null}
-                {BOARDS.map(({ key, label }) => {
-                  const group = inOffice.filter((r) => (r.leaderboard_group || 'unset') === key);
-                  if (group.length === 0) return null;
-                  const ranked = group.filter((r) => r.rank).length;
-                  return (
-                    <View key={key} style={styles.board}>
-                      <View style={styles.boardHead}>
-                        <Text style={styles.boardLabel}>{label}</Text>
-                        <Text style={styles.boardCount}>
-                          {ranked > 0 ? `${ranked} RANKED · ` : ''}{group.length}
-                        </Text>
-                      </View>
-                      {group.map(renderRow)}
-                    </View>
-                  );
-                })}
+                {/* One list, everyone ranked together on their own Gross ALP
+                    (owner, from MJ, 2026-09-24). A filtered list keeps each
+                    person's full-list number. */}
+                <View style={styles.board}>
+                  <View style={styles.boardHead}>
+                    <Text style={styles.boardLabel}>{FILTER_LABEL[tenureFilter]}</Text>
+                    <Text style={styles.boardCount}>
+                      {(() => { const ranked = inOffice.filter((r) => r.overall_rank).length; return ranked > 0 ? `${ranked} RANKED · ` : ''; })()}{inOffice.length}
+                    </Text>
+                  </View>
+                  {inOffice.map(renderRow)}
+                </View>
               </View>
             );
           })}
@@ -567,6 +619,18 @@ export default function TeamScreen() {
           });
           await fetchAll();
         }}
+      />
+      <TeamDateSheet
+        visible={dateOpen && !!salesDay}
+        salesDay={salesDay || ''}
+        value={dateWindow}
+        onChange={setDateWindow}
+        onClose={() => setDateOpen(false)}
+      />
+      <SetTenureSheet
+        target={tenureTarget}
+        onClose={() => setTenureTarget(null)}
+        onChanged={fetchAll}
       />
       <ChangeTierSheet
         target={tierTarget}
@@ -605,8 +669,30 @@ export default function TeamScreen() {
 }
 
 const styles = StyleSheet.create({
-  weekPicker: { gap: 6, paddingVertical: 8 },
   scopeRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  dateBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: 6, paddingHorizontal: 12, paddingVertical: 9,
+  },
+  dateBtnTxt: { flex: 1, color: '#fff', fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
+  filterBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: 4, backgroundColor: COLORS.surface,
+  },
+  filterBtnOn: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
+  filterTxt: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  filterTxtOn: { color: '#000' },
+  menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 32 },
+  menu: { backgroundColor: '#1A1A1A', borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, padding: 8 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12 },
+  menuTxt: { color: '#fff', fontWeight: '900', fontSize: 12, letterSpacing: 1 },
+  menuNote: { color: COLORS.textMuted, fontSize: 10, fontStyle: 'italic', paddingHorizontal: 12, paddingBottom: 6 },
+  leaderTag: { paddingHorizontal: 4, paddingVertical: 1, borderRadius: 2, borderWidth: 1, borderColor: COLORS.gold },
+  leaderTagTxt: { color: COLORS.gold, fontWeight: '900', fontSize: 8, letterSpacing: 0.8 },
+  tenureBadge: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 2, backgroundColor: 'rgba(255,215,0,0.15)', borderWidth: 1, borderColor: COLORS.gold },
+  tenureBadgeTxt: { color: COLORS.gold, fontWeight: '900', fontSize: 8, letterSpacing: 0.8 },
   officeHead: {
     color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 1.2,
     marginTop: 8, marginBottom: 10,

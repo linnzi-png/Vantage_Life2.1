@@ -349,9 +349,9 @@
           <div><div class="kicker">HIERARCHY VIEW · LIVE</div><div class="h1s">TEAM PRODUCTION</div></div>
           <div class="pill-btn" data-t="team-noms">🏅 NOMINATIONS <span style="background:#FF3B30;color:#fff;border-radius:8px;font-size:8.5px;padding:1px 5px">2</span></div>
         </div>
-        <div class="chips" data-t="team-weeks"><span class="chip live">LIVE</span><span class="chip num">8/5</span><span class="chip num">7/29</span><span class="chip num">7/22</span><span class="chip num">7/15</span><span class="chip num">7/8</span></div>
+        <div class="chips" data-t="team-weeks"><span class="chip live">📅 Month to date · Sep 1 – Sep 24 ▾</span></div>
         <div class="missing" data-t="team-missing"><span>⚠️</span><div><div class="k">MISSING TONIGHT · 3</div><small>A. Mulder, J. Marquez, T. Fields</small></div><div class="act">ENTER ALL ›</div></div>
-        <div class="sortbar"><span class="on">ALP</span><span>Sales</span><span>Close Ratio</span><span>Avg Deal</span></div>
+        <div class="sortbar"><span data-t="team-filter">ALL ▾</span><span class="on">ALP</span><span>Sales</span><span>Close Ratio</span><span>Avg Deal</span></div>
         <div class="search" data-t="team-roster">🔍 Search name, office, title</div>
         <div class="row"><div><b>Hussein Habhab</b><span class="rk">R</span><div class="meta">Detroit · Agent</div></div><div><div class="alp num">$2,150</div><div class="m2 num">1 sale · 100%</div></div></div>
         <div class="row"><div><b>Trey Munn</b><div class="meta">Gojcaj · Agent</div><span class="alert-chip">NO PULSE</span></div><div><div class="alp num">$1,433</div><div class="m2 num">1 sale · 50%</div></div></div>
@@ -593,7 +593,8 @@
 
     var TEAM = [
       st('team', 'team-roster', 'YOUR TEAM, LIVE', "Your full downline rolls up in the TEAM tab — ALP, sales, close ratio, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row for a contact card with that agent's 13-week production history."),
-      st('team', 'team-weeks', 'REWIND THE WEEK', 'These chips pin any past reporting week — LIVE is now; tap a date to see the board exactly as that week closed. A pinned week is a static snapshot; tap LIVE to come back.'),
+      st('team', 'team-weeks', 'PICK YOUR DATES', 'The board opens on month to date. Tap the date button for a calendar: tap one day for that day, or two days for any range — a reporting week, a whole past month, whatever you need. It goes back to month to date every time you open the tab.'),
+      st('team', 'team-filter', 'ONE LIST, EVERYONE RANKED', 'Everyone is ranked together on their own ALP — rookies, veterans and leaders alike, a leader on what they sold themselves. The dropdown narrows the list to Rookies or Veterans, and everyone keeps their full-list rank number, so a rookies list can read 8, 9, 12.'),
       st('team', 'team-missing', 'MISSING TONIGHT', "Agents who haven't submitted their Pulse show up in the MISSING TONIGHT card. Tap ENTER ALL to walk their entries back-to-back — as their upline you can submit for anyone on your team, up to 7 sales days back."),
       st('team', 'team-noms', 'NOMINATIONS INBOX', 'Platinum Rule nominations from your team land behind this button — the badge counts the ones that have hit the endorsement threshold.'),
       st('nominations', 'noms-header', 'ENDORSE THE WORTHY', 'Read each nomination and ENDORSE the ones that deserve the wall. Three leadership endorsements flag a nomination as ready.')

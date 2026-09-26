@@ -22,7 +22,10 @@ import { Role } from './auth';
 // office rollup, new for that tier. A separate number from v5 on purpose:
 // v5 is already on main and may have reached devices, and a tour only
 // re-shows when the version it last recorded is older than this one.
-export const TOUR_VERSION = 6;
+// v7: Team tab redesign (owner, 2026-09-24) — one ranked list with the
+// All / Rookies / Veterans dropdown, and a date button (month to date or
+// any range) in place of the period selector and week chips.
+export const TOUR_VERSION = 7;
 
 export type TourAnchorId =
   | 'dash-header'
@@ -36,6 +39,7 @@ export type TourAnchorId =
   | 'shoutouts-nominate'
   | 'team-roster'
   | 'team-weeks'
+  | 'team-filter'
   | 'team-missing'
   | 'team-nominations'
   | 'noms-header'
@@ -218,14 +222,23 @@ const basicsBrief = (welcomeBody: string, includeUpline: boolean): TourStep[] =>
   },
 ];
 
-// Shared verbatim across TEAM_STEPS and AGENT_TEAM_STEPS — the week picker
-// works identically for every tier, so the copy needs no manager framing.
+// Shared verbatim across TEAM_STEPS and AGENT_TEAM_STEPS — the date button
+// and the filter work identically for every tier, so the copy needs no
+// manager framing.
 const teamWeeksStep: TourStep = {
   id: 'team-weeks',
   screen: '/team',
   anchor: 'team-weeks',
-  title: 'REWIND THE WEEK',
-  body: 'These chips pin any past reporting week — LIVE is now; tap a date to see the board exactly as that week closed. A pinned week is a static snapshot; tap LIVE to come back.',
+  title: 'PICK YOUR DATES',
+  body: 'The board opens on month to date. Tap the date button for a calendar: tap one day for that day, or two days for any range — a reporting week, a whole past month, whatever you need. It goes back to month to date every time you open the tab.',
+};
+
+const teamFilterStep: TourStep = {
+  id: 'team-filter',
+  screen: '/team',
+  anchor: 'team-filter',
+  title: 'ONE LIST, EVERYONE RANKED',
+  body: 'Everyone is ranked together on their own ALP — rookies, veterans and leaders alike, a leader on what they sold themselves. The dropdown narrows the list to Rookies or Veterans, and everyone keeps their full-list rank number, so a rookies list can read 8, 9, 12.',
 };
 
 const TEAM_STEPS: TourStep[] = [
@@ -237,6 +250,7 @@ const TEAM_STEPS: TourStep[] = [
     body: "Your full downline rolls up in the TEAM tab — ALP, sales, close ratio, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row to open their contact card and reach out — call, text, or email, straight from the app. Bringing someone new onto your team directly? Tap ADD, top right.",
   },
   teamWeeksStep,
+  teamFilterStep,
   {
     id: 'missing-tonight',
     screen: '/team',
@@ -273,9 +287,10 @@ const AGENT_TEAM_STEPS: TourStep[] = [
     screen: '/team',
     anchor: 'team-roster',
     title: 'YOUR TEAM, LIVE',
-    body: "Your SA team rolls up here — you, your teammates and the SA or GA who runs the team, with ALP, sales, and close ratio, live. Sort by any column, search by name or title, and tap a row for a contact card with that person's 13-week production history and any single day's numbers. Your uplines above the team are listed as contacts to reach, not numbers to read. You still enter your own Nightly Numbers only, back on the PULSE tab.",
+    body: "Your SA team rolls up here — you, your teammates and the SA or GA who runs the team, with ALP, sales, and close ratio, live. Sort by any column, search by name or title, and tap a row for a contact card with that person's 13-week production history and any day or range of days. Your uplines above the team are listed as contacts to reach, not numbers to read. You still enter your own Nightly Numbers only, back on the PULSE tab.",
   },
   teamWeeksStep,
+  teamFilterStep,
 ];
 
 const MGA_STEPS: TourStep[] = [
