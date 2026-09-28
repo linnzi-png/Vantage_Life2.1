@@ -40,12 +40,15 @@ function parts(day: string): { y: number; m: number; d: number } {
   return { y, m, d };
 }
 function daysInMonth(y: number, m: number): number { return new Date(y, m, 0).getDate(); }
+/** Never indexes MONTHS with something that is not 1..12 — a bad day string
+ *  must degrade to a blank label, not take the screen down. */
+function monthName(m: number): string { return MONTHS[m - 1] ?? ''; }
 
 /** "Sep 1 – Sep 24", "Sep 16", or "Month to date · Sep 1 – Sep 24" for the button label. */
 export function describeWindow(value: DateWindow, salesDay: string, echoedStart?: string | null): string {
   const short = (day: string) => {
     const { m, d } = parts(day);
-    return `${MONTHS[m - 1].slice(0, 3)} ${d}`;
+    return `${monthName(m).slice(0, 3)} ${d}`;
   };
   if (value.mode === 'mtd') {
     const start = echoedStart || `${salesDay.slice(0, 7)}-01`;
@@ -56,7 +59,18 @@ export function describeWindow(value: DateWindow, salesDay: string, echoedStart?
 
 export function TeamDateSheet({ visible, salesDay, value, allowMonthToDate = true, onChange, onClose }: Props) {
   const today = parts(salesDay);
-  const [view, setView] = useState<{ y: number; m: number }>({ y: today.y, m: today.m });
+  // The month on screen is DERIVED from the props on every render — the
+  // month the current selection ends in, else the sales day's — and the
+  // arrows only store an override on top of that. It used to be seeded into
+  // state once at mount, when the Team tab and the agent card render this
+  // sheet before /api/team or /api/agents/{id}/day has answered and salesDay
+  // is still ''. That seed was { NaN, NaN }, the effect below corrected it
+  // only AFTER the first visible render, and that first render indexed
+  // MONTHS[NaN] and threw — the "toUpperCase of undefined" crash agents hit
+  // the first time they opened the calendar on a producer (2026-09-28).
+  const anchor = parts(value.mode === 'range' ? value.end : salesDay);
+  const [viewOverride, setViewOverride] = useState<{ y: number; m: number } | null>(null);
+  const view = viewOverride ?? { y: anchor.y, m: anchor.m };
   // The two taps in progress. `end` is null between the first tap and the second.
   const [start, setStart] = useState<string | null>(null);
   const [end, setEnd] = useState<string | null>(null);
@@ -64,10 +78,9 @@ export function TeamDateSheet({ visible, salesDay, value, allowMonthToDate = tru
   // Each open starts from the current selection and the month it ends in.
   useEffect(() => {
     if (!visible) return;
-    const anchor = parts(value.mode === 'range' ? value.end : salesDay);
     // Seeding local edit state from props when the sheet opens, not deriving it.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setView({ y: anchor.y, m: anchor.m });
+    setViewOverride(null);
     setStart(value.mode === 'range' ? value.start : null);
     setEnd(value.mode === 'range' ? value.end : null);
   }, [visible, value, salesDay]);
@@ -82,7 +95,7 @@ export function TeamDateSheet({ visible, salesDay, value, allowMonthToDate = tru
     for (let d = 1; d <= count; d += 1) out.push(ymd(view.y, view.m, d));
     while (out.length % 7 !== 0) out.push(null);
     return out;
-  }, [view]);
+  }, [view.y, view.m]);
 
   const tap = (day: string) => {
     if (day > salesDay) return;
@@ -102,8 +115,8 @@ export function TeamDateSheet({ visible, salesDay, value, allowMonthToDate = tru
     return day >= start && day <= hi;
   };
 
-  const prevMonth = () => setView((v) => (v.m === 1 ? { y: v.y - 1, m: 12 } : { y: v.y, m: v.m - 1 }));
-  const nextMonth = () => { if (!atCurrentMonth) setView((v) => (v.m === 12 ? { y: v.y + 1, m: 1 } : { y: v.y, m: v.m + 1 })); };
+  const prevMonth = () => setViewOverride(view.m === 1 ? { y: view.y - 1, m: 12 } : { y: view.y, m: view.m - 1 });
+  const nextMonth = () => { if (!atCurrentMonth) setViewOverride(view.m === 12 ? { y: view.y + 1, m: 1 } : { y: view.y, m: view.m + 1 }); };
 
   const apply = () => {
     if (!start) return;
@@ -145,7 +158,7 @@ export function TeamDateSheet({ visible, salesDay, value, allowMonthToDate = tru
             <TouchableOpacity onPress={prevMonth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} testID="team-date-prev">
               <Ionicons name="chevron-back" size={20} color={COLORS.textDim} />
             </TouchableOpacity>
-            <Text style={styles.monthTxt}>{MONTHS[view.m - 1].toUpperCase()} {view.y}</Text>
+            <Text style={styles.monthTxt}>{monthName(view.m).toUpperCase()} {view.y}</Text>
             <TouchableOpacity
               onPress={nextMonth}
               disabled={atCurrentMonth}
