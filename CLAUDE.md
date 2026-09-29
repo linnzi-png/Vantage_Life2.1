@@ -322,8 +322,26 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 - Dev (backend + frontend web): `npm run dev`
 - Build (Expo web export): `npm run build`
 - Type check: `npm run typecheck` (must pass before every commit)
-- Tests: `npm test` (pytest over `backend/tests/`)
+- Tests: `npm test` runs both suites — `npm run test:backend` (pytest over `backend/tests/`) and `npm run test:frontend` (Jest over `frontend/src/**/__tests__/`, see below)
 - Deploy: Railway deploys the backend from main; Vercel builds the web export
+
+## Frontend tests (Jest, added 2026-09-29)
+`frontend/src/**/__tests__/*.test.tsx`, run by `yarn --cwd frontend test`
+(preset `jest-expo`, `@testing-library/react-native` v14 — `render`,
+`rerender` and `fireEvent.*` are async, so `await` them; query through
+`screen`, not the render result). `frontend/jest.globalSetup.js` forces
+`NODE_ENV=test` and sets `EXPO_PUBLIC_BACKEND_URL` before any worker starts
+(a shell with `NODE_ENV=production` otherwise loads React's production
+build, which has no `act`, and makes `yarn install` skip devDependencies —
+use `yarn add -D` there); `frontend/jest.setup.ts` mocks AsyncStorage,
+expo-router and push registration once for every file; mock `api` per test with
+`jest.mock('../../lib/auth', …)` as `AgentDayDetail.test.tsx` does, never
+let a test reach the network. Why this exists: the date sheet took the Team
+tab down twice in one week (#165, #166) on a sequence typecheck cannot see —
+mounted hidden before the server's sales day arrived, then opened. Any
+component that is mounted before its data arrives (a sheet, a modal, a
+picker) gets a test that mounts it empty, supplies the data, then opens it.
+The suite runs under `npm test` and must pass before every commit.
 
 ## Coding Conventions
 - TypeScript strict mode in the frontend. No `any` types. No type assertions.
@@ -349,7 +367,7 @@ dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 
 ## AI Agent Notes
 - Ask before modifying any business logic or calculation
-- Run `npm run typecheck` and `npm test` after every non-trivial change; stop if they fail
+- Run `npm run typecheck` and `npm test` (backend pytest + frontend Jest) after every non-trivial change; stop if they fail. A new sheet, modal or picker gets a mount-empty-then-open test (see Frontend tests)
 - Read existing patterns in `backend/server.py` and `frontend/src/lib/` before proposing new architecture
 - Create feature branches for all work; never commit directly to main
 - When uncertain about tier permissions, enforce more restrictive access
