@@ -8,6 +8,7 @@ import { AuthProvider } from '../src/lib/auth';
 import { TourProvider } from '../src/lib/tour';
 import { TourOverlay } from '../src/components/TourOverlay';
 import NotificationNagOverlay from '../src/components/NotificationNagOverlay';
+import SmsConsentCard from '../src/components/SmsConsentCard';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { useDisplayFonts } from '../src/lib/fonts';
 
@@ -64,6 +65,7 @@ export default function RootLayout() {
               <Stack.Screen name="admin" options={{ title: 'Admin Panel' }} />
             </Stack>
             <TourOverlay />
+            <SmsConsentCard />
             <NotificationNagOverlay />
           </TourProvider>
           </ErrorBoundary>

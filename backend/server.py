@@ -5201,6 +5201,60 @@ async def me_set_licensed_states(payload: LicensedStatesIn, user: Dict[str, Any]
     return await _write_licensed_states(target, codes, user, "set_licensed_states_self")
 
 
+# ---- Text-message consent (owner, 2026-09-24; batch 2, PR 0) ----------------
+#
+# Brevo's toll-free registration and the TCPA both want an explicit, recorded
+# opt-in before any marketing-style text goes out. The record lives on the
+# agent profile as sms_consent = {status, changed_at, source}: status is
+# "opted_in" or "opted_out", and a profile with no record at all (None) has
+# never been asked — the client shows the one-time consent card in that case
+# and never again once either answer is stored. source says which control
+# recorded it, for the audit trail. Every text sender (PR C) reads only
+# status == "opted_in"; None and "opted_out" never receive a message.
+
+SMS_CONSENT_SOURCES = ("onboarding_card", "more_tab", "admin")
+
+
+class SmsConsentIn(BaseModel):
+    opted_in: bool
+    source: str = "more_tab"
+
+
+@api_router.post("/me/sms-consent")
+async def me_set_sms_consent(payload: SmsConsentIn, user: Dict[str, Any] = Depends(require_agent)):
+    """Records the signed-in person's own answer to "may we text you". Self
+    only, and only for someone with a profile (a phone number to consent
+    for): finance_admin and pending accounts are turned away by require_agent."""
+    if payload.source not in SMS_CONSENT_SOURCES:
+        raise HTTPException(status_code=400, detail="Unknown consent source")
+    target = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    consent = {
+        "status": "opted_in" if payload.opted_in else "opted_out",
+        "changed_at": now_utc(),
+        "source": payload.source,
+    }
+    await db.agent_profiles.update_one(
+        {"agent_id": target["agent_id"]},
+        {"$set": {"sms_consent": consent, "updated_at": now_utc()}},
+    )
+    previous = target.get("sms_consent") or None
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now_utc(),
+        "action": "sms_consent",
+        "agent_id": target["agent_id"],
+        "agent_name": target.get("name"),
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "original_value": previous.get("status") if previous else None,
+        "new_value": consent["status"],
+        "source": payload.source,
+    })
+    return {"ok": True, "sms_consent": consent}
+
+
 @api_router.post("/team/set-licensed-states")
 async def team_set_licensed_states(payload: TeamLicensedStatesIn, user: Dict[str, Any] = Depends(get_current_user)):
     """A leader records licensed states for someone in their hierarchy (owner,

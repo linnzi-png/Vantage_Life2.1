@@ -1,10 +1,10 @@
 // More tab: profile, manager, audit, vault, logout
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useAuth, COLORS, levelNum, adminActive, Role, api } from '../../src/lib/auth';
+import { useAuth, COLORS, levelNum, adminActive, Role, api, SmsConsent } from '../../src/lib/auth';
 import { LicensedStatesSheet } from '../../src/components/LicensedStatesSheet';
 import { formatLicensedStates } from '../../src/lib/licensedStates';
 import { useTour } from '../../src/lib/tour';
@@ -25,6 +25,27 @@ export default function MoreScreen() {
   // Licensed states (owner, 2026-09-24): the one place a person sets their
   // own list. Leaders set a downline member's from the Team tab card.
   const [statesOpen, setStatesOpen] = React.useState(false);
+  // Text-message consent (owner, 2026-09-24; batch 2). The switch edits the
+  // answer the one-time card recorded; the server is the source of truth so
+  // a second device shows the same state after a fresh sign-in.
+  const [smsSaving, setSmsSaving] = React.useState(false);
+  const smsOptedIn = agent?.sms_consent?.status === 'opted_in';
+  const onToggleSms = async (next: boolean) => {
+    if (smsSaving) return;
+    setSmsSaving(true);
+    try {
+      await api<{ ok: boolean; sms_consent: SmsConsent }>('/api/me/sms-consent', {
+        method: 'POST',
+        body: JSON.stringify({ opted_in: next, source: 'more_tab' }),
+      });
+      await reload();
+      notify(next ? 'Text updates on' : 'Text updates off');
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'Could not update text messages. Try again.');
+    } finally {
+      setSmsSaving(false);
+    }
+  };
   const { start: startTour } = useTour();
   const lvl = levelNum(user?.role);
   const [switching, setSwitching] = React.useState(false);
@@ -142,6 +163,37 @@ export default function MoreScreen() {
                 ios_backgroundColor={COLORS.surface2}
                 accessibilityLabel={viewSwitchIsTeam ? 'Company-wide view' : 'In-house admin mode'}
                 testID="view-mode-switch"
+              />
+            </View>
+          </>
+        ) : null}
+
+        {agent ? (
+          <>
+            <Text style={styles.kicker}>TEXT MESSAGE UPDATES</Text>
+            <View style={[styles.viewCard, smsSaving && styles.itemBusy]} testID="sms-consent-card-more">
+              <View style={{ flex: 1 }}>
+                <Text style={styles.viewTitle}>Get updates by text</Text>
+                <Text style={styles.viewNote}>
+                  {`Feature announcements and important updates from VantageLife, sent to ${agent.phone || 'the phone number on your profile'}. Message and data rates may apply. Turn this off at any time to stop all texts.`}
+                </Text>
+                <Text style={styles.viewNote}>
+                  Texts are sent by HyperVivid Studios on behalf of AO Premier. See the{' '}
+                  <Text style={styles.link} onPress={() => Linking.openURL('https://www.aovantagelife.com/privacy-policy')}>
+                    Privacy Policy
+                  </Text>
+                  .
+                </Text>
+              </View>
+              <Switch
+                value={smsOptedIn}
+                onValueChange={onToggleSms}
+                disabled={smsSaving}
+                trackColor={{ false: COLORS.surface2, true: COLORS.primary }}
+                thumbColor="#fff"
+                ios_backgroundColor={COLORS.surface2}
+                accessibilityLabel="Get updates by text"
+                testID="sms-consent-switch"
               />
             </View>
           </>
@@ -297,6 +349,7 @@ const styles = StyleSheet.create({
   },
   viewTitle: { color: '#fff', fontWeight: '900', fontSize: 14 },
   viewNote: { color: COLORS.textDim, fontSize: 11, marginTop: 4, lineHeight: 15 },
+  link: { color: COLORS.primary, textDecorationLine: 'underline' },
   switchNote: { color: COLORS.textDim, fontSize: 11, marginBottom: 10 },
   switchRow: { flexDirection: 'row', gap: 6 },
   switchBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface2 },

@@ -90,6 +90,10 @@ export interface AppAgent {
   office: string;
   role: Role;
   io_role?: string;
+  // The profile's phone, as stored (mixed formats); /api/auth/me returns
+  // the whole profile so this rides along. Shown on the More tab's text
+  // updates section so the person knows where texts would go.
+  phone?: string;
   is_rookie?: boolean;
   ga_id?: string | null;
   // Set on team members who are not producing agents (app developer, office
@@ -99,6 +103,17 @@ export interface AppAgent {
   // States they are licensed to sell in (owner, 2026-09-24); set from the
   // More tab (self) or a leader's Team tab card. Absent = never recorded.
   licensed_states?: string[];
+  // Text-message consent (owner, 2026-09-24; batch 2). Absent or null means
+  // the person has never been asked, which is what makes the one-time
+  // consent card show. Either answer records a status and the card never
+  // returns; the More tab's switch edits it afterwards.
+  sms_consent?: SmsConsent | null;
+}
+
+export interface SmsConsent {
+  status: 'opted_in' | 'opted_out';
+  changed_at: string;
+  source: 'onboarding_card' | 'more_tab' | 'admin';
 }
 
 /**
