@@ -114,6 +114,8 @@ export interface SmsConsent {
   status: 'opted_in' | 'opted_out';
   changed_at: string;
   source: 'onboarding_card' | 'more_tab' | 'admin';
+  /** The number the person opted in at; null on an opt-out. */
+  phone?: string | null;
 }
 
 /**

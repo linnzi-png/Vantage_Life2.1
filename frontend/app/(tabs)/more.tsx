@@ -30,6 +30,7 @@ export default function MoreScreen() {
   // a second device shows the same state after a fresh sign-in.
   const [smsSaving, setSmsSaving] = React.useState(false);
   const smsOptedIn = agent?.sms_consent?.status === 'opted_in';
+  const smsHasPhone = !!agent?.phone?.trim();
   const onToggleSms = async (next: boolean) => {
     if (smsSaving) return;
     setSmsSaving(true);
@@ -175,7 +176,9 @@ export default function MoreScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.viewTitle}>Get updates by text</Text>
                 <Text style={styles.viewNote}>
-                  {`Feature announcements and important updates from VantageLife, sent to ${agent.phone || 'the phone number on your profile'}. Message and data rates may apply. Turn this off at any time to stop all texts.`}
+                  {smsHasPhone
+                    ? `Feature announcements and important updates from VantageLife, sent to ${agent.phone}. Message and data rates may apply. Turn this off at any time to stop all texts.`
+                    : 'There is no phone number on your profile yet. Ask your upline to add one, then you can turn on text updates here.'}
                 </Text>
                 <Text style={styles.viewNote}>
                   Texts are sent by HyperVivid Studios on behalf of AO Premier. See the{' '}
@@ -188,7 +191,7 @@ export default function MoreScreen() {
               <Switch
                 value={smsOptedIn}
                 onValueChange={onToggleSms}
-                disabled={smsSaving}
+                disabled={smsSaving || !smsHasPhone}
                 trackColor={{ false: COLORS.surface2, true: COLORS.primary }}
                 thumbColor="#fff"
                 ios_backgroundColor={COLORS.surface2}

@@ -5209,8 +5209,10 @@ async def me_set_licensed_states(payload: LicensedStatesIn, user: Dict[str, Any]
 # "opted_in" or "opted_out", and a profile with no record at all (None) has
 # never been asked — the client shows the one-time consent card in that case
 # and never again once either answer is stored. source says which control
-# recorded it, for the audit trail. Every text sender (PR C) reads only
-# status == "opted_in"; None and "opted_out" never receive a message.
+# recorded it, for the audit trail; phone is the number the person opted in
+# at. Every text sender (PR C) reads only status == "opted_in" and only sends
+# to a profile whose current phone still equals consent.phone; None and
+# "opted_out" never receive a message.
 
 SMS_CONSENT_SOURCES = ("onboarding_card", "more_tab", "admin")
 
@@ -5230,10 +5232,19 @@ async def me_set_sms_consent(payload: SmsConsentIn, user: Dict[str, Any] = Depen
     target = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
     if not target:
         raise HTTPException(status_code=404, detail="Agent not found")
+    # Consent is to texts at a particular number. A profile with no phone
+    # (team-member creation defaults it to "") has nothing to consent to, so
+    # an opt-in is refused rather than recorded against a number that may be
+    # filled in later without the person ever seeing it; the number consented
+    # to is stored on the record so a sender can tell if it has changed since.
+    phone = str(target.get("phone") or "").strip()
+    if payload.opted_in and not phone:
+        raise HTTPException(status_code=400, detail="Add a phone number to your profile before turning on text updates")
     consent = {
         "status": "opted_in" if payload.opted_in else "opted_out",
         "changed_at": now_utc(),
         "source": payload.source,
+        "phone": phone if payload.opted_in else None,
     }
     await db.agent_profiles.update_one(
         {"agent_id": target["agent_id"]},

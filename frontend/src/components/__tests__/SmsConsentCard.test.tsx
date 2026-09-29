@@ -21,7 +21,7 @@ const mockedUseTour = jest.mocked(useTour);
 type AuthShape = ReturnType<typeof useAuth>;
 type TourShape = ReturnType<typeof useTour>;
 
-const agentBase = { agent_id: 'AG_1', name: 'Ag One', office: 'MI RGA', role: 'level_1' as const };
+const agentBase = { agent_id: 'AG_1', name: 'Ag One', office: 'MI RGA', role: 'level_1' as const, phone: '(734) 555-0100' };
 
 function authState(over: Partial<AuthShape>): AuthShape {
   const base = {
@@ -38,8 +38,8 @@ function authState(over: Partial<AuthShape>): AuthShape {
   return { ...base, ...over } as unknown as AuthShape;
 }
 
-function tourState(active: boolean): TourShape {
-  return { active } as unknown as TourShape;
+function tourState(active: boolean, deciding = false): TourShape {
+  return { active, deciding } as unknown as TourShape;
 }
 
 beforeEach(() => {
@@ -70,6 +70,43 @@ describe('SmsConsentCard', () => {
     }));
     await screen.rerender(<SmsConsentCard />);
     expect(screen.queryByTestId('sms-consent-card')).toBeNull();
+  });
+
+  it('stays hidden when the profile has no phone number', async () => {
+    mockedUseAuth.mockReturnValue(authState({ agent: { ...agentBase, phone: '' } }));
+    await render(<SmsConsentCard />);
+    expect(screen.queryByTestId('sms-consent-card')).toBeNull();
+  });
+
+  it('waits while the walkthrough is still deciding whether to launch (first sign-in)', async () => {
+    mockedUseAuth.mockReturnValue(authState({}));
+    mockedUseTour.mockReturnValue(tourState(false, true));
+    await render(<SmsConsentCard />);
+    expect(screen.queryByTestId('sms-consent-card')).toBeNull();
+
+    // The tour decided to run: still hidden.
+    mockedUseTour.mockReturnValue(tourState(true, false));
+    await screen.rerender(<SmsConsentCard />);
+    expect(screen.queryByTestId('sms-consent-card')).toBeNull();
+  });
+
+  it('shows again for a different person who signs in on the same running app', async () => {
+    const reload = jest.fn(async () => {});
+    mockedUseAuth.mockReturnValue(authState({ reload }));
+    mockedApi.mockResolvedValueOnce({ ok: true, sms_consent: { status: 'opted_in', changed_at: 'x', source: 'onboarding_card', phone: '(734) 555-0100' } });
+    await render(<SmsConsentCard />);
+    await fireEvent.press(screen.getByTestId('sms-consent-yes'));
+    await waitFor(() => expect(screen.queryByTestId('sms-consent-card')).toBeNull());
+
+    // Sign-out, then a second person with no recorded answer signs in.
+    mockedUseAuth.mockReturnValue(authState({ user: null as never, agent: null }));
+    await screen.rerender(<SmsConsentCard />);
+    mockedUseAuth.mockReturnValue(authState({
+      user: { user_id: 'u2', role: 'level_1', agent_id: 'AG_2' } as never,
+      agent: { ...agentBase, agent_id: 'AG_2', name: 'Ag Two' },
+    }));
+    await screen.rerender(<SmsConsentCard />);
+    expect(screen.getByTestId('sms-consent-card')).toBeTruthy();
   });
 
   it('waits while the guided walkthrough is on screen and appears once it ends', async () => {

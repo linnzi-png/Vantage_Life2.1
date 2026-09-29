@@ -41,6 +41,12 @@ async function markTourDone(userId: string, role: Role): Promise<void> {
 
 interface TourCtx {
   active: boolean;
+  /** True from the moment the auto-launch effect starts asking whether this
+   *  person's tour is done until it either starts the tour or decides not
+   *  to. Other first-open overlays (the text-message consent card, What's
+   *  New) wait on this so they never flash up and get replaced by the tour
+   *  a moment later — the tour goes first on a first sign-in. */
+  deciding: boolean;
   steps: TourStep[];
   index: number;
   start: (role: Role) => void; // auto-launch and manual replay; ignores the done flag
@@ -65,6 +71,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   const [active, setActive] = useState(false);
+  const [deciding, setDeciding] = useState(false);
   const [steps, setSteps] = useState<TourStep[]>([]);
   const [index, setIndex] = useState(0);
   // Who the running tour belongs to — skip/finish persist against these even
@@ -154,10 +161,13 @@ export function TourProvider({ children }: { children: ReactNode }) {
     if (doneCache.current.has(tourKey(user_id, role))) return;
     let stale = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // Flagging the decision as in progress for the other overlays.
+    setDeciding(true);
     isTourDone(user_id, role).then((done) => {
-      if (stale || done) return;
+      if (stale) return;
+      if (done) { setDeciding(false); return; }
       // Let the dashboard paint before the overlay fades in.
-      timer = setTimeout(() => start(role), 600);
+      timer = setTimeout(() => { start(role); setDeciding(false); }, 600);
     });
     return () => {
       stale = true;
@@ -167,7 +177,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
 
   return (
     <TourContext.Provider
-      value={{ active, steps, index, start, next, back, skip, finish, cancel, registerAnchor, getAnchor }}
+      value={{ active, deciding, steps, index, start, next, back, skip, finish, cancel, registerAnchor, getAnchor }}
     >
       {children}
     </TourContext.Provider>
