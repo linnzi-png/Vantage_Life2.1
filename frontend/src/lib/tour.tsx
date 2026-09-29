@@ -8,29 +8,34 @@ import { router, usePathname } from 'expo-router';
 import { Role, useAuth } from './auth';
 import { TourAnchorId, TourStep, TOUR_VERSION, stepsForRole } from './tourSteps';
 
-// Keyed per user AND per role: signOut() leaves non-session keys behind on a
-// shared device, and a promotion (or the VIEW AS TIER switcher) should
-// re-trigger the higher tier's tour.
+// Once per person, ever (owner, 2026-09-24; batch 2, PR A). The record is
+// user.tour_completed_at on the server; the device flag below is only an
+// offline / in-flight guard so the tour cannot re-fire between skip() and
+// the server acknowledging it, and a migration source for phones that
+// finished the tour before the server knew about it. TOUR_VERSION is a
+// content version for the More-tab replay and the public /tour page; it no
+// longer drives the auto-launch.
+//
+// Why the old scheme re-launched the tour: the flag was keyed per user AND
+// per role and stamped with TOUR_VERSION, so every tour revision, every
+// role change (the 9/22 level_sa migration, the VIEW AS TIER switcher), a
+// reinstall and a second device all counted as "never seen".
 const tourKey = (userId: string, role: Role) => `vl_tour_done_${userId}_${role}`;
+const ROLES_EVER: Role[] = ['pending', 'level_1', 'level_sa', 'level_2', 'level_3', 'level_4', 'finance_admin'];
 
-function isRecord(x: unknown): x is Record<string, unknown> {
-  return typeof x === 'object' && x !== null;
-}
-
-async function isTourDone(userId: string, role: Role): Promise<boolean> {
+async function hasLocalDoneFlag(userId: string): Promise<boolean> {
+  // Any version, any role: the person has been through it once on this
+  // device, which is all the server needs to know.
   try {
-    const raw = await AsyncStorage.getItem(tourKey(userId, role));
-    if (!raw) return false;
-    const parsed: unknown = JSON.parse(raw);
-    // A flag from an older TOUR_VERSION counts as not-done so revised tours
-    // re-show once.
-    return isRecord(parsed) && typeof parsed.v === 'number' && parsed.v >= TOUR_VERSION;
+    const keys = ROLES_EVER.map((r) => tourKey(userId, r));
+    const pairs = await AsyncStorage.multiGet(keys);
+    return pairs.some(([, v]) => !!v);
   } catch {
     return false;
   }
 }
 
-async function markTourDone(userId: string, role: Role): Promise<void> {
+async function markLocalDone(userId: string, role: Role): Promise<void> {
   try {
     await AsyncStorage.setItem(
       tourKey(userId, role),
@@ -67,7 +72,7 @@ const TAB_PATHS = ['/', '/pulse', '/shoutouts', '/team', '/more'];
 const FINANCE_ADMIN_HOME = '/admin';
 
 export function TourProvider({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, markTourCompleted } = useAuth();
   const pathname = usePathname();
 
   const [active, setActive] = useState(false);
@@ -114,9 +119,14 @@ export function TourProvider({ children }: { children: ReactNode }) {
   const persistDone = useCallback(() => {
     const owner = tourOwner.current;
     if (!owner) return;
-    doneCache.current.add(tourKey(owner.userId, owner.role));
-    markTourDone(owner.userId, owner.role);
-  }, []);
+    doneCache.current.add(owner.userId);
+    markLocalDone(owner.userId, owner.role);
+    markTourCompleted().catch(() => {
+      // Offline or the server is down: the local flag above keeps the tour
+      // from re-firing on this device, and the next successful sign-in
+      // replays the migration below and stamps the server then.
+    });
+  }, [markTourCompleted]);
 
   const skip = useCallback(() => {
     persistDone();
@@ -146,26 +156,38 @@ export function TourProvider({ children }: { children: ReactNode }) {
     }
   }, [identity, active, cancel]);
 
-  // First-session auto-launch. Guards: a linked, non-pending agent (never
-  // levelNum alone — levelNum('pending') is 1) sitting on a tab route.
-  // finance_admin is the one exception: it carries no agent_id (no
+  // First-sign-in auto-launch: the one condition is that the server has no
+  // tour_completed_at for this person. Guards: a linked, non-pending agent
+  // (never levelNum alone — levelNum('pending') is 1) sitting on a tab
+  // route. finance_admin is the one exception: it carries no agent_id (no
   // production identity) and its "home" is /admin, not a tab route.
+  //
+  // Migration (one-time, per device): a phone that completed the tour under
+  // the old device-only scheme has a local flag but no server stamp. Rather
+  // than show those people the tour again after this update, the flag is
+  // reported to the server and the launch skipped.
   useEffect(() => {
     if (loading || active) return;
     if (!user || user.role === 'pending') return;
+    if (user.tour_completed_at) return;
     const isFinanceAdmin = user.role === 'finance_admin';
     if (!isFinanceAdmin && !user.agent_id) return;
     const onHome = isFinanceAdmin ? pathname === FINANCE_ADMIN_HOME : TAB_PATHS.includes(pathname);
     if (!onHome) return;
     const { user_id, role } = user;
-    if (doneCache.current.has(tourKey(user_id, role))) return;
+    if (doneCache.current.has(user_id)) return;
     let stale = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     // Flagging the decision as in progress for the other overlays.
     setDeciding(true);
-    isTourDone(user_id, role).then((done) => {
+    hasLocalDoneFlag(user_id).then((seenBefore) => {
       if (stale) return;
-      if (done) { setDeciding(false); return; }
+      if (seenBefore) {
+        doneCache.current.add(user_id);
+        markTourCompleted().catch(() => {});
+        setDeciding(false);
+        return;
+      }
       // Let the dashboard paint before the overlay fades in.
       timer = setTimeout(() => { start(role); setDeciding(false); }, 600);
     });
@@ -173,7 +195,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
       stale = true;
       if (timer) clearTimeout(timer);
     };
-  }, [loading, active, user, pathname, start]);
+  }, [loading, active, user, pathname, start, markTourCompleted]);
 
   return (
     <TourContext.Provider
