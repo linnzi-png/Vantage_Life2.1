@@ -447,6 +447,7 @@
         </div>
         <div class="sect" style="margin-top:4px">HELP</div>
         <div class="list" data-t="more-walkthrough"><div class="item"><i>🛟</i>App Walkthrough<span class="chev">›</span></div></div>
+        <div class="list" data-t="more-whats-new"><div class="item"><i>✨</i>What's New<span class="chev">›</span></div></div>
         <div class="sect" style="margin-top:4px">ACCOUNT</div>
         <div class="list"><div class="item" style="color:var(--red)"><i style="color:var(--red)">⏻</i>Sign Out<span class="chev">›</span></div></div>
       </div>
@@ -616,12 +617,13 @@
       st('more', 'more-walkthrough', 'REPLAY ANYTIME', "That's the full command deck. Replay this walkthrough anytime from right here.")
     ];
 
+    var WHATS_NEW = st('more', 'more-whats-new', "WHAT'S NEW", "When the app gains a feature, a WHAT'S NEW card walks you through it the next time you open the app — once. Missed it or want it again? Every past announcement is here.");
     var OUTRO = st('dashboard', null, "YOU'RE READY", 'Log your Pulse tonight, watch the wall, and get on the ticker. In the app, replay this walkthrough anytime from MORE → HELP → App Walkthrough.');
 
-    if (role === 'agent') return BASICS_FULL.concat([OUTRO]);
-    if (role === 'ga')    return BASICS_BRIEF.concat([UPLINE, SHOUT_BRIEF], TEAM, [OUTRO]);
-    if (role === 'mga')   return BASICS_BRIEF.concat([UPLINE, SHOUT_BRIEF], TEAM, MGA, [OUTRO]);
-    return BASICS_BRIEF.concat([SHOUT_BRIEF], TEAM, MGA, RGA, [OUTRO]); // rga: no upline
+    if (role === 'agent') return BASICS_FULL.concat([WHATS_NEW, OUTRO]);
+    if (role === 'ga')    return BASICS_BRIEF.concat([UPLINE, SHOUT_BRIEF], TEAM, [WHATS_NEW, OUTRO]);
+    if (role === 'mga')   return BASICS_BRIEF.concat([UPLINE, SHOUT_BRIEF], TEAM, MGA, [WHATS_NEW, OUTRO]);
+    return BASICS_BRIEF.concat([SHOUT_BRIEF], TEAM, MGA, RGA, [WHATS_NEW, OUTRO]); // rga: no upline
   }
   function st(screen, target, title, body) { return { screen: screen, target: target, title: title, body: body }; }
 

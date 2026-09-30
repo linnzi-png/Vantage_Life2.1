@@ -25,7 +25,7 @@ import { Role } from './auth';
 // v7: Team tab redesign (owner, 2026-09-24) — one ranked list with the
 // All / Rookies / Veterans dropdown, and a date button (month to date or
 // any range) in place of the period selector and week chips.
-export const TOUR_VERSION = 7;
+export const TOUR_VERSION = 8;
 
 export type TourAnchorId =
   | 'dash-header'
@@ -49,6 +49,8 @@ export type TourAnchorId =
   | 'vault-weeks'
   | 'more-tools'
   | 'more-walkthrough'
+  | 'more-whats-new'
+  | 'admin-announce'
   | 'admin-scoreboard'
   | 'admin-add'
   | 'admin-war-import'
@@ -369,6 +371,17 @@ const RGA_STEPS: TourStep[] = [
   },
 ];
 
+// Batch 2 (owner, 2026-09-24): the WHAT'S NEW card pops up on its own when
+// an admin posts an announcement the person has not seen; the More tab
+// keeps the history. Every tier gets this step, right before the outro.
+const WHATS_NEW_STEP: TourStep = {
+  id: 'whats-new',
+  screen: '/more',
+  anchor: 'more-whats-new',
+  title: "WHAT'S NEW",
+  body: "When the app gains a feature, a WHAT'S NEW card walks you through it the next time you open the app — once. Missed it or want it again? Every past announcement is here.",
+};
+
 const OUTRO: TourStep = {
   id: 'outro',
   screen: '/',
@@ -439,7 +452,7 @@ const FINANCE_ADMIN_STEPS: TourStep[] = [
 export function stepsForRole(role: Role): TourStep[] {
   switch (role) {
     case 'level_1':
-      return [...BASICS_FULL, ...AGENT_TEAM_STEPS, OUTRO];
+      return [...BASICS_FULL, ...AGENT_TEAM_STEPS, WHATS_NEW_STEP, OUTRO];
     case 'level_sa':
     case 'level_2':
       return [
@@ -448,6 +461,7 @@ export function stepsForRole(role: Role): TourStep[] {
           true,
         ),
         ...TEAM_STEPS,
+        WHATS_NEW_STEP,
         OUTRO,
       ];
     case 'level_3':
@@ -458,6 +472,7 @@ export function stepsForRole(role: Role): TourStep[] {
         ),
         ...TEAM_STEPS,
         ...MGA_STEPS,
+        WHATS_NEW_STEP,
         OUTRO,
       ];
     case 'level_4':
@@ -469,6 +484,7 @@ export function stepsForRole(role: Role): TourStep[] {
         ...TEAM_STEPS,
         ...MGA_STEPS,
         ...RGA_STEPS,
+        WHATS_NEW_STEP,
         OUTRO,
       ];
     case 'pending':

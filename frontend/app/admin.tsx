@@ -22,6 +22,7 @@ import { DuplicateMerge } from '../src/components/DuplicateMerge';
 import { RosterSheetSync } from '../src/components/RosterSheetSync';
 import { RosterEmailAudit } from '../src/components/RosterEmailAudit';
 import { MoveMemberSheet } from '../src/components/MoveMemberSheet';
+import { AnnouncePanel } from '../src/components/AnnouncePanel';
 import { confirmAsync, notify } from '../src/lib/dialog';
 
 interface Person {
@@ -468,6 +469,9 @@ export default function AdminScreen() {
             other people's flags. */}
         {!isFA ? (
           <>
+            <TourAnchor id="admin-announce">
+              <AnnouncePanel />
+            </TourAnchor>
             <OfficeMerge />
             <OrphanRepair candidates={people} onRepaired={load} />
             <DuplicateMerge onMerged={load} />
