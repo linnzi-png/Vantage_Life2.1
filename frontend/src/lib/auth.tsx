@@ -1,5 +1,5 @@
 // Shared API helper + auth context for VantageLife 2.0
-import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { registerForPulseNotifications } from './push';
@@ -80,6 +80,11 @@ export interface AppUser {
   /** Whether the switch is offered at all — the server's answer, never a
    *  client guess (admins with a linked producer tier only). */
   can_toggle_view?: boolean;
+  /** When this person first finished or skipped the guided walkthrough
+   *  (owner, 2026-09-24; batch 2). Null or absent = never, which is the one
+   *  and only condition for the auto-launch. Server-held so it survives a
+   *  reinstall, a second device, a role change and a tour revision. */
+  tour_completed_at?: string | null;
 }
 
 export type ViewMode = 'full' | 'own';
@@ -348,6 +353,8 @@ interface AuthCtx {
   deleteAccount: () => Promise<void>;
   switchRole: (role: Role) => Promise<void>;
   setViewMode: (mode: ViewMode) => Promise<void>;
+  /** Stamps the walkthrough as done on the server and in memory. Idempotent. */
+  markTourCompleted: () => Promise<void>;
   /** True while a sign-out, account deletion or tier switch is in flight, so
    *  the screens offering them can disable the row instead of firing twice. */
   accountBusy: boolean;
@@ -525,8 +532,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await reload();
   });
 
+  // Stable identity: TourProvider's auto-launch effect lists this as a
+  // dependency, and a fresh function every render would re-run that effect
+  // on every render.
+  const markTourCompleted = useCallback(async () => {
+    // Optimistic: the in-memory user flips first so the auto-launch effect
+    // cannot re-fire while the request is in flight, then the server's stamp
+    // (which may be an earlier one from another device) replaces it.
+    setUser((u) => (u && !u.tour_completed_at ? { ...u, tour_completed_at: new Date().toISOString() } : u));
+    const r = await api<{ ok: boolean; tour_completed_at: string }>('/api/me/tour-done', { method: 'POST' });
+    setUser((u) => (u ? { ...u, tour_completed_at: r.tour_completed_at } : u));
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInAuth0, signOut, deleteAccount, switchRole, setViewMode, accountBusy }}>
+    <AuthContext.Provider value={{ user, agent, roleLabel, loading, reload, signInDemo, signInApple, signInAuth0, signOut, deleteAccount, switchRole, setViewMode, markTourCompleted, accountBusy }}>
       {children}
     </AuthContext.Provider>
   );

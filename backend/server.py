@@ -6915,6 +6915,38 @@ async def self_set_view_mode(payload: SelfViewModeIn, user: Dict[str, Any] = Dep
     return {"ok": True, "view_mode": payload.view_mode}
 
 
+# ---- Guided walkthrough: once per person, ever (owner, 2026-09-24; batch 2, PR A)
+#
+# The walkthrough used to be tracked on the device, keyed by user and role
+# and stamped with a content version, so every tour revision re-launched it
+# for the whole fleet, a role change re-launched it, and a reinstall or a
+# second device had no record at all. The record now lives on the users doc
+# as tour_completed_at: set the first time the person finishes or skips it,
+# returned on /api/auth/me, and never cleared by any migration, role change
+# or version bump. The More tab's "Guided walkthrough" item replays it on
+# demand; TOUR_VERSION on the client is a content version for that replay
+# and the public /tour page only.
+
+@api_router.post("/me/tour-done")
+async def me_tour_done(user: Dict[str, Any] = Depends(get_current_user)):
+    """Idempotent: the first call stamps tour_completed_at, later calls leave
+    the original stamp alone. Any signed-in account, pending included — the
+    tour can be dismissed from wherever it showed."""
+    existing = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "tour_completed_at": 1})
+    stamp = (existing or {}).get("tour_completed_at")
+    if not stamp:
+        stamp = now_utc()
+        await db.users.update_one(
+            {"user_id": user["user_id"], "tour_completed_at": {"$in": [None]}},
+            {"$set": {"tour_completed_at": stamp}},
+        )
+        # Another device may have stamped it between the read and the write;
+        # whichever landed first is the one that stays.
+        current = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "tour_completed_at": 1})
+        stamp = (current or {}).get("tour_completed_at") or stamp
+    return {"ok": True, "tour_completed_at": stamp}
+
+
 # Mount router & app
 app.include_router(api_router)
 
