@@ -4,6 +4,7 @@ matching, and the overlap rule.
 The CLI writes with sync pymongo rather than motor, so these use mongomock
 directly instead of the async fixtures in conftest.
 """
+import os
 import io
 from datetime import date
 
@@ -161,5 +162,5 @@ def test_collect_files_sorts_chronologically_and_expands_dirs(tmp_path):
         write_workbook(tmp_path, n, {"Wed": [("Agent One", SAMPLE)]})
     (tmp_path / "notes.txt").write_text("ignored")
 
-    got = [f.rsplit("/", 1)[-1] for f in cli.collect_files([str(tmp_path)])]
+    got = [os.path.basename(f) for f in cli.collect_files([str(tmp_path)])]
     assert got == ["2026-02-18_MJ.xlsx", "2026-02-25_MJ.xlsx", "2026-03-04_MJ.xlsx"]
