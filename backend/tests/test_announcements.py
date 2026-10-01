@@ -83,6 +83,11 @@ async def test_unseen_respects_audience_and_seen_state_across_devices(client, se
     ag1 = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
     ag2 = await make_session(seeded_db, role="level_1", agent_id="AG_2", email="ag2@test.dev")
     await seeded_db.users.update_many({}, {"$set": {"created_at": past}})
+    # Two posts a few microseconds apart can share a clock tick on Windows and
+    # tie on created_at, so pin the order the assertion depends on.
+    now = datetime.now(timezone.utc)
+    await seeded_db.announcements.update_one({"title": "For everyone"}, {"$set": {"created_at": now - timedelta(hours=2)}})
+    await seeded_db.announcements.update_one({"title": "MCM only"}, {"$set": {"created_at": now - timedelta(hours=1)}})
 
     u1 = await client.get("/api/announcements/unseen", headers=auth(ag1))
     assert [a["title"] for a in u1.json()["announcements"]] == ["MCM only", "For everyone"]
