@@ -10,7 +10,7 @@
 // the two cards stay the same height whatever the data (design review,
 // 2026-09-29). Small type uses textDim, not textMuted.
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../lib/auth';
 import { withAlpha } from '../lib/motion';
@@ -41,7 +41,7 @@ const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 export default function PlatinumWall(
   {
     vets, rookies, top10Vets = [], top10Rookies = [], platinum = [], windowLabel, subtitle,
-    flippedCard = null, onFlipCard, onPress,
+    flippedCard = null, onFlipCard,
   }: {
     vets: WallItem[]; rookies: WallItem[];
     /** From /dashboard/platinum-wall; absent from an older server. */
@@ -55,7 +55,6 @@ export default function PlatinumWall(
     /** Which card on the screen is turned over, if any. */
     flippedCard?: string | null;
     onFlipCard?: (id: string) => void;
-    onPress?: (item: WallItem) => void;
   },
 ) {
   const flip = (id: string) => () => onFlipCard?.(id);
@@ -78,7 +77,6 @@ export default function PlatinumWall(
           flipped={flippedCard === WALL_VETS_ID}
           onFlip={flip(WALL_VETS_ID)}
           testID="platinum-vets"
-          onPress={onPress}
         />
         <WallCard
           id={WALL_ROOKIES_ID}
@@ -91,7 +89,6 @@ export default function PlatinumWall(
           flipped={flippedCard === WALL_ROOKIES_ID}
           onFlip={flip(WALL_ROOKIES_ID)}
           testID="platinum-rookies"
-          onPress={onPress}
         />
       </View>
       {platinum.length ? (
@@ -114,7 +111,7 @@ export default function PlatinumWall(
   );
 }
 
-function WallCard({ id, title, backTitle, color, icon, items, top10, flipped, onFlip, testID, onPress }: {
+function WallCard({ id, title, backTitle, color, icon, items, top10, flipped, onFlip, testID }: {
   id: string;
   title: string;
   backTitle: string;
@@ -125,7 +122,6 @@ function WallCard({ id, title, backTitle, color, icon, items, top10, flipped, on
   flipped: boolean;
   onFlip: () => void;
   testID: string;
-  onPress?: (item: WallItem) => void;
 }) {
   const top = items.slice(0, FRONT_ROWS);
   const biggest = Math.max(...top.map((i) => i.gross_alp), 0);
@@ -149,12 +145,13 @@ function WallCard({ id, title, backTitle, color, icon, items, top10, flipped, on
             {top.length === 0 ? (
               <Text style={styles.empty}>No production in this period.</Text>
             ) : top.map((it, i) => (
-              <Pressable
+              // A plain row, not a button: the whole card is one tap target that
+              // flips to the top 10 (owner, 2026-10-01).
+              <View
                 key={it.agent_id}
                 style={styles.frontRow}
-                onPress={() => onPress?.(it)}
-                accessibilityRole="button"
-                accessibilityLabel={`${i + 1}. ${it.name}, ${money(it.gross_alp)}. Opens their contact card.`}
+                accessible
+                accessibilityLabel={`${i + 1}. ${it.name}, ${money(it.gross_alp)}`}
                 testID={`platinum-item-${it.agent_id}`}
               >
                 <View style={[styles.badge, { backgroundColor: withAlpha(color, 0.2), borderColor: withAlpha(color, 0.55) }]}>
@@ -169,7 +166,7 @@ function WallCard({ id, title, backTitle, color, icon, items, top10, flipped, on
                     <View style={[styles.barFill, { backgroundColor: color, width: `${biggest > 0 ? Math.max((it.gross_alp / biggest) * 100, 4) : 0}%` }]} />
                   </View>
                 </View>
-              </Pressable>
+              </View>
             ))}
           </View>
           <Text style={[styles.hint, { color }]}>→ Tap to see top 10 leaderboard</Text>

@@ -13,7 +13,6 @@ import { api, COLORS, useAuth } from '../../src/lib/auth';
 import { DISPLAY_FONT, useDisplayFonts } from '../../src/lib/fonts';
 import StatCard, { OfficeStatRow } from '../../src/components/StatCard';
 import PlatinumWall, { WallItem, Top10Item, PlatinumRulePost } from '../../src/components/PlatinumWall';
-import { AgentContactSheet, AgentContact } from '../../src/components/AgentContactSheet';
 import GateBanner from '../../src/components/GateBanner';
 import Ticker, { TickerItem } from '../../src/components/Ticker';
 import { Period, usePersistedPeriod } from '../../src/components/PeriodSelector';
@@ -83,7 +82,6 @@ export default function DashboardScreen() {
   const [pushGoal, setPushGoal] = useState<PushGoalData | null>(null);
   const [pushGoalOpen, setPushGoalOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [contactAgent, setContactAgent] = useState<AgentContact | null>(null);
   // Which card is turned over, if any (one at a time).
   const [flippedCard, setFlippedCard] = useState<string | null>(null);
   const toggleCard = useCallback((id: string) => setFlippedCard((cur) => nextFlipped(cur, id)), []);
@@ -421,10 +419,6 @@ export default function DashboardScreen() {
                 subtitle={`Top 3 producers · ${wallCoverage}`}
                 flippedCard={flippedCard}
                 onFlipCard={toggleCard}
-                onPress={(it: WallItem) => setContactAgent({
-                  name: it.name, role: it.role || 'level_1', io_role: it.io_role,
-                  phone: it.phone, email: it.email, office: it.office,
-                })}
               />
               </LoadState>
             </TourAnchor>
@@ -447,7 +441,6 @@ export default function DashboardScreen() {
         </LoadState>
       </ScrollView>
 
-      <AgentContactSheet agent={contactAgent} onClose={() => setContactAgent(null)} />
       {pushGoalOpen ? <PushGoalDetail data={pushGoal} onClose={() => setPushGoalOpen(false)} /> : null}
 
       <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
