@@ -1345,6 +1345,104 @@ def scoreboard_prev_window(period: str) -> Dict[str, Any]:
     return {"sales_day": {"$gte": prev.date().isoformat(), "$lt": cur.date().isoformat()}}
 
 
+def _pct_change(cur: float, prev: float) -> Optional[float]:
+    """Percent change against the previous window; None when there is nothing
+    to compare against (a previous total of zero), so the card shows no pill
+    rather than an invented 0%."""
+    return round((cur - prev) / prev * 100.0, 1) if prev > 0 else None
+
+
+def dashboard_deltas(cur: Dict[str, float], prev: Dict[str, float]) -> Dict[str, Optional[float]]:
+    """Change in each headline figure against the previous window (the day
+    before for Daily, the prior week or month for the rolling windows). ALP,
+    sales and sits are percentages; close ratio is in percentage points. The
+    ratio itself always comes from metrics.close_rate."""
+    close_ratio: Optional[float] = None
+    if prev["sits"] > 0:
+        close_ratio = round(metrics.close_rate(cur["sales"], cur["sits"]) - metrics.close_rate(prev["sales"], prev["sits"]), 1)
+    return {
+        "alp": _pct_change(cur["gross_alp"], prev["gross_alp"]),
+        "sales": _pct_change(cur["sales"], prev["sales"]),
+        "sits": _pct_change(cur["sits"], prev["sits"]),
+        "close_ratio": close_ratio,
+    }
+
+
+async def dashboard_office_breakdown(window: Dict[str, Any], ids: Optional[List[str]]) -> List[Dict[str, Any]]:
+    """Gross ALP, sales, sits and close ratio per office for a window, from one
+    aggregation grouped by agent and filed under each agent's profile office.
+
+    Offices are discovered from agent_profiles so a new RGA appears on its own.
+    A blank office is bucketed under UNASSIGNED_OFFICE and an entry whose agent
+    has no profile goes there too, so the rows always add up to the agency
+    totals; discarding them made the office figures silently under-sum the
+    headline. Every office is listed, zero production included."""
+    profile_q: Dict[str, Any] = {}
+    if ids is not None:
+        profile_q["agent_id"] = {"$in": ids}
+    office_of: Dict[str, str] = {}
+    totals: Dict[str, Dict[str, float]] = {}
+    async for a in db.agent_profiles.find(profile_q, {"_id": 0, "agent_id": 1, "office": 1}):
+        office = a.get("office") or UNASSIGNED_OFFICE
+        office_of[a["agent_id"]] = office
+        totals.setdefault(office, {"gross_alp": 0.0, "sales": 0, "sits": 0})
+    match: Dict[str, Any] = dict(window)
+    if ids is not None:
+        match["agent_id"] = {"$in": ids}
+    async for d in db.production_entries.aggregate([
+        {"$match": match},
+        {"$group": {"_id": "$agent_id", "gross_alp": {"$sum": "$gross_alp"},
+                    "sales": {"$sum": "$sales"}, "sits": {"$sum": "$sits"}}},
+    ]):
+        t = totals.setdefault(office_of.get(d["_id"], UNASSIGNED_OFFICE), {"gross_alp": 0.0, "sales": 0, "sits": 0})
+        t["gross_alp"] += float(d.get("gross_alp", 0) or 0)
+        t["sales"] += int(d.get("sales", 0) or 0)
+        t["sits"] += int(d.get("sits", 0) or 0)
+    return [
+        {"office": office, "gross_alp": round(t["gross_alp"], 2), "sales": int(t["sales"]), "sits": int(t["sits"]),
+         "close_ratio": round(metrics.close_rate(int(t["sales"]), int(t["sits"])), 1)}
+        for office, t in sorted(totals.items())
+    ]
+
+
+async def dashboard_alp_by_day(first_day: str, last_day: str, ids: Optional[List[str]]) -> List[Dict[str, Any]]:
+    """Gross ALP for every sales day from first_day through last_day, zero
+    nights included: a gap would read as a missing day, not a quiet one."""
+    match: Dict[str, Any] = {"sales_day": {"$gte": first_day, "$lte": last_day}}
+    if ids is not None:
+        match["agent_id"] = {"$in": ids}
+    by_day: Dict[str, float] = {}
+    async for d in db.production_entries.aggregate([
+        {"$match": match},
+        {"$group": {"_id": "$sales_day", "gross_alp": {"$sum": "$gross_alp"}}},
+    ]):
+        by_day[d["_id"]] = float(d.get("gross_alp", 0) or 0)
+    out: List[Dict[str, Any]] = []
+    cursor = date.fromisoformat(first_day)
+    end = date.fromisoformat(last_day)
+    while cursor <= end:
+        key = cursor.isoformat()
+        out.append({"sales_day": key, "gross_alp": round(by_day.get(key, 0.0), 2)})
+        cursor += timedelta(days=1)
+    return out
+
+
+async def dashboard_summary_extras(cur: Dict[str, float], prev: Dict[str, float], window: Dict[str, Any],
+                                   first_day: str, last_day: str, ids: Optional[List[str]]) -> Dict[str, Any]:
+    """Fields the refreshed dashboard reads beside the totals (additive; older
+    builds ignore them). Unassigned is listed only when it holds production."""
+    by_office = [
+        r for r in await dashboard_office_breakdown(window, ids)
+        if r["office"] != UNASSIGNED_OFFICE or r["gross_alp"] or r["sales"] or r["sits"]
+    ]
+    return {
+        "total_close_ratio": round(metrics.close_rate(cur["sales"], cur["sits"]), 1),
+        "deltas": dashboard_deltas(cur, prev),
+        "by_office": by_office,
+        "by_day": await dashboard_alp_by_day(first_day, last_day, ids),
+    }
+
+
 @api_router.get("/dashboard/summary")
 async def dashboard_summary(
     sales_day: Optional[str] = None,
@@ -1377,6 +1475,8 @@ async def dashboard_summary(
             "is_full_agency": ids is None,
             "scope": dashboard_scope_label(user, ids),
             "is_history": False,
+            **await dashboard_summary_extras(
+                cur_agg, prev_agg, base, base["sales_day"]["$gte"], base["sales_day"]["$lte"], ids),
         }
 
     day = resolve_history_day(sales_day)
@@ -1404,6 +1504,10 @@ async def dashboard_summary(
         "is_full_agency": ids is None,
         "scope": dashboard_scope_label(user, ids),
         "is_history": day != today,
+        # The chart shows the seven sales days ending on the chosen day.
+        **await dashboard_summary_extras(
+            today_agg, yest_agg, {"sales_day": day},
+            (date.fromisoformat(day) - timedelta(days=6)).isoformat(), day, ids),
     }
 
 
@@ -1429,6 +1533,11 @@ async def dashboard_ticker(user: Dict[str, Any] = Depends(require_agent)):
             "ts": iso_utc(e["submitted_at"]) if isinstance(e["submitted_at"], datetime) else e["submitted_at"],
         })
     return {"items": items}
+
+
+# Top 3 on the dashboard card front, top 10 on its back (owner, 2026-09-29).
+WALL_TOP_N = 3
+WALL_LEADERBOARD_N = 10
 
 
 @api_router.get("/dashboard/platinum-wall")
@@ -1460,11 +1569,20 @@ async def dashboard_platinum_wall(
         {"$group": {"_id": "$agent_id", "gross_alp": {"$sum": "$gross_alp"}, "sales": {"$sum": "$sales"}}},
         {"$sort": {"gross_alp": -1}},
     ]
-    cur = db.production_entries.aggregate(pipeline)
-    rows = [d async for d in cur]
+    rows = [d async for d in db.production_entries.aggregate(pipeline)]
+    # One lookup for everyone in the window; the loop below may need to read
+    # well past the top three to fill the top-10 lists.
+    profiles = {
+        a["agent_id"]: a async for a in db.agent_profiles.find(
+            {"agent_id": {"$in": [r["_id"] for r in rows]}}, {"_id": 0})
+    }
     vets, rookies, unranked = [], [], []
     for r in rows:
-        agent = await db.agent_profiles.find_one({"agent_id": r["_id"]}, {"_id": 0})
+        # Sorted by Gross ALP, so everything after the first non-positive
+        # total is non-positive too. Nobody at $0 is ranked (owner, 2026-10-01).
+        if r["gross_alp"] <= 0:
+            break
+        agent = profiles.get(r["_id"])
         if not agent:
             continue
         # Tenure must be explicitly recorded to rank as a vet or a rookie: a
@@ -1488,14 +1606,14 @@ async def dashboard_platinum_wall(
         }
         if tenure is None:
             # A removed person's production still counts on the wall, but the
-            # TENURE NOT SET panel is a prompt to go set it, and nobody is
+            # unranked list is a prompt to go set tenure, and nobody is
             # going to set tenure on someone who has been removed (owner,
             # 2026-09-24). They never appear there.
             if agent.get("archived"):
                 continue
-            bucket = unranked
+            bucket, limit = unranked, WALL_TOP_N
         elif tenure:
-            bucket = rookies
+            bucket, limit = rookies, WALL_LEADERBOARD_N
         else:
             # Per owner, 2026-09-23: a veteran flagged
             # exclude_from_platinum_vets is skipped for the Top 3 Veterans
@@ -1504,11 +1622,17 @@ async def dashboard_platinum_wall(
             # own numbers, the Team tab and the Hierarchy Map all still count them.
             if agent.get("exclude_from_platinum_vets"):
                 continue
-            bucket = vets
-        if len(bucket) < 3:
+            bucket, limit = vets, WALL_LEADERBOARD_N
+        if len(bucket) < limit:
             bucket.append(item)
-        if len(vets) >= 3 and len(rookies) >= 3 and len(unranked) >= 3:
+        if len(vets) >= WALL_LEADERBOARD_N and len(rookies) >= WALL_LEADERBOARD_N and len(unranked) >= WALL_TOP_N:
             break
+    # The top-10 lists carry only what a leaderboard row shows: no contact
+    # details and no per-agent history (owner, 2026-09-29).
+    def leaderboard(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [{"rank": i + 1, "agent_id": it["agent_id"], "name": it["name"],
+                 "office": it["office"], "gross_alp": it["gross_alp"]} for i, it in enumerate(items)]
+    top10_vets, top10_rookies = leaderboard(vets), leaderboard(rookies)
     # Recent Platinum Rule recognition posts (global scope, newest first)
     platinum = [s async for s in db.shoutouts.find(
         {"type": "platinum_rule"}, {"_id": 0}).sort("ts", -1).limit(5)]
@@ -1518,7 +1642,8 @@ async def dashboard_platinum_wall(
     # What the wall ranks over, for its subtitle: the agency, the caller's
     # office (level_1, or MJ's own-RGA view), or a leader's downline.
     wall_scope = dashboard_scope_label(user, ids)
-    return {"vets": vets, "rookies": rookies, "unranked": unranked,
+    return {"vets": vets[:WALL_TOP_N], "rookies": rookies[:WALL_TOP_N], "unranked": unranked,
+            "top10_vets": top10_vets, "top10_rookies": top10_rookies,
             "platinum_rule": platinum, "period": period or "daily", "scope": wall_scope}
 
 
@@ -1532,29 +1657,15 @@ async def dashboard_offices(
     # Weekly/monthly use a rolling window; daily/default keeps the single-day
     # (optionally historical) behavior.
     window, _ = scoreboard_window(period or "daily", sales_day)
-    # Discover offices from agent_profiles so new RGAs appear automatically.
-    # An agent with a blank office is bucketed under UNASSIGNED_OFFICE rather
-    # than dropped: their production still counts toward the summary above, so
-    # discarding them here made the office tiles silently under-sum the headline.
-    profile_q: Dict[str, Any] = {}
-    if ids is not None:
-        profile_q["agent_id"] = {"$in": ids}
-    ids_by_office: Dict[str, List[str]] = {}
-    async for a in db.agent_profiles.find(profile_q, {"_id": 0, "agent_id": 1, "office": 1}):
-        ids_by_office.setdefault(a.get("office") or UNASSIGNED_OFFICE, []).append(a["agent_id"])
-
+    # The same per-office aggregation the summary's by_office uses, so the two
+    # can never disagree.
     out = []
-    for office in sorted(ids_by_office):
-        office_agent_ids = ids_by_office[office]
-        if not office_agent_ids:
-            out.append({"office": office, "alp": 0, "sales": 0, "avg_deal": 0})
-            continue
-        agg = await aggregate_alp({**window, "agent_id": {"$in": office_agent_ids}})
-        avg = (agg["gross_alp"] / agg["sales"]) if agg["sales"] > 0 else 0
+    for row in await dashboard_office_breakdown(window, ids):
+        avg = (row["gross_alp"] / row["sales"]) if row["sales"] > 0 else 0
         out.append({
-            "office": office,
-            "alp": round(agg["gross_alp"], 2),
-            "sales": agg["sales"],
+            "office": row["office"],
+            "alp": row["gross_alp"],
+            "sales": row["sales"],
             "avg_deal": round(avg, 2),
         })
     return {"offices": out, "period": period or "daily"}
