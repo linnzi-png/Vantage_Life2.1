@@ -16,6 +16,7 @@ import Svg, { Defs, LinearGradient, Stop, Rect, Pattern, Path } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../lib/auth';
 import { DISPLAY_FONT, useDisplayFonts } from '../lib/fonts';
+import GlowCard from './GlowCard';
 
 export interface PushGoalDay { sales_day: string; alp: number; sales: number; }
 export interface PushGoalOffice { office: string; alp: number; sales: number; }
@@ -124,13 +125,14 @@ export default function PushGoal({ data, onPress, testID = 'push-goal' }: {
 
   return (
     <TouchableOpacity
-      style={[styles.card, reached && styles.cardReached]}
+      style={styles.press}
       onPress={onPress}
       activeOpacity={0.85}
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={`${data.label}. ${fmtWhole(data.total_alp)} of ${fmtWhole(data.goal_alp)}, ${Math.round(data.pct)} percent. ${daysLabel(data)}. Opens the breakdown.`}
     >
+      <GlowCard accent={COLORS.gold} contentStyle={styles.cardPad}>
       <Animated.View style={[styles.head, entrance(0)]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.kicker}>PUSH MONTH</Text>
@@ -214,18 +216,16 @@ export default function PushGoal({ data, onPress, testID = 'push-goal' }: {
           <Ionicons name="chevron-forward" size={12} color={COLORS.textDim} />
         </View>
       </Animated.View>
+      </GlowCard>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1, borderColor: COLORS.border,
-    borderTopWidth: 2, borderTopColor: COLORS.gold,
-    borderRadius: 6, padding: 14, marginBottom: 14,
-  },
-  cardReached: { borderColor: 'rgba(255,215,0,0.45)' },
+  // The surface, border and gold glow come from GlowCard; this is only the
+  // spacing around it and the padding inside it.
+  press: { marginBottom: 14 },
+  cardPad: { padding: 14 },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   kicker: { color: COLORS.gold, fontSize: 10, fontWeight: '900', letterSpacing: 2.4 },
   title: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.4, marginTop: 2, lineHeight: 18 },

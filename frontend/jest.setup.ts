@@ -16,6 +16,25 @@ jest.mock('expo-router', () => ({
   usePathname: () => '/',
 }));
 
+// Reanimated 4 drives its animations through the native Worklets runtime,
+// which does not exist under Jest. Both packages ship a JS mock for this.
+jest.mock('react-native-worklets', () => require('react-native-worklets/lib/module/mock'));
+jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
+
+// Liquid Glass is a native iOS 26 view with no JS fallback under Jest. The
+// gate says "unavailable", so every glass surface draws its plain version, and
+// the glass components themselves are pass-through views.
+jest.mock('expo-glass-effect', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { View } = require('react-native');
+  return {
+    GlassView: View,
+    GlassContainer: View,
+    isLiquidGlassAvailable: () => false,
+    isGlassEffectAPIAvailable: () => false,
+  };
+});
+
 jest.mock('./src/lib/push', () => ({
   registerForPulseNotifications: jest.fn(async () => null),
 }));

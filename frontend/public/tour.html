@@ -70,23 +70,34 @@
   .dash-brand em { font-style: normal; color: var(--primary); }
   .dash-sub { color: var(--dim); font-size: 10.5px; margin-top: 2px; }
   .dash-sub em { font-style: normal; color: var(--primary); }
-  .day-pill { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 4px; padding: 5px 9px; font-size: 10.5px; font-weight: 700; }
-  .seg { display: flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
-  .seg span { flex: 1; text-align: center; padding: 7px 0; font-size: 11px; font-weight: 800; color: var(--dim); letter-spacing: .4px; }
-  .seg span.on { color: var(--primary); background: rgba(49,152,66,.12); }
+  .dash-welcome { color: var(--dim); font-size: 10.5px; font-weight: 700; letter-spacing: .6px; }
+  .dash-name { font-size: 18px; font-weight: 900; letter-spacing: .3px; margin-top: 1px; }
+  .dash-name em { display: block; font-style: normal; color: var(--primary); font-size: 10.5px; font-weight: 700; letter-spacing: .5px; margin-top: 1px; }
+  .dash-right { display: flex; align-items: center; gap: 7px; }
+  .live-pill { display: flex; align-items: center; gap: 5px; border: 1px solid rgba(49,152,66,.55); border-radius: 999px; padding: 5px 9px; font-size: 10px; font-weight: 900; letter-spacing: 1.1px; color: var(--primary); }
+  .live-pill i { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); animation: livepulse 1.1s ease-in-out infinite alternate; }
+  @keyframes livepulse { from { opacity: 1; } to { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .live-pill i { animation: none; } }
+  .day-pill { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 5px 9px; font-size: 10.5px; font-weight: 700; }
+  .seg { display: flex; gap: 4px; padding: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .seg span { flex: 1; text-align: center; line-height: 44px; border-radius: 10px; font-size: 12px; font-weight: 800; color: var(--dim); letter-spacing: .4px; }
+  .seg span.on { color: #fff; background: linear-gradient(180deg, #319842, #2A8239); box-shadow: 0 0 14px rgba(49,152,66,.5); }
   .sect { color: var(--dim); font-size: 10.5px; font-weight: 900; letter-spacing: 2px; }
-  .stats { display: flex; gap: 7px; }
-  .stat { flex: 1; background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--ac); border-radius: 6px; padding: 9px 10px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { position: relative; background: linear-gradient(180deg, var(--surface2), var(--surface)); border: 1px solid var(--border); border-top: 1px solid var(--ac); border-radius: 12px; padding: 10px 11px 26px; box-shadow: 0 8px 20px -10px var(--ac); }
+  .stat .flip-hint { position: absolute; left: 11px; bottom: 8px; font-size: 9.5px; font-weight: 800; letter-spacing: .3px; color: var(--ac); }
   .stat .lab { font-size: 9px; font-weight: 900; letter-spacing: 1.2px; color: var(--dim); text-transform: uppercase; }
-  .stat .val { font-size: 19px; font-weight: 900; margin-top: 3px; letter-spacing: -.5px; }
+  .stat .val { font-size: 26px; font-weight: 900; margin-top: 3px; letter-spacing: -.5px; }
   .stat .delta { font-size: 9.5px; color: var(--primary); font-weight: 800; margin-top: 2px; }
   .wall-row { display: flex; gap: 7px; }
   .wall-col { flex: 1; }
   .wall-col h4 { font-size: 9.5px; font-weight: 900; letter-spacing: 1.2px; margin-bottom: 6px; }
   .wall-col.vets h4 { color: var(--gold); } .wall-col.rooks h4 { color: var(--orange); }
   .wall-item { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; border-top: 1px solid var(--border); }
+  .wall-hint { font-size: 9.5px; font-weight: 800; margin-top: 6px; }
+  .wall-col.vets .wall-hint { color: var(--gold); } .wall-col.rooks .wall-hint { color: var(--orange); }
   .wall-item b { font-weight: 800; } .wall-item span { color: var(--primary); font-weight: 900; }
-  .ticker { position: absolute; left: 0; right: 0; bottom: 58px; height: 32px; background: #000; border-top: 1px solid var(--border); display: flex; align-items: center; overflow: hidden; }
+  .ticker { position: relative; flex: none; height: 32px; background: #000; border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; overflow: hidden; }
   .ticker .live { background: var(--primary); color: #000; font-size: 10px; font-weight: 900; letter-spacing: 1.4px; padding: 0 9px; height: 100%; display: flex; align-items: center; flex: none; }
   .ticker .feed { white-space: nowrap; font-size: 10.5px; color: var(--dim); animation: marquee 18s linear infinite; padding-left: 12px; }
   .ticker .feed b { color: var(--text); } .ticker .feed em { font-style: normal; color: var(--primary); font-weight: 900; }
@@ -270,17 +281,18 @@
       <div class="screen on" data-screen="dashboard">
         <div class="dash-head" data-t="dash-header">
           <div>
-            <div class="dash-brand">VANTAGE<em>LIFE</em></div>
-            <div class="dash-sub" id="dash-name">Jordan Cole · <em id="dash-title">Agent</em></div>
+            <div class="dash-welcome">Welcome back</div>
+            <div class="dash-name" id="dash-name">Jordan Cole<em id="dash-title">Agent</em></div>
           </div>
-          <div class="day-pill">📅 <span class="num">2026-08-09</span> ▾</div>
+          <div class="dash-right"><div class="live-pill"><i></i>LIVE</div><div class="day-pill">📅 <span class="num">2026-08-09</span> ▾</div></div>
         </div>
         <div class="seg" data-t="dash-period"><span class="on">Daily</span><span>Weekly</span><span>Monthly</span></div>
         <div class="sect" id="dash-scope">TODAY'S AGENCY PRODUCTION</div>
         <div class="stats" data-t="dash-stats">
-          <div class="stat" style="--ac:#319842"><div class="lab">Total Team ALP</div><div class="val num">$45,210</div><div class="delta">▲ +8.5% vs yest.</div></div>
-          <div class="stat" style="--ac:#00558C"><div class="lab">Agency Sits</div><div class="val num">31</div></div>
-          <div class="stat" style="--ac:#FFD700"><div class="lab">Total Sales</div><div class="val num">12</div></div>
+          <div class="stat" style="--ac:#319842"><div class="lab">Agency ALP</div><div class="val num">$45,210</div><div class="delta">▲ +8.5% vs yesterday</div><div class="flip-hint">↻ Tap for by office</div></div>
+          <div class="stat" style="--ac:#FFD700"><div class="lab">Agency Sales</div><div class="val num">12</div><div class="delta">▲ +9.1% vs yesterday</div><div class="flip-hint">↻ Tap for by office</div></div>
+          <div class="stat" style="--ac:#00558C"><div class="lab">Agency Sits</div><div class="val num">31</div><div class="delta">▲ +3.3% vs yesterday</div><div class="flip-hint">↻ Tap for by office</div></div>
+          <div class="stat" style="--ac:#FF8C00"><div class="lab">Close Ratio</div><div class="val num">38.7%</div><div class="delta">▲ +1.2 pts vs yesterday</div><div class="flip-hint">↻ Tap for by office</div></div>
         </div>
         <div class="card" data-t="dash-wall">
           <div class="sect" style="margin-bottom:8px">PLATINUM WALL</div>
@@ -288,14 +300,18 @@
             <div class="wall-col vets"><h4>🏆 TOP 3 VETS</h4>
               <div class="wall-item"><b>M. Alwatan</b><span class="num">$5,200</span></div>
               <div class="wall-item"><b>D. Okafor</b><span class="num">$4,410</span></div>
+              <div class="wall-item"><b>R. Hale</b><span class="num">$3,860</span></div>
+              <div class="wall-hint">→ Tap to see top 10 leaderboard</div>
             </div>
             <div class="wall-col rooks"><h4>⚡ TOP 3 ROOKIES</h4>
               <div class="wall-item"><b>T. Fields</b><span class="num">$2,980</span></div>
               <div class="wall-item"><b>K. Pyles</b><span class="num">$2,150</span></div>
+              <div class="wall-item"><b>S. Ortiz</b><span class="num">$1,720</span></div>
+              <div class="wall-hint">→ Tap to see top 10 leaderboard</div>
             </div>
           </div>
         </div>
-        <div class="ticker" data-t="dash-ticker"><div class="live">LIVE</div><div class="feed">● <b>J. Rivers</b> <em class="num">$2,100</em> Detroit · 2 REPS&nbsp;&nbsp;&nbsp;● <b>M. Cole</b> <em class="num">$1,450</em> Troy · 1 REP&nbsp;&nbsp;&nbsp;● <b>A. Mulder</b> <em class="num">$3,300</em> Gojcaj · 2 REPS&nbsp;&nbsp;&nbsp;● <b>J. Rivers</b> <em class="num">$2,100</em> Detroit · 2 REPS&nbsp;&nbsp;&nbsp;● <b>M. Cole</b> <em class="num">$1,450</em> Troy · 1 REP&nbsp;&nbsp;&nbsp;● <b>A. Mulder</b> <em class="num">$3,300</em> Gojcaj · 2 REPS</div></div>
+        <div class="ticker" data-t="dash-ticker"><div class="live">LIVE SALES</div><div class="feed">● <b>J. Rivers</b> <em class="num">$2,100</em> Detroit · 2 REPS&nbsp;&nbsp;&nbsp;● <b>M. Cole</b> <em class="num">$1,450</em> Troy · 1 REP&nbsp;&nbsp;&nbsp;● <b>A. Mulder</b> <em class="num">$3,300</em> Gojcaj · 2 REPS&nbsp;&nbsp;&nbsp;● <b>J. Rivers</b> <em class="num">$2,100</em> Detroit · 2 REPS&nbsp;&nbsp;&nbsp;● <b>M. Cole</b> <em class="num">$1,450</em> Troy · 1 REP&nbsp;&nbsp;&nbsp;● <b>A. Mulder</b> <em class="num">$3,300</em> Gojcaj · 2 REPS</div></div>
       </div>
 
       <!-- PULSE -->
@@ -571,11 +587,12 @@
 
     var BASICS_FULL = [
       st('dashboard', null, 'WELCOME TO VANTAGELIFE', welcome),
-      st('dashboard', 'dash-header', 'YOUR DASHBOARD', 'Your name and producer title live up here. The date pill is the open sales day. Tap the pill anytime to look back at a past day, read-only.'),
+      st('dashboard', 'dash-header', 'YOUR DASHBOARD', 'Your name and producer title live up here, beside the LIVE pill. The date pill is the open sales day. Tap it anytime to look back at a past day, read-only; the pill then reads HISTORY in gold.'),
       st('dashboard', 'dash-period', 'DAILY · WEEKLY · MONTHLY', 'Flip the scoreboard between today, the rolling week, and the month. The production week closes every Wednesday at 2:00 PM, when totals lock and archive.'),
-      st('dashboard', 'dash-stats', 'LIVE PRODUCTION', 'Total ALP, Sits, and Sales update live, with the swing versus yesterday. One rule to know everywhere in this app: Close Ratio is Sales ÷ Sits. N1 visits (medically unqualified) are tallied separately and already left out of your Sits — they never count against you.'),
-      st('dashboard', 'dash-wall', 'THE PLATINUM WALL', 'Top Vets, top Rookies, and Platinum Rule honorees. Tap any name to open their contact card — call or text them straight from the app.'),
-      st('dashboard', 'dash-ticker', 'THE LIVE WIRE', 'Every sale in the agency scrolls across this ticker as it lands. When you close tonight, the whole team sees it here.'),
+      st('dashboard', 'dash-stats', 'LIVE PRODUCTION', 'Agency ALP, Sales, Sits, and Close Ratio update live, with the swing versus the window before (yesterday, last week, or last month). One rule to know everywhere in this app: Close Ratio is Sales ÷ Sits. N1 visits (medically unqualified) are tallied separately and already left out of your Sits — they never count against you.'),
+      st('dashboard', 'dash-stats', 'TAP A CARD TO FLIP IT', 'Tap any of the four cards and it turns over to show that number by office, one row per office. Tap it again to turn it back. Only one card stays open at a time, and the Daily, Weekly or Monthly choice applies to the back too.'),
+      st('dashboard', 'dash-wall', 'THE PLATINUM WALL', 'Top 3 Vets and top 3 Rookies, with Platinum Rule honorees under them. Tap a name to open their contact card — call or text them straight from the app. Tap the card itself and it flips to the top 10 by Gross ALP.'),
+      st('dashboard', 'dash-ticker', 'THE LIVE WIRE', 'Every sale in the agency scrolls across the LIVE SALES strip, just under the Platinum Wall, as it lands. When you close tonight, the whole team sees it here.'),
       st('dashboard', 'tabbar', 'GETTING AROUND', "Everything lives in these tabs. Next, we'll walk through the ones you'll use every day."),
       st('pulse', 'pulse-stepper', 'YOUR NIGHTLY PULSE', "The one job you own every night: your 14 nightly numbers, entered one at a time — Sets through Gross ALP. Each step tells you exactly what counts. Hit $10K in a day and you join the Player's Club."),
       st('pulse', null, 'WHEN TO SUBMIT', 'Submit before 9:00 PM — that\'s when the warning banner turns yellow. Miss it? The "Midnight Miracle" window (midnight to 6:00 AM) still posts to the same sales day. Submit on time every night and your streak grows. 🔥'),
@@ -586,7 +603,7 @@
     var BASICS_BRIEF = [
       st('dashboard', null, 'WELCOME TO VANTAGELIFE', welcome),
       st('dashboard', 'dash-header', 'THE SALES DAY', 'The date pill is the open sales day. The production week locks every Wednesday at 2:00 PM. Tap the pill to review past days read-only.'),
-      st('dashboard', 'dash-stats', 'LIVE ROLLUPS', 'ALP, Sits, and Sales roll up live across the whole agency — the same board for everyone. Close Ratio everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close ratio down.'),
+      st('dashboard', 'dash-stats', 'LIVE ROLLUPS', 'ALP, Sales, Sits, and Close Ratio roll up live across the whole agency, and tapping any card shows it by office — the same board for everyone. Close Ratio everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close ratio down.'),
       st('pulse', 'pulse-stepper', 'YOUR NIGHTLY PULSE', 'Your own 14 nightly numbers still go in here every night — before the 9:00 PM gate, or in the Midnight Miracle window (midnight–6:00 AM) at the latest.')
     ];
     var UPLINE = st('pulse', 'pulse-upline', 'YOUR UPLINE', "Your upline's contact card sits at the bottom of the Pulse screen — one tap to call or text.");
@@ -637,7 +654,7 @@
 
   function setRole(role) {
     var m = ROLE_META[role];
-    document.getElementById('dash-name').innerHTML = m.name + ' · <em>' + m.title + '</em>';
+    document.getElementById('dash-name').innerHTML = m.name + '<em>' + m.title + '</em>';
     document.getElementById('dash-scope').textContent = m.scope;
     document.getElementById('more-name').textContent = m.name;
     document.getElementById('avatar').textContent = m.name.charAt(0);

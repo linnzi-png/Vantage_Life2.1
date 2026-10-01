@@ -25,6 +25,9 @@ import { Role } from './auth';
 // v7: Team tab redesign (owner, 2026-09-24) — one ranked list with the
 // All / Rookies / Veterans dropdown, and a date button (month to date or
 // any range) in place of the period selector and week chips.
+// Dashboard Visual Refresh (owner, 2026-10-01) edits the dashboard steps' copy
+// and adds one step for the card flip. The version stays 8 on purpose, so
+// nobody is sent back through the whole tour for it.
 export const TOUR_VERSION = 8;
 
 export type TourAnchorId =
@@ -98,7 +101,7 @@ const BASICS_FULL: TourStep[] = [
     screen: '/',
     anchor: 'dash-header',
     title: 'YOUR DASHBOARD',
-    body: 'Your name and producer title live up here. The date pill is the open sales day. Tap the pill anytime to look back at a past day, read-only.',
+    body: 'Your name and producer title live up here, beside the LIVE pill. The date pill is the open sales day. Tap it anytime to look back at a past day, read-only; the pill then reads HISTORY in gold.',
   },
   {
     id: 'periods',
@@ -112,21 +115,28 @@ const BASICS_FULL: TourStep[] = [
     screen: '/',
     anchor: 'dash-stats',
     title: 'LIVE PRODUCTION',
-    body: 'Total ALP, Sits, and Sales update live, with the swing versus yesterday. One rule to know everywhere in this app: Close Ratio is Sales ÷ Sits. N1 visits (medically unqualified) are tallied separately and already left out of your Sits — they never count against you.',
+    body: 'Agency ALP, Sales, Sits, and Close Ratio update live, with the swing versus the window before (yesterday, last week, or last month). One rule to know everywhere in this app: Close Ratio is Sales ÷ Sits. N1 visits (medically unqualified) are tallied separately and already left out of your Sits — they never count against you.',
+  },
+  {
+    id: 'flip-cards',
+    screen: '/',
+    anchor: 'dash-stats',
+    title: 'TAP A CARD TO FLIP IT',
+    body: 'Tap any of the four cards and it turns over to show that number by office, one row per office. Tap it again to turn it back. Only one card stays open at a time, and the Daily, Weekly or Monthly choice applies to the back too.',
   },
   {
     id: 'platinum-wall',
     screen: '/',
     anchor: 'dash-wall',
     title: 'THE PLATINUM WALL',
-    body: 'Top Vets, top Rookies, and Platinum Rule honorees. Tap any name to open their contact card — call or text them straight from the app.',
+    body: 'Top 3 Vets and top 3 Rookies, with Platinum Rule honorees under them. Tap a name to open their contact card — call or text them straight from the app. Tap the card itself and it flips to the top 10 by Gross ALP.',
   },
   {
     id: 'ticker',
     screen: '/',
     anchor: 'dash-ticker',
     title: 'THE LIVE WIRE',
-    body: 'Every sale in the agency scrolls across this ticker as it lands. When you close tonight, the whole team sees it here.',
+    body: 'Every sale in the agency scrolls across the LIVE SALES strip, just under the Platinum Wall, as it lands. When you close tonight, the whole team sees it here.',
   },
   {
     id: 'tabs',
@@ -188,7 +198,7 @@ const basicsBrief = (welcomeBody: string, includeUpline: boolean): TourStep[] =>
     screen: '/',
     anchor: 'dash-stats',
     title: 'LIVE ROLLUPS',
-    body: 'ALP, Sits, and Sales roll up live across the whole agency — the same board for everyone. Close Ratio everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close ratio down.',
+    body: 'ALP, Sales, Sits, and Close Ratio roll up live across the whole agency, and tapping any card shows it by office — the same board for everyone. Close Ratio everywhere is Sales ÷ Sits — N1 visits are tallied separately and already left out of Sits, so they never drag a close ratio down.',
   },
   {
     id: 'nightly-pulse',
