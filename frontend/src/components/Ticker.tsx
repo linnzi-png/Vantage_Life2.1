@@ -11,7 +11,13 @@ export interface TickerItem {
   ts: string;
 }
 
-export default function Ticker({ items }: { items: TickerItem[] }) {
+export default function Ticker({ items, label = 'LIVE', inline = false }: {
+  items: TickerItem[];
+  /** The tag on the left edge. The dashboard reads "LIVE SALES". */
+  label?: string;
+  /** Sits inside a scrolling screen as a rounded strip, not docked to an edge. */
+  inline?: boolean;
+}) {
   // Standard RN Animated idiom: a ref holds the mutable Animated.Value across
   // renders, and .current is read once here to get a stable reference — not a
   // per-render read of a changing ref value.
@@ -41,8 +47,8 @@ export default function Ticker({ items }: { items: TickerItem[] }) {
   const seq = [...display, ...display, ...display];
 
   return (
-    <View style={styles.bar} testID="dashboard-ticker">
-      <View style={styles.label}><Text style={styles.labelText}>LIVE</Text></View>
+    <View style={[styles.bar, inline && styles.barInline]} testID="dashboard-ticker">
+      <View style={styles.label}><Text style={styles.labelText}>{label}</Text></View>
       <View style={styles.scrollArea}>
         <Animated.View style={[styles.row, { transform: [{ translateX }] }]}>
           {seq.map((it, i) => (
@@ -70,6 +76,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     overflow: 'hidden',
+  },
+  barInline: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    marginTop: 4,
+    marginBottom: 14,
   },
   label: {
     paddingHorizontal: 10,

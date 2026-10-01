@@ -49,13 +49,16 @@ export function LineChart({
   const line = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(d.value)}`).join(' ');
   const area = `${line} L${x(data.length - 1)},${PAD_T + innerH} L${x(0)},${PAD_T + innerH} Z`;
   const last = data[data.length - 1];
+  // One gradient per colour: SVG ids are global on the web build, so charts of
+  // different colours sharing "areaFill" would all take the first one's.
+  const fillId = `areaFill-${color.replace(/[^0-9a-zA-Z]/g, '')}`;
 
   return (
     <View>
       <Svg width={width} height={height}>
         <Defs>
-          <LinearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={color} stopOpacity="0.35" />
+          <LinearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={color} stopOpacity="0.4" />
             <Stop offset="1" stopColor={color} stopOpacity="0" />
           </LinearGradient>
         </Defs>
@@ -67,10 +70,15 @@ export function LineChart({
             stroke={COLORS.border} strokeWidth={1}
           />
         ))}
-        <Path d={area} fill="url(#areaFill)" />
-        <Path d={line} stroke={color} strokeWidth={2} fill="none" />
+        <Path d={area} fill={`url(#${fillId})`} />
+        {/* A wide, faint copy of the line underneath it reads as a glow. */}
+        <Path d={line} stroke={color} strokeOpacity={0.18} strokeWidth={9} strokeLinejoin="round" strokeLinecap="round" fill="none" />
+        <Path d={line} stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" fill="none" />
         {data.length > 1 ? (
-          <Circle cx={x(data.length - 1)} cy={y(last.value)} r={3.5} fill={color} />
+          <>
+            <Circle cx={x(data.length - 1)} cy={y(last.value)} r={9} fill={color} fillOpacity={0.18} />
+            <Circle cx={x(data.length - 1)} cy={y(last.value)} r={3.5} fill={color} />
+          </>
         ) : null}
       </Svg>
       <View style={styles.axisRow}>
