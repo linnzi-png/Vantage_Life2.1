@@ -72,6 +72,18 @@ describe('SmsConsentCard', () => {
     expect(screen.queryByTestId('sms-consent-card')).toBeNull();
   });
 
+  it('stays hidden for a Financial Administrator even with a profile and a phone number', async () => {
+    // Regression: their profile links (agent_id set), so the card used to show,
+    // and either answer hit a route that refuses the role with a 403 popup.
+    mockedUseAuth.mockReturnValue(authState({
+      user: { user_id: 'u3', role: 'finance_admin', agent_id: 'AG_FA' } as never,
+      agent: { ...agentBase, agent_id: 'AG_FA', role: 'finance_admin' as never },
+    }));
+    await render(<SmsConsentCard />);
+    expect(screen.queryByTestId('sms-consent-card')).toBeNull();
+    expect(mockedApi).not.toHaveBeenCalled();
+  });
+
   it('stays hidden when the profile has no phone number', async () => {
     mockedUseAuth.mockReturnValue(authState({ agent: { ...agentBase, phone: '' } }));
     await render(<SmsConsentCard />);

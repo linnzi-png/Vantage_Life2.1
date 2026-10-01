@@ -169,7 +169,9 @@ export default function MoreScreen() {
           </>
         ) : null}
 
-        {agent ? (
+        {/* Not for a Financial Administrator: the server refuses that role on
+            /api/me/sms-consent, so the switch could only ever show a 403. */}
+        {agent && user?.role !== 'finance_admin' ? (
           <>
             <Text style={styles.kicker}>TEXT MESSAGE UPDATES</Text>
             <View style={[styles.viewCard, smsSaving && styles.itemBusy]} testID="sms-consent-card-more">
