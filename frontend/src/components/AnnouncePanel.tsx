@@ -17,6 +17,17 @@ const emptyCard = (): AnnouncementCard => ({ heading: '', body: '' });
 
 interface OfficeRow { office: string; agents: number }
 
+export interface SmsLogRow {
+  announcement_id: string;
+  agent_id: string | null;
+  name?: string | null;
+  office?: string | null;
+  to: string | null;
+  status: 'sent' | 'error' | 'skipped';
+  reason: string | null;
+  ts: string;
+}
+
 export function AnnouncePanel() {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -27,6 +38,8 @@ export function AnnouncePanel() {
   const [smsAvailable, setSmsAvailable] = useState(false);
   const [sendSms, setSendSms] = useState(false);
   const [past, setPast] = useState<Announcement[]>([]);
+  const [smsLog, setSmsLog] = useState<SmsLogRow[] | null>(null);
+  const [showLog, setShowLog] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -44,6 +57,17 @@ export function AnnouncePanel() {
       notify('Error', e instanceof Error ? e.message : 'Could not load announcements.');
     }
   }, []);
+
+  const toggleLog = async () => {
+    if (showLog) { setShowLog(false); return; }
+    setShowLog(true);
+    try {
+      const r = await api<{ sms_log: SmsLogRow[] }>('/api/admin/sms-log');
+      setSmsLog(r.sms_log);
+    } catch (e: unknown) {
+      notify('Error', e instanceof Error ? e.message : 'Could not load the text log.');
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -229,6 +253,27 @@ export function AnnouncePanel() {
           ))}
         </>
       ) : null}
+
+      <TouchableOpacity style={styles.logBtn} onPress={toggleLog} testID="announce-sms-log-toggle">
+        <Text style={styles.logBtnTxt}>{showLog ? 'HIDE TEXT MESSAGE LOG' : 'SHOW TEXT MESSAGE LOG'}</Text>
+      </TouchableOpacity>
+      {showLog ? (
+        smsLog === null ? null : smsLog.length === 0 ? (
+          <Text style={styles.pastMeta} testID="announce-sms-log-empty">No text messages have been sent yet.</Text>
+        ) : (
+          smsLog.map((row, i) => (
+            <View key={`${row.announcement_id}-${row.agent_id}-${i}`} style={styles.pastRow} testID={`announce-sms-log-${i}`}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pastTitle}>{row.name || row.agent_id || 'Unknown'}{row.to ? ` · ${row.to}` : ''}</Text>
+                <Text style={styles.pastMeta}>
+                  {new Date(row.ts).toLocaleString()}{row.office ? ` · ${row.office}` : ''}{row.reason ? ` · ${row.reason}` : ''}
+                </Text>
+              </View>
+              <Text style={[styles.pastCounts, row.status === 'sent' ? styles.logOk : styles.logBad]}>{row.status.toUpperCase()}</Text>
+            </View>
+          ))
+        )
+      ) : null}
     </View>
   );
 }
@@ -263,4 +308,8 @@ const styles = StyleSheet.create({
   pastTitle: { color: '#fff', fontWeight: '700', fontSize: 13 },
   pastMeta: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
   pastCounts: { color: COLORS.textDim, fontSize: 11, fontWeight: '700' },
+  logBtn: { alignItems: 'center', paddingVertical: 10, marginTop: 10 },
+  logBtnTxt: { color: COLORS.textDim, fontWeight: '900', fontSize: 10, letterSpacing: 1.2 },
+  logOk: { color: COLORS.primary },
+  logBad: { color: COLORS.red },
 });

@@ -3,7 +3,7 @@ AO Premier — Real-Time Impact Culture
 """
 from fastapi import (
     FastAPI, APIRouter, Request, HTTPException, Response, Depends, Body,
-    UploadFile, File, Form,
+    UploadFile, File, Form, BackgroundTasks,
 )
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
@@ -7000,7 +7000,8 @@ def _user_in_audience(user: Dict[str, Any], agent: Optional[Dict[str, Any]], aud
 
 
 @api_router.post("/admin/announcements")
-async def admin_create_announcement(payload: AnnouncementIn, user: Dict[str, Any] = Depends(require_admin)):
+async def admin_create_announcement(payload: AnnouncementIn, background_tasks: BackgroundTasks,
+                                    user: Dict[str, Any] = Depends(require_admin)):
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Give the announcement a title")
@@ -7052,14 +7053,13 @@ async def admin_create_announcement(payload: AnnouncementIn, user: Dict[str, Any
     doc["push_sent_at"] = now_utc()
     doc["push_count"] = len(tokens)
 
-    sms_count = 0
-    if sms_sender is not None:
-        sms_count = await sms_sender(doc, recipient_ids)
-        await db.announcements.update_one(
-            {"announcement_id": doc["announcement_id"]},
-            {"$set": {"sms_sent_at": now_utc(), "sms_count": sms_count}})
-        doc["sms_sent_at"] = now_utc()
-        doc["sms_count"] = sms_count
+    # Texts go out one at a time with a pause between them, which can take far
+    # longer than the client's request timeout, so the batch runs after the
+    # response is sent. sms_sent_at and sms_count are filled in when it ends.
+    sms_queued = sms_sender is not None
+    if sms_queued:
+        background_tasks.add_task(_deliver_announcement_sms, sms_sender, dict(doc), list(recipient_ids))
+    doc["sms_queued"] = sms_queued
 
     await db.audit_log.insert_one({
         "audit_id": f"au_{uuid.uuid4().hex[:10]}",
@@ -7069,16 +7069,186 @@ async def admin_create_announcement(payload: AnnouncementIn, user: Dict[str, Any
         "changed_by_name": user.get("name"),
         "new_value": {"announcement_id": doc["announcement_id"], "title": title,
                       "audience": audience, "cards": len(cards),
-                      "push_count": len(tokens), "sms_count": sms_count},
+                      "push_count": len(tokens), "sms_queued": sms_queued},
     })
     return {"ok": True, "announcement": _announcement_public(doc)}
 
 
+# ---- Brevo text messages (owner, 2026-09-24; batch 2, PR C) -------------------
+#
+# Announcements can also go out as a text through Brevo's transactional SMS
+# API. Three rules from the owner (2026-09-29): nobody who has not opted in
+# ever gets a text, not even the first announcement; a person who changed
+# their phone number since opting in must opt in again (consent is to a
+# number, recorded as sms_consent.phone); and a number that will not
+# normalise to E.164 is skipped and logged, never guessed at. Every send and
+# every skip lands in sms_log, shown at GET /api/admin/sms-log.
+#
+# Environment: SMS_ENABLED ("true" to switch the channel on), BREVO_API_KEY,
+# BREVO_SMS_SENDER (the approved toll-free number or sender name). With any
+# of them missing the channel reports itself unavailable and nothing sends.
+
+BREVO_SMS_URL = "https://api.brevo.com/v3/transactionalSMS/sms"
+SMS_OPT_OUT_LINE = "Turn off texts in the VantageLife More tab."
+SMS_SEND_DELAY_SECONDS = 0.15
+
+
 def sms_configured() -> bool:
-    """Whether the Brevo channel may be used. PR C wires the real check
-    (SMS_ENABLED and the API key); until then texts are unavailable and the
-    Admin Panel's switch stays disabled."""
-    return False
+    """Whether the Brevo channel may be used: switched on and fully set up."""
+    return (
+        os.environ.get("SMS_ENABLED", "").strip().lower() == "true"
+        and bool(os.environ.get("BREVO_API_KEY", "").strip())
+        and bool(os.environ.get("BREVO_SMS_SENDER", "").strip())
+    )
+
+
+def normalize_phone_e164(raw: Any) -> Optional[str]:
+    """Profiles store phones in mixed formats. Returns +E.164 or None.
+    10 digits is a US number (+1); 11 digits starting with 1 is US with the
+    country code; anything already starting with + keeps its country code if
+    it has 8 to 15 digits. Anything with extensions or other non-formatting
+    characters, and everything else, is rejected, not guessed."""
+    s = str(raw or "").strip()
+    if not s:
+        return None
+    # Only formatting separators may surround the digits. Anything else (an
+    # extension such as "ext 123" or "x12", letters, a stray + in the middle)
+    # would otherwise be folded into the number and text a different one.
+    if re.search(r"[^\d\s().\-+]", s) or "+" in s[1:]:
+        return None
+    digits = re.sub(r"\D", "", s)
+    if s.startswith("+"):
+        return f"+{digits}" if 8 <= len(digits) <= 15 and digits[0] != "0" else None
+    if len(digits) == 10 and digits[0] not in "01":
+        return f"+1{digits}"
+    if len(digits) == 11 and digits[0] == "1" and digits[1] not in "01":
+        return f"+{digits}"
+    return None
+
+
+def announcement_sms_text(title: str) -> str:
+    base = title.strip().rstrip(".!? ")
+    return f"{base}. {SMS_OPT_OUT_LINE}"
+
+
+def _masked_phone(e164: Optional[str]) -> Optional[str]:
+    return f"***{e164[-4:]}" if e164 else None
+
+
+async def _log_sms(announcement_id: str, agent_id: Optional[str], status: str, *,
+                   phone: Optional[str] = None, reason: Optional[str] = None,
+                   brevo_status: Optional[int] = None, brevo_response: Any = None) -> None:
+    await db.sms_log.insert_one({
+        "announcement_id": announcement_id,
+        "agent_id": agent_id,
+        "to": _masked_phone(phone),
+        "status": status,  # "sent" | "error" | "skipped"
+        "reason": reason,
+        "brevo_status": brevo_status,
+        "brevo_response": brevo_response,
+        "ts": now_utc(),
+    })
+
+
+async def send_brevo_sms(to: str, text: str) -> Dict[str, Any]:
+    """One transactional text through Brevo (its endpoint takes one recipient
+    per request). Returns {ok, status, response}; never raises."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client_http:
+            resp = await client_http.post(
+                BREVO_SMS_URL,
+                json={
+                    "sender": os.environ.get("BREVO_SMS_SENDER", "").strip(),
+                    "recipient": to,
+                    "content": text,
+                    "type": "transactional",
+                    "tag": "vantagelife-announcement",
+                },
+                headers={
+                    "api-key": os.environ.get("BREVO_API_KEY", "").strip(),
+                    "accept": "application/json",
+                    "content-type": "application/json",
+                },
+            )
+        try:
+            payload = resp.json()
+        except Exception:
+            payload = {"raw": resp.text[:300]}
+        return {"ok": resp.status_code in (200, 201), "status": resp.status_code, "response": payload}
+    except Exception as e:
+        logger.warning(f"Brevo SMS send failed: {e}")
+        return {"ok": False, "status": None, "response": {"error": str(e)[:300]}}
+
+
+async def send_announcement_sms(doc: Dict[str, Any], recipient_ids: List[str]) -> int:
+    """Texts an announcement's title to the audience members who opted in at
+    their current number. Returns how many Brevo accepted. A failure for one
+    person is logged and never stops the rest."""
+    announcement_id = doc["announcement_id"]
+    text = announcement_sms_text(doc["title"])
+    sent = 0
+    first = True
+    async for p in db.agent_profiles.find(
+        {"agent_id": {"$in": recipient_ids}},
+        {"_id": 0, "agent_id": 1, "phone": 1, "sms_consent": 1},
+    ):
+        agent_id = p["agent_id"]
+        consent = p.get("sms_consent") or {}
+        if consent.get("status") != "opted_in":
+            continue  # never asked or opted out: not even a log row
+        current = normalize_phone_e164(p.get("phone"))
+        consented = normalize_phone_e164(consent.get("phone"))
+        if current is None:
+            await _log_sms(announcement_id, agent_id, "skipped", reason="phone does not normalise")
+            continue
+        if consented is None or consented != current:
+            await _log_sms(announcement_id, agent_id, "skipped", phone=current,
+                           reason="phone changed since opt-in; needs to opt in again")
+            continue
+        if not first:
+            await asyncio.sleep(SMS_SEND_DELAY_SECONDS)
+        first = False
+        result = await send_brevo_sms(current, text)
+        if result["ok"]:
+            sent += 1
+        await _log_sms(announcement_id, agent_id, "sent" if result["ok"] else "error", phone=current,
+                       reason=None if result["ok"] else "Brevo rejected the message",
+                       brevo_status=result["status"], brevo_response=result["response"])
+    return sent
+
+
+async def _deliver_announcement_sms(sender, doc: Dict[str, Any], recipient_ids: List[str]) -> None:
+    """Background half of announcement texting: runs the batch, then records
+    how many Brevo accepted. Never raises; a crash is logged."""
+    try:
+        sms_count = await sender(doc, recipient_ids)
+    except Exception as e:
+        logger.exception(f"Announcement SMS batch failed: {e}")
+        return
+    await db.announcements.update_one(
+        {"announcement_id": doc["announcement_id"]},
+        {"$set": {"sms_sent_at": now_utc(), "sms_count": sms_count}})
+
+
+@api_router.get("/admin/sms-log")
+async def admin_sms_log(user: Dict[str, Any] = Depends(require_admin)):
+    """Recent text-message attempts, sent, failed and skipped alike, newest
+    first, with the recipient's name and office (one batch lookup)."""
+    items = []
+    async for row in db.sms_log.find({}, {"_id": 0}).sort("ts", -1).limit(200):
+        if isinstance(row.get("ts"), datetime):
+            row["ts"] = iso_utc(row["ts"])
+        items.append(row)
+    ids = list({i["agent_id"] for i in items if i.get("agent_id")})
+    people = {
+        a["agent_id"]: a async for a in db.agent_profiles.find(
+            {"agent_id": {"$in": ids}}, {"_id": 0, "agent_id": 1, "name": 1, "office": 1})
+    }
+    for i in items:
+        who = people.get(i.get("agent_id")) or {}
+        i["name"] = who.get("name")
+        i["office"] = who.get("office")
+    return {"sms_log": items}
 
 
 @api_router.get("/announcements/sms-status")
