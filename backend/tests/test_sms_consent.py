@@ -59,7 +59,8 @@ async def test_opt_out_replaces_opt_in_and_audits_the_change(client, seeded_db):
     assert r.json()["sms_consent"]["phone"] is None
     audits = [a async for a in seeded_db.audit_log.find({"action": "sms_consent", "agent_id": "AG_1"})]
     assert len(audits) == 2
-    latest = max(audits, key=lambda a: a["ts"])
+    # Both rows can share a clock tick, so pick the change by what it did, not by ts.
+    latest = next(a for a in audits if a["new_value"] == "opted_out")
     assert latest["original_value"] == "opted_in"
     assert latest["new_value"] == "opted_out"
     assert latest["source"] == "more_tab"
