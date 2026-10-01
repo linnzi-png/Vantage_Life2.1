@@ -9,6 +9,7 @@ import { TourProvider } from '../src/lib/tour';
 import { TourOverlay } from '../src/components/TourOverlay';
 import NotificationNagOverlay from '../src/components/NotificationNagOverlay';
 import SmsConsentCard from '../src/components/SmsConsentCard';
+import WhatsNewOverlay from '../src/components/WhatsNewOverlay';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { useDisplayFonts } from '../src/lib/fonts';
 
@@ -60,12 +61,14 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="manager" options={{ title: 'Manager Command' }} />
               <Stack.Screen name="audit" options={{ title: 'Audit Log' }} />
+              <Stack.Screen name="whats-new" options={{ title: "What's New" }} />
               <Stack.Screen name="vault" options={{ title: 'Historical Vault' }} />
               <Stack.Screen name="push-log" options={{ title: 'Push Delivery Log' }} />
               <Stack.Screen name="admin" options={{ title: 'Admin Panel' }} />
             </Stack>
             <TourOverlay />
             <SmsConsentCard />
+            <WhatsNewOverlay />
             <NotificationNagOverlay />
           </TourProvider>
           </ErrorBoundary>

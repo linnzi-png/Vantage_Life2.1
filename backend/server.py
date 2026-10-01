@@ -6947,6 +6947,207 @@ async def me_tour_done(user: Dict[str, Any] = Depends(get_current_user)):
     return {"ok": True, "tour_completed_at": stamp}
 
 
+# ---- What's New announcements (owner, 2026-09-24; batch 2, PR B) --------------
+#
+# An admin writes an announcement in the Admin Panel: a short title (the
+# push body) and one to six cards, each a heading and a body, aimed at the
+# whole agency or one office. Creating it sends a push to everyone in the
+# audience straight away and, when Brevo is configured (PR C), a text to
+# those who opted in. In the app, the WHAT'S NEW overlay shows the cards the
+# next time each person opens the app — once, because seen state is kept
+# server-side in announcement_seen so it holds across devices — and the More
+# tab keeps the history. A brand-new account never gets a backlog: only
+# announcements created after the account was.
+
+ANNOUNCEMENT_MAX_CARDS = 6
+ANNOUNCEMENT_UNSEEN_LIMIT = 5
+
+
+class AnnouncementCardIn(BaseModel):
+    heading: str
+    body: str
+
+
+class AnnouncementAudienceIn(BaseModel):
+    scope: str  # "agency" | "office"
+    office: Optional[str] = None
+
+
+class AnnouncementIn(BaseModel):
+    title: str
+    cards: List[AnnouncementCardIn]
+    audience: AnnouncementAudienceIn
+    send_sms: bool = False
+
+
+def _announcement_public(a: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: v for k, v in a.items() if k != "_id"}
+
+
+async def announcement_audience_ids(audience: Dict[str, Any]) -> List[str]:
+    """Active, non-archived profiles in the audience. Non-producing staff are
+    included: an announcement about the app is for everyone who uses it."""
+    q: Dict[str, Any] = {**ACTIVE_AGENT}
+    if audience.get("scope") == "office":
+        q["office"] = audience.get("office")
+    return [a["agent_id"] async for a in db.agent_profiles.find(q, {"_id": 0, "agent_id": 1})]
+
+
+def _user_in_audience(user: Dict[str, Any], agent: Optional[Dict[str, Any]], audience: Dict[str, Any]) -> bool:
+    if audience.get("scope") == "agency":
+        return True
+    return bool(agent) and (agent.get("office") or "") == (audience.get("office") or "")
+
+
+@api_router.post("/admin/announcements")
+async def admin_create_announcement(payload: AnnouncementIn, user: Dict[str, Any] = Depends(require_admin)):
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Give the announcement a title")
+    if len(title) > 80:
+        raise HTTPException(status_code=400, detail="Keep the title under 80 characters; it is the push notification")
+    cards = [{"heading": c.heading.strip(), "body": c.body.strip()} for c in payload.cards]
+    cards = [c for c in cards if c["heading"] or c["body"]]
+    if not cards:
+        raise HTTPException(status_code=400, detail="Add at least one card")
+    if len(cards) > ANNOUNCEMENT_MAX_CARDS:
+        raise HTTPException(status_code=400, detail=f"At most {ANNOUNCEMENT_MAX_CARDS} cards")
+    if any(not c["heading"] for c in cards):
+        raise HTTPException(status_code=400, detail="Every card needs a heading")
+    if payload.audience.scope not in ("agency", "office"):
+        raise HTTPException(status_code=400, detail="audience.scope must be 'agency' or 'office'")
+    office = (payload.audience.office or "").strip()
+    if payload.audience.scope == "office" and not office:
+        raise HTTPException(status_code=400, detail="Pick an office")
+    audience = {"scope": payload.audience.scope, **({"office": office} if payload.audience.scope == "office" else {})}
+    sms_sender = globals().get("send_announcement_sms") if payload.send_sms else None
+    if payload.send_sms and (sms_sender is None or not sms_configured()):
+        raise HTTPException(status_code=400, detail="Text messages are not configured yet")
+
+    now = now_utc()
+    doc = {
+        "announcement_id": f"ann_{uuid.uuid4().hex[:10]}",
+        "title": title,
+        "cards": cards,
+        "audience": audience,
+        "created_by": user["user_id"],
+        "created_by_name": user.get("name"),
+        "created_at": now,
+        "push_sent_at": None,
+        "push_count": 0,
+        "sms_sent_at": None,
+        "sms_count": 0,
+    }
+    await db.announcements.insert_one(dict(doc))
+
+    recipient_ids = await announcement_audience_ids(audience)
+    tokens = [t["push_token"] async for t in db.push_tokens.find(
+        {"agent_id": {"$in": recipient_ids}, "push_token": {"$exists": True, "$ne": None}},
+        {"_id": 0, "push_token": 1})]
+    if tokens:
+        await send_expo_push(tokens, "What's New", title)
+    await db.announcements.update_one(
+        {"announcement_id": doc["announcement_id"]},
+        {"$set": {"push_sent_at": now_utc(), "push_count": len(tokens)}})
+    doc["push_sent_at"] = now_utc()
+    doc["push_count"] = len(tokens)
+
+    sms_count = 0
+    if sms_sender is not None:
+        sms_count = await sms_sender(doc, recipient_ids)
+        await db.announcements.update_one(
+            {"announcement_id": doc["announcement_id"]},
+            {"$set": {"sms_sent_at": now_utc(), "sms_count": sms_count}})
+        doc["sms_sent_at"] = now_utc()
+        doc["sms_count"] = sms_count
+
+    await db.audit_log.insert_one({
+        "audit_id": f"au_{uuid.uuid4().hex[:10]}",
+        "ts": now,
+        "action": "create_announcement",
+        "changed_by": user["user_id"],
+        "changed_by_name": user.get("name"),
+        "new_value": {"announcement_id": doc["announcement_id"], "title": title,
+                      "audience": audience, "cards": len(cards),
+                      "push_count": len(tokens), "sms_count": sms_count},
+    })
+    return {"ok": True, "announcement": _announcement_public(doc)}
+
+
+def sms_configured() -> bool:
+    """Whether the Brevo channel may be used. PR C wires the real check
+    (SMS_ENABLED and the API key); until then texts are unavailable and the
+    Admin Panel's switch stays disabled."""
+    return False
+
+
+@api_router.get("/announcements/sms-status")
+async def announcements_sms_status(user: Dict[str, Any] = Depends(require_admin)):
+    return {"available": sms_configured()}
+
+
+@api_router.get("/admin/announcements")
+async def admin_list_announcements(user: Dict[str, Any] = Depends(require_admin)):
+    items = [_announcement_public(a) async for a in db.announcements.find({}, {"_id": 0}).sort("created_at", -1).limit(100)]
+    return {"announcements": items}
+
+
+async def _caller_agent(user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not user.get("agent_id"):
+        return None
+    return await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0, "office": 1})
+
+
+@api_router.get("/announcements/unseen")
+async def announcements_unseen(user: Dict[str, Any] = Depends(get_current_user)):
+    """Newest first, in the caller's audience, not yet seen by this account,
+    and created after the account was — a new person is not greeted with
+    every announcement ever made. Any signed-in account; pending accounts
+    simply have no office and so see agency-wide ones only."""
+    agent = await _caller_agent(user)
+    created = user.get("created_at")
+    q: Dict[str, Any] = {}
+    if created:
+        q["created_at"] = {"$gt": created}
+    seen_ids = {s["announcement_id"] async for s in db.announcement_seen.find(
+        {"user_id": user["user_id"]}, {"_id": 0, "announcement_id": 1})}
+    out = []
+    async for a in db.announcements.find(q, {"_id": 0}).sort("created_at", -1):
+        if a["announcement_id"] in seen_ids:
+            continue
+        if not _user_in_audience(user, agent, a.get("audience") or {}):
+            continue
+        out.append(_announcement_public(a))
+        if len(out) >= ANNOUNCEMENT_UNSEEN_LIMIT:
+            break
+    return {"announcements": out}
+
+
+@api_router.post("/announcements/{announcement_id}/seen")
+async def announcement_mark_seen(announcement_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    exists = await db.announcements.find_one({"announcement_id": announcement_id}, {"_id": 0, "announcement_id": 1})
+    if not exists:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+    await db.announcement_seen.update_one(
+        {"announcement_id": announcement_id, "user_id": user["user_id"]},
+        {"$setOnInsert": {"announcement_id": announcement_id, "user_id": user["user_id"], "seen_at": now_utc()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.get("/announcements/history")
+async def announcements_history(user: Dict[str, Any] = Depends(get_current_user)):
+    """Everything in the caller's audience, newest first, seen or not, for the
+    More tab. No account-creation cut-off here: history is for looking back."""
+    agent = await _caller_agent(user)
+    out = []
+    async for a in db.announcements.find({}, {"_id": 0}).sort("created_at", -1).limit(50):
+        if _user_in_audience(user, agent, a.get("audience") or {}):
+            out.append(_announcement_public(a))
+    return {"announcements": out}
+
+
 # Mount router & app
 app.include_router(api_router)
 
@@ -6987,6 +7188,8 @@ async def on_startup():
     await db.agent_profiles.create_index("agent_id", unique=True)
     await db.agent_profiles.create_index("upline_id")
     await db.agent_profiles.create_index("office")
+    await db.announcements.create_index([("created_at", -1)])
+    await db.announcement_seen.create_index([("announcement_id", 1), ("user_id", 1)], unique=True)
     await db.production_entries.create_index([("agent_id", 1), ("sales_day", 1)])
     await db.production_entries.create_index("submitted_at")
     await db.production_entries.create_index("archived")

@@ -244,6 +244,13 @@ export default function MoreScreen() {
                 <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
               </TouchableOpacity>
             </TourAnchor>
+            <TourAnchor id="more-whats-new" style={styles.list}>
+              <TouchableOpacity style={styles.item} onPress={() => router.push('/whats-new')} testID="more-whats-new">
+                <Ionicons name="sparkles" size={18} color={COLORS.gold} />
+                <Text style={styles.itemTxt}>What&apos;s New</Text>
+                <Ionicons name="chevron-forward" size={16} color={COLORS.textDim} />
+              </TouchableOpacity>
+            </TourAnchor>
           </>
         ) : null}
 
