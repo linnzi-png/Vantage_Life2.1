@@ -129,7 +129,7 @@ const BASICS_FULL: TourStep[] = [
     screen: '/',
     anchor: 'dash-wall',
     title: 'THE PLATINUM WALL',
-    body: 'Top 3 Vets and top 3 Rookies, with Platinum Rule honorees under them. Tap a name to open their contact card — call or text them straight from the app. Tap the card itself and it flips to the top 10 by Gross ALP.',
+    body: 'Top 3 Vets and top 3 Rookies, with Platinum Rule honorees under them. Tap either card, anywhere on it, and it flips to the top 10 by Gross ALP in that group. Tap again to flip it back.',
   },
   {
     id: 'ticker',

@@ -144,6 +144,14 @@ describe('PlatinumWall', () => {
     expect(screen.getByText('PLATINUM RULE')).toBeTruthy();
   });
 
+  it('flips the whole card when a name on the front is tapped', async () => {
+    const onFlipCard = jest.fn();
+    await render(wall({ vets: [item(1), item(2)], onFlipCard }));
+    await fireEvent.press(screen.getByTestId('platinum-item-a1'));
+    expect(onFlipCard).toHaveBeenCalledTimes(1);
+    expect(onFlipCard).toHaveBeenCalledWith(WALL_VETS_ID);
+  });
+
   it('asks the screen to flip the card that was tapped', async () => {
     const onFlipCard = jest.fn();
     await render(wall({ vets: [item(1)], onFlipCard }));
