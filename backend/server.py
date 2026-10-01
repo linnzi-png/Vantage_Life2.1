@@ -3,7 +3,7 @@ AO Premier — Real-Time Impact Culture
 """
 from fastapi import (
     FastAPI, APIRouter, Request, HTTPException, Response, Depends, Body,
-    UploadFile, File, Form,
+    UploadFile, File, Form, BackgroundTasks,
 )
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
@@ -7000,7 +7000,8 @@ def _user_in_audience(user: Dict[str, Any], agent: Optional[Dict[str, Any]], aud
 
 
 @api_router.post("/admin/announcements")
-async def admin_create_announcement(payload: AnnouncementIn, user: Dict[str, Any] = Depends(require_admin)):
+async def admin_create_announcement(payload: AnnouncementIn, background_tasks: BackgroundTasks,
+                                    user: Dict[str, Any] = Depends(require_admin)):
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Give the announcement a title")
@@ -7052,14 +7053,13 @@ async def admin_create_announcement(payload: AnnouncementIn, user: Dict[str, Any
     doc["push_sent_at"] = now_utc()
     doc["push_count"] = len(tokens)
 
-    sms_count = 0
-    if sms_sender is not None:
-        sms_count = await sms_sender(doc, recipient_ids)
-        await db.announcements.update_one(
-            {"announcement_id": doc["announcement_id"]},
-            {"$set": {"sms_sent_at": now_utc(), "sms_count": sms_count}})
-        doc["sms_sent_at"] = now_utc()
-        doc["sms_count"] = sms_count
+    # Texts go out one at a time with a pause between them, which can take far
+    # longer than the client's request timeout, so the batch runs after the
+    # response is sent. sms_sent_at and sms_count are filled in when it ends.
+    sms_queued = sms_sender is not None
+    if sms_queued:
+        background_tasks.add_task(_deliver_announcement_sms, sms_sender, dict(doc), list(recipient_ids))
+    doc["sms_queued"] = sms_queued
 
     await db.audit_log.insert_one({
         "audit_id": f"au_{uuid.uuid4().hex[:10]}",
@@ -7069,7 +7069,7 @@ async def admin_create_announcement(payload: AnnouncementIn, user: Dict[str, Any
         "changed_by_name": user.get("name"),
         "new_value": {"announcement_id": doc["announcement_id"], "title": title,
                       "audience": audience, "cards": len(cards),
-                      "push_count": len(tokens), "sms_count": sms_count},
+                      "push_count": len(tokens), "sms_queued": sms_queued},
     })
     return {"ok": True, "announcement": _announcement_public(doc)}
 
@@ -7106,9 +7106,15 @@ def normalize_phone_e164(raw: Any) -> Optional[str]:
     """Profiles store phones in mixed formats. Returns +E.164 or None.
     10 digits is a US number (+1); 11 digits starting with 1 is US with the
     country code; anything already starting with + keeps its country code if
-    it has 8 to 15 digits. Everything else is rejected, not guessed."""
+    it has 8 to 15 digits. Anything with extensions or other non-formatting
+    characters, and everything else, is rejected, not guessed."""
     s = str(raw or "").strip()
     if not s:
+        return None
+    # Only formatting separators may surround the digits. Anything else (an
+    # extension such as "ext 123" or "x12", letters, a stray + in the middle)
+    # would otherwise be folded into the number and text a different one.
+    if re.search(r"[^\d\s().\-+]", s) or "+" in s[1:]:
         return None
     digits = re.sub(r"\D", "", s)
     if s.startswith("+"):
@@ -7209,6 +7215,19 @@ async def send_announcement_sms(doc: Dict[str, Any], recipient_ids: List[str]) -
                        reason=None if result["ok"] else "Brevo rejected the message",
                        brevo_status=result["status"], brevo_response=result["response"])
     return sent
+
+
+async def _deliver_announcement_sms(sender, doc: Dict[str, Any], recipient_ids: List[str]) -> None:
+    """Background half of announcement texting: runs the batch, then records
+    how many Brevo accepted. Never raises; a crash is logged."""
+    try:
+        sms_count = await sender(doc, recipient_ids)
+    except Exception as e:
+        logger.exception(f"Announcement SMS batch failed: {e}")
+        return
+    await db.announcements.update_one(
+        {"announcement_id": doc["announcement_id"]},
+        {"$set": {"sms_sent_at": now_utc(), "sms_count": sms_count}})
 
 
 @api_router.get("/admin/sms-log")

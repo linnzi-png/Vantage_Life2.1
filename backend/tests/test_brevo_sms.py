@@ -64,6 +64,12 @@ def announcement(send_sms=True, scope="agency", office=None):
     ("7345550100", "+17345550100"),
     ("1 734 555 0100", "+17345550100"),
     ("+1 (734) 555-0100", "+17345550100"),
+    ("+1 (734) 555-0100 ext 123", None),
+    ("734-555-0100 x12", None),
+    ("734-555-0100 ext. 5", None),
+    ("(734) 555-0100 #4", None),
+    ("734/555/0100", None),
+    ("734 555+0100", None),
     ("+44 20 7946 0958", "+442079460958"),
     ("", None),
     (None, None),
@@ -124,9 +130,10 @@ async def test_only_opted_in_people_are_texted(client, seeded_db, monkeypatch, t
     assert [t["to"] for t in texts] == ["+17345550100"]
     assert texts[0]["text"] == "Team tab date range. Turn off texts in the VantageLife More tab."
     a = r.json()["announcement"]
-    assert a["sms_count"] == 1 and a["sms_sent_at"]
+    # The request returns before the batch; the count lands when it finishes.
+    assert a["sms_queued"] is True and a["sms_count"] == 0
     stored = await seeded_db.announcements.find_one({"announcement_id": a["announcement_id"]})
-    assert stored["sms_count"] == 1
+    assert stored["sms_count"] == 1 and stored["sms_sent_at"]
     # People who never opted in leave no trace in the log either.
     rows = [row async for row in seeded_db.sms_log.find({})]
     assert [(row["agent_id"], row["status"]) for row in rows] == [("AG_1", "sent")]
@@ -140,6 +147,7 @@ async def test_no_texts_unless_the_admin_asks_for_them(client, seeded_db, monkey
     r = await client.post("/api/admin/announcements", headers=auth(token), json=announcement(send_sms=False))
     assert r.status_code == 200
     assert texts == [] and r.json()["announcement"]["sms_count"] == 0
+    assert r.json()["announcement"]["sms_queued"] is False
 
 
 async def test_office_audience_limits_the_texts(client, seeded_db, monkeypatch, texts):
@@ -165,7 +173,9 @@ async def test_changed_number_needs_a_fresh_opt_in(client, seeded_db, monkeypatc
     await opt_in(seeded_db, "AG_1", "(734) 555-0199", consent_phone="(734) 555-0100")
     token = await admin_token(seeded_db)
     r = await client.post("/api/admin/announcements", headers=auth(token), json=announcement())
-    assert texts == [] and r.json()["announcement"]["sms_count"] == 0
+    assert texts == []
+    stored = await seeded_db.announcements.find_one({"announcement_id": r.json()["announcement"]["announcement_id"]})
+    assert stored["sms_count"] == 0
     row = await seeded_db.sms_log.find_one({"agent_id": "AG_1"})
     assert row["status"] == "skipped" and "opt in again" in row["reason"]
 
@@ -185,7 +195,8 @@ async def test_unnormalisable_number_is_skipped_and_logged(client, seeded_db, mo
     token = await admin_token(seeded_db)
     r = await client.post("/api/admin/announcements", headers=auth(token), json=announcement())
     assert [t["to"] for t in texts] == ["+13135550111"]
-    assert r.json()["announcement"]["sms_count"] == 1
+    stored = await seeded_db.announcements.find_one({"announcement_id": r.json()["announcement"]["announcement_id"]})
+    assert stored["sms_count"] == 1
     row = await seeded_db.sms_log.find_one({"agent_id": "AG_1"})
     assert row["status"] == "skipped" and row["reason"] == "phone does not normalise" and row["to"] is None
 
@@ -208,7 +219,8 @@ async def test_one_failure_does_not_stop_the_batch(client, seeded_db, monkeypatc
     await opt_in(seeded_db, "AG_2", "(313) 555-0111")
     token = await admin_token(seeded_db)
     r = await client.post("/api/admin/announcements", headers=auth(token), json=announcement())
-    assert r.json()["announcement"]["sms_count"] == 1
+    stored = await seeded_db.announcements.find_one({"announcement_id": r.json()["announcement"]["announcement_id"]})
+    assert stored["sms_count"] == 1
     statuses = {row["agent_id"]: row["status"] async for row in seeded_db.sms_log.find({})}
     assert statuses == {"AG_1": "error", "AG_2": "sent"}
 
@@ -261,3 +273,47 @@ async def test_brevo_request_shape_and_failure_handling(monkeypatch):
                         lambda **kw: real_client(transport=httpx.MockTransport(boom), **kw))
     down = await server.send_brevo_sms("+17345550100", "x")
     assert down["ok"] is False and down["status"] is None
+
+
+async def test_response_returns_before_the_batch_runs(client, seeded_db, monkeypatch):
+    """The slow part (one request and a pause per person) must not hold the
+    request open: the route answers while the batch has not started."""
+    configure(monkeypatch)
+    started = []
+
+    async def no_push(tokens, title, text):
+        return None
+
+    monkeypatch.setattr(server, "send_expo_push", no_push)
+    deferred = []
+
+    class Capture:
+        def add_task(self, func, *args, **kwargs):
+            deferred.append((func, args, kwargs))
+
+    async def fake_sms(doc, recipient_ids):
+        started.append(doc["announcement_id"])
+        return 3
+
+    monkeypatch.setattr(server, "send_announcement_sms", fake_sms)
+    token = await admin_token(seeded_db)
+    doc = {"title": "T", "cards": [{"heading": "h", "body": "b"}],
+           "audience": {"scope": "agency"}, "send_sms": True}
+    r = await server.admin_create_announcement(
+        server.AnnouncementIn(**doc), Capture(), {"user_id": "u_admin", "name": "Admin"})
+    assert started == [] and len(deferred) == 1
+    assert r["announcement"]["sms_queued"] is True
+    func, args, kwargs = deferred[0]
+    await func(*args, **kwargs)
+    stored = await seeded_db.announcements.find_one({"announcement_id": r["announcement"]["announcement_id"]})
+    assert started and stored["sms_count"] == 3 and stored["sms_sent_at"]
+
+
+async def test_a_crashing_batch_is_logged_not_raised(seeded_db):
+    async def boom(doc, recipient_ids):
+        raise RuntimeError("brevo exploded")
+
+    await seeded_db.announcements.insert_one({"announcement_id": "ann_x", "sms_count": 0, "sms_sent_at": None})
+    await server._deliver_announcement_sms(boom, {"announcement_id": "ann_x"}, [])
+    stored = await seeded_db.announcements.find_one({"announcement_id": "ann_x"})
+    assert stored["sms_sent_at"] is None
