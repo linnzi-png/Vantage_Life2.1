@@ -39,9 +39,12 @@ export default function SmsConsentCard() {
   // explains what to do instead.
   const hasPhone = !!agent?.phone?.trim();
 
+  // A Financial Administrator has an agent profile (and often a phone) but
+  // the server turns that role away from /api/me/sms-consent, so asking would
+  // only ever end in a 403 popup. They are left out of the card entirely.
   const visible =
-    !loading && !!user?.agent_id && !!agent && hasPhone && agent.sms_consent == null
-    && !tourActive && !tourDeciding && !answered;
+    !loading && !!user?.agent_id && user.role !== 'finance_admin' && !!agent && hasPhone
+    && agent.sms_consent == null && !tourActive && !tourDeciding && !answered;
   if (!visible) return null;
 
   const answer = async (optedIn: boolean) => {
