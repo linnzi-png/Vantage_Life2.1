@@ -1792,7 +1792,8 @@ def validate_buffered_sales_day(sales_day: Optional[str], is_proxy_entry: bool, 
 
 
 @api_router.post("/pulse")
-async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_agent)):
+async def submit_pulse(payload: PulseIn, background_tasks: BackgroundTasks,
+                       user: Dict[str, Any] = Depends(require_agent)):
     if not user.get("agent_id"):
         raise HTTPException(status_code=400, detail="No linked agent profile")
 
@@ -1871,8 +1872,9 @@ async def submit_pulse(payload: PulseIn, user: Dict[str, Any] = Depends(require_
     await db.production_entries.insert_one(entry)
     entry.pop("_id", None)
 
-    # Trigger shoutouts
-    await maybe_trigger_shoutouts(agent, entry)
+    # Trigger shoutouts (each one pushes to the person's team after the
+    # response, through background_tasks)
+    await maybe_trigger_shoutouts(agent, entry, background_tasks)
 
     # Confirmation check-in to the direct upline -- self entries only. Proxy
     # entries skip it (the upline typed the numbers themselves).
@@ -1926,7 +1928,8 @@ async def pulse_me_day(sales_day: Optional[str] = None, user: Dict[str, Any] = D
 
 
 @api_router.post("/pulse/correct")
-async def pulse_correct(payload: SelfCorrectIn, user: Dict[str, Any] = Depends(require_agent)):
+async def pulse_correct(payload: SelfCorrectIn, background_tasks: BackgroundTasks,
+                        user: Dict[str, Any] = Depends(require_agent)):
     """Self-correction (owner decisions, 2026-08-22): the agent restates the
     TRUE totals for a day within MAX_SELF_BUFFER_DAYS; one is_adjustment /
     is_self_correction row carries the per-field deltas.
@@ -2021,7 +2024,9 @@ async def pulse_correct(payload: SelfCorrectIn, user: Dict[str, Any] = Depends(r
     # Only the Player's Club check re-runs — it's idempotent (no-ops if the
     # shoutout already exists) and never retracts one if the corrected total
     # drops back under $10k. Streak / First Deal are never correction-triggered.
-    await maybe_trigger_players_club(agent, sd)
+    # The push rides on the insert: a re-run that finds the shoutout already
+    # there sends nothing.
+    await maybe_trigger_players_club(agent, sd, background_tasks)
 
     audit["ts"] = iso_utc(audit["ts"])
     return {"ok": True, "entry": _ser_entry(adj), "audit": audit}
@@ -3022,16 +3027,116 @@ async def hierarchy_directory(user: Dict[str, Any] = Depends(require_agent_or_ad
 #                       SHOUTOUTS
 # =========================================================
 
-async def maybe_trigger_players_club(agent: Dict[str, Any], sd: str):
+# ---- Shoutout pushes (owner, 2026-10-01; audience and copy 2026-10-02) ---------
+#
+# Every shoutout type pushes the moment it is created -- Player's Club, First
+# Deal, Streak and a Platinum Rule post -- to the person's own team and to no
+# one else, and never to the person it is about. "Team" is sa_team_agent_ids:
+# the subtree under the nearest SA or GA above the person, the same grouping
+# Missing Numbers and the Team tab use, so "my team" means one thing. A removed
+# or archived person is skipped through ACTIVE_AGENT, because removing someone
+# leaves their token row behind. Like the tenure nudge, a send is deduped
+# through notification_log and each token's outcome lands in push_log
+# (send_expo_push). The routes queue the send as a background task, as the
+# announcement texts are, so the response never waits on Expo, and
+# push_shoutout swallows its own failures: nothing here can fail the request
+# that created the shoutout.
+
+SHOUTOUT_PUSH_TITLE = "VantageLife"
+# Expo rejects a request of more than 100 messages (PUSH_TOO_MANY_NOTIFICATIONS)
+# and send_expo_push sends what it is given in one request, so a large team's
+# push goes out in slices.
+EXPO_PUSH_BATCH = 100
+# The Player's Club line: this much Gross ALP in one sales day. The push
+# names this figure ("$10,000 in one day"), not the person's own total, so
+# the copy and the check below cannot drift apart.
+PLAYERS_CLUB_DAILY_ALP = 10000
+
+
+def _players_club_push_body(name: str) -> str:
+    return f"{name} hit Player's Club (${PLAYERS_CLUB_DAILY_ALP:,} in one day)"
+
+
+def _first_deal_push_body(name: str) -> str:
+    return f"{name} closed their first deal"
+
+
+def _streak_push_body(name: str, streak: Any) -> str:
+    return f"{name} is on a {streak}-night streak"
+
+
+def _platinum_rule_push_body(name: str) -> str:
+    return f"{name} was posted to the Platinum Wall"
+
+
+async def shoutout_team_recipient_ids(person_id: str) -> List[str]:
+    """The active members of the person's SA team, minus the person."""
+    team = [a for a in await sa_team_agent_ids(person_id) if a != person_id]
+    if not team:
+        return []
+    return [a["agent_id"] async for a in db.agent_profiles.find(
+        {**ACTIVE_AGENT, "agent_id": {"$in": team}}, {"_id": 0, "agent_id": 1})]
+
+
+async def push_shoutout(shoutout: Dict[str, Any], nomination_id: Optional[str] = None) -> None:
+    """Push a shoutout that was just inserted. Best-effort -- never raises.
+
+    Every type goes to every registered token of the active members of the
+    person's team, minus the person (for a Platinum Rule, the nominee's team).
+    An unknown type returns at once. No token, no send. notification_log keeps
+    one send per person and day for a Player's Club, one per person for a First
+    Deal, one per person and streak length for a Streak, and one per nomination
+    for a Platinum Rule, so two requests racing to the same insert cannot push
+    twice."""
+    try:
+        kind = shoutout.get("type")
+        person_id = shoutout.get("agent_id")
+        if not person_id:
+            return
+        name = (shoutout.get("agent_name") or "").strip() or "A teammate"
+        if kind == "players_club":
+            body = _players_club_push_body(name)
+            log_stage = "shoutout_players_club"
+        elif kind == "first_deal":
+            body = _first_deal_push_body(name)
+            log_stage = "shoutout_first_deal"
+        elif kind == "streak":
+            body = _streak_push_body(name, shoutout.get("streak"))
+            log_stage = f"shoutout_streak:{shoutout.get('streak')}"
+        elif kind == "platinum_rule":
+            body = _platinum_rule_push_body(name)
+            log_stage = f"shoutout_platinum_rule:{nomination_id or shoutout.get('shoutout_id')}"
+        else:
+            return  # a type added later does not push until it is listed here
+        recipient_ids = await shoutout_team_recipient_ids(person_id)
+        if not recipient_ids:
+            return
+        tokens = [t["push_token"] async for t in db.push_tokens.find(
+            {"agent_id": {"$in": recipient_ids}, "push_token": {"$exists": True, "$ne": None}},
+            {"_id": 0, "push_token": 1})]
+        tokens = list(dict.fromkeys(tokens))  # one device, one push
+        if not tokens:
+            return
+        if not await _log_and_check(person_id, shoutout.get("sales_day"), log_stage):
+            return
+        for i in range(0, len(tokens), EXPO_PUSH_BATCH):
+            await send_expo_push(tokens[i:i + EXPO_PUSH_BATCH], SHOUTOUT_PUSH_TITLE, body)
+    except Exception as e:
+        logger.warning(f"Shoutout push failed: {e}")
+
+
+async def maybe_trigger_players_club(agent: Dict[str, Any], sd: str, background_tasks: BackgroundTasks):
     """Player's Club: $10k+ Gross ALP in a sales day. Idempotent — no-ops if
     the shoutout for this agent+day already exists, and never retracts one.
     Split out of maybe_trigger_shoutouts so a self-correction can re-run just
-    this check (the only shoutout type corrections may trigger)."""
+    this check (the only shoutout type corrections may trigger). A shoutout it
+    actually inserts is pushed to the person's team after the response
+    (push_shoutout); a no-op pushes nothing."""
     agg = await aggregate_alp({"agent_id": agent["agent_id"], "sales_day": sd})
-    if agg["gross_alp"] >= 10000:
+    if agg["gross_alp"] >= PLAYERS_CLUB_DAILY_ALP:
         existing = await db.shoutouts.find_one({"type": "players_club", "agent_id": agent["agent_id"], "sales_day": sd})
         if not existing:
-            await db.shoutouts.insert_one({
+            shoutout = {
                 "shoutout_id": f"so_{uuid.uuid4().hex[:10]}",
                 "type": "players_club",
                 "scope": "global",
@@ -3042,12 +3147,16 @@ async def maybe_trigger_players_club(agent: Dict[str, Any], sd: str):
                 "sales_day": sd,
                 "amount": agg["gross_alp"],
                 "ts": now_utc(),
-            })
+            }
+            await db.shoutouts.insert_one(shoutout)
+            background_tasks.add_task(push_shoutout, dict(shoutout))
 
 
-async def maybe_trigger_shoutouts(agent: Dict[str, Any], entry: Dict[str, Any]):
+async def maybe_trigger_shoutouts(agent: Dict[str, Any], entry: Dict[str, Any], background_tasks: BackgroundTasks):
+    # Every type below pushes to the person's team once it is inserted
+    # (push_shoutout); a check that finds the shoutout already there pushes nothing.
     sd = entry["sales_day"]
-    await maybe_trigger_players_club(agent, sd)
+    await maybe_trigger_players_club(agent, sd, background_tasks)
     # First Deal Milestone (only first ever sale): scope = ga_team
     total_sales = await db.production_entries.aggregate([
         {"$match": {"agent_id": agent["agent_id"]}},
@@ -3056,7 +3165,7 @@ async def maybe_trigger_shoutouts(agent: Dict[str, Any], entry: Dict[str, Any]):
     if total_sales and total_sales[0]["sales"] == entry["sales"] and entry["sales"] > 0:
         existing = await db.shoutouts.find_one({"type": "first_deal", "agent_id": agent["agent_id"]})
         if not existing:
-            await db.shoutouts.insert_one({
+            first_deal = {
                 "shoutout_id": f"so_{uuid.uuid4().hex[:10]}",
                 "type": "first_deal",
                 "scope": "ga_team",
@@ -3066,7 +3175,9 @@ async def maybe_trigger_shoutouts(agent: Dict[str, Any], entry: Dict[str, Any]):
                 "office": agent["office"],
                 "sales_day": sd,
                 "ts": now_utc(),
-            })
+            }
+            await db.shoutouts.insert_one(first_deal)
+            background_tasks.add_task(push_shoutout, dict(first_deal))
     # Streak: 5+ consecutive on-time pulse submissions
     streak = 0
     d = now_detroit()
@@ -3080,7 +3191,7 @@ async def maybe_trigger_shoutouts(agent: Dict[str, Any], entry: Dict[str, Any]):
     if streak >= 5:
         existing = await db.shoutouts.find_one({"type": "streak", "agent_id": agent["agent_id"], "streak": streak})
         if not existing:
-            await db.shoutouts.insert_one({
+            streak_shoutout = {
                 "shoutout_id": f"so_{uuid.uuid4().hex[:10]}",
                 "type": "streak",
                 "scope": "global",
@@ -3091,7 +3202,9 @@ async def maybe_trigger_shoutouts(agent: Dict[str, Any], entry: Dict[str, Any]):
                 "sales_day": sd,
                 "streak": streak,
                 "ts": now_utc(),
-            })
+            }
+            await db.shoutouts.insert_one(streak_shoutout)
+            background_tasks.add_task(push_shoutout, dict(streak_shoutout))
 
 
 @api_router.get("/shoutouts")
@@ -3246,7 +3359,8 @@ async def endorse_nomination(nomination_id: str, user: Dict[str, Any] = Depends(
 
 
 @api_router.post("/nominations/{nomination_id}/post-to-wall")
-async def post_nomination_to_wall(nomination_id: str, user: Dict[str, Any] = Depends(require_level(3))):
+async def post_nomination_to_wall(nomination_id: str, background_tasks: BackgroundTasks,
+                                  user: Dict[str, Any] = Depends(require_level(3))):
     nom = await db.nominations.find_one({"nomination_id": nomination_id}, {"_id": 0})
     if not nom:
         raise HTTPException(status_code=404, detail="Nomination not found")
@@ -3275,6 +3389,9 @@ async def post_nomination_to_wall(nomination_id: str, user: Dict[str, Any] = Dep
         {"nomination_id": nomination_id},
         {"$set": {"status": "posted", "posted_at": now_utc(), "posted_by_agent_id": user["agent_id"]}},
     )
+    # The nominee's team hears about it, after the response (owner,
+    # 2026-10-02); the nomination id is what keeps a double tap to one push.
+    background_tasks.add_task(push_shoutout, dict(shoutout), nomination_id)
     shoutout.pop("_id", None)
     shoutout["ts"] = iso_utc(shoutout["ts"])
     return {"ok": True, "shoutout": shoutout}

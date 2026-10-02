@@ -100,8 +100,9 @@ appear under All only, with a SET TENURE badge for whoever may set it
 Admin Panel's path). Their nearest SA or GA — else the MGA or RGA they
 report to — gets one consolidated push each morning with the 06:30 job
 (`run_tenure_nudge`, stage `tenure_nudge_upline` in `notification_log`)
-until it is set. The secondary filter, REPORTS TO ME, is the caller's
-downline — what an upline wants for entry, not for competing.
+until it is set. The secondary filter, MY DIRECT REPORTS (REPORTS TO ME
+until 2026-10-01; same filter), is the caller's downline — what an
+upline wants for entry, not for competing.
 
 **The Team tab's window is a date range (owner, 2026-09-24).** One date
 button replaces the Daily / Weekly / Monthly selector and the week chips.
@@ -130,7 +131,23 @@ Three things stay exactly as they were:
 - **Every write path** — `can_enter_for`, remove-person, reassign, set-tier —
   stays on `downline_agent_ids`. `team_view` marks each row with
   `in_my_downline` so the client only offers those actions where they would
-  succeed; the Team tab also uses it for the MY TEAM / REPORTS TO ME filter.
+  succeed; the Team tab also uses it for the MY TEAM / MY DIRECT REPORTS filter.
+
+**Shoutout pushes (owner, 2026-10-01; audience and copy 2026-10-02).** Every
+shoutout type pushes the moment it is created - Player's Club, First Deal,
+Streak and a Platinum Rule post - to the person's own team and no one else, and
+never to the person it is about. "Team" is `sa_team_agent_ids`, the same
+nearest-SA-or-GA grouping Missing Numbers uses; a removed or archived person
+is skipped. A Platinum Rule goes to the nominee's team, not to the whole
+agency and not to the poster unless the poster is on it. Copy (title
+VantageLife): "<name> hit Player's Club ($10,000 in one day)", "<name> closed their first
+deal", "<name> is on a 5-night streak", "<name> was posted to the Platinum
+Wall". The send is queued after the response (`push_shoutout` through
+BackgroundTasks), deduped through `notification_log` (Player's Club per person
+and day, First Deal per person, Streak per person and length, Platinum Rule
+per nomination), logged per token in `push_log`, sent in slices of 100, and a
+failure is logged and never fails the request that made the shoutout. A new
+shoutout type does not push until it is listed in `push_shoutout`.
 
 **Missing Numbers (per owner, 2026-09-19, MJ's request):** `GET
 /api/team/missing` lists, for each of the last 7 sales days (max 14), who has

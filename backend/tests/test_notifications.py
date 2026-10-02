@@ -4,6 +4,7 @@ run_pulse_escalation_check() is tested directly (not through the 60s loop) by
 monkeypatching now_detroit() to land inside a specific stage's fire window.
 """
 from datetime import datetime
+import pytest
 import pytz
 import server
 from conftest import auth, make_session
@@ -204,6 +205,17 @@ async def test_admin_manual_trigger(client, seeded_db, monkeypatch):
 
 # ---------------- upline submission confirmation ----------------
 
+@pytest.fixture()
+def no_shoutout_push(monkeypatch):
+    """Shoutouts push to the person's team (test_shoutout_push.py covers that).
+    FULL_PULSE has sales, so it also makes a First Deal shoutout; these tests
+    are about the upline check-in alone and capture every push, so the
+    shoutout push is muted here."""
+    async def skip(shoutout, nomination_id=None):
+        return None
+    monkeypatch.setattr(server, "push_shoutout", skip)
+
+
 FULL_PULSE = {
     "sets": 4, "sits": 3, "sales": 2, "ots_sits": 1, "ots_sales": 0,
     "n1": 1, "refs_obtained": 5, "ref_sits": 1, "ref_sales": 0,
@@ -212,7 +224,7 @@ FULL_PULSE = {
 }
 
 
-async def test_submission_pushes_confirmation_to_direct_upline(client, seeded_db, monkeypatch):
+async def test_submission_pushes_confirmation_to_direct_upline(client, seeded_db, monkeypatch, no_shoutout_push):
     """AG_1 submits -> SA_1 (direct upline) gets exactly one confirmation push."""
     await seeded_db.push_tokens.insert_one({"user_id": "u_sa1", "agent_id": "SA_1", "push_token": "tok_sa1"})
     captured = []
@@ -227,7 +239,7 @@ async def test_submission_pushes_confirmation_to_direct_upline(client, seeded_db
     assert captured == [({"tok_sa1"}, "Agent One entered their daily numbers.")]
 
 
-async def test_submission_confirmation_fires_once_per_sales_day(client, seeded_db, monkeypatch):
+async def test_submission_confirmation_fires_once_per_sales_day(client, seeded_db, monkeypatch, no_shoutout_push):
     await seeded_db.push_tokens.insert_one({"user_id": "u_sa1", "agent_id": "SA_1", "push_token": "tok_sa1"})
     captured = []
     async def fake_send(tokens, title, body):
@@ -241,7 +253,7 @@ async def test_submission_confirmation_fires_once_per_sales_day(client, seeded_d
     assert len(captured) == 1  # notification_log dedupes the second entry
 
 
-async def test_proxy_entry_sends_no_confirmation(client, seeded_db, monkeypatch):
+async def test_proxy_entry_sends_no_confirmation(client, seeded_db, monkeypatch, no_shoutout_push):
     """SA_1 enters numbers FOR AG_1 -> nobody gets a confirmation push."""
     await seeded_db.push_tokens.insert_many([
         {"user_id": "u_sa1", "agent_id": "SA_1", "push_token": "tok_sa1"},
