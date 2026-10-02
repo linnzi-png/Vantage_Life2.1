@@ -35,3 +35,28 @@ def test_more_sales_than_sits_exceeds_one_hundred():
 def test_eligible_sits_helper_is_gone():
     """It only existed to subtract N1; keeping it invites the old rule back."""
     assert not hasattr(metrics, "eligible_sits")
+
+
+# ---------------- Team views: Refs per Sit and Average ALP ----------------
+
+def test_refs_per_sit_is_referrals_over_sits():
+    assert metrics.refs_per_sit(refs_obtained=6, sits=4) == 1.5
+    assert metrics.refs_per_sit(refs_obtained=0, sits=10) == 0
+
+
+def test_refs_per_sit_is_a_ratio_not_a_percentage():
+    assert metrics.refs_per_sit(refs_obtained=5, sits=5) == 1.0
+
+
+def test_refs_per_sit_with_zero_sits_returns_zero():
+    assert metrics.refs_per_sit(refs_obtained=0, sits=0) == 0
+    assert metrics.refs_per_sit(refs_obtained=7, sits=0) == 0   # referrals with no appointment kept: no ratio
+
+
+def test_alp_per_sale_is_gross_alp_over_sales():
+    assert metrics.alp_per_sale(gross_alp=1800.0, sales=3) == 600.0
+
+
+def test_alp_per_sale_with_zero_sales_returns_zero():
+    assert metrics.alp_per_sale(gross_alp=0.0, sales=0) == 0
+    assert metrics.alp_per_sale(gross_alp=950.0, sales=0) == 0

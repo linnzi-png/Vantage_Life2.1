@@ -35,7 +35,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from jose import jwt as apple_jwt
 from jose.exceptions import JOSEError
-from typing import List, Optional, Dict, Any, Tuple
+from typing import Iterable, List, Optional, Dict, Any, Tuple
 from datetime import datetime, timezone, timedelta, date
 
 ROOT_DIR = Path(__file__).parent
@@ -2576,6 +2576,38 @@ def month_to_date_range() -> Tuple[str, str]:
     return f"{today[:7]}-01", today
 
 
+def build_tree(profiles: Iterable[Dict[str, Any]]) -> Tuple[Dict[str, List[str]], set]:
+    """(children by upline, archived ids) from agent profiles. Archived people
+    stay in the tree: removing someone archives them and deliberately keeps
+    their upline_id and their production ("history is history" -- see
+    team_remove_person), so a team total that skipped them would disagree with
+    the rows printed underneath it."""
+    children: Dict[str, List[str]] = {}
+    archived_ids: set = set()
+    for a in profiles:
+        children.setdefault(a.get("upline_id") or "", []).append(a["agent_id"])
+        if a.get("archived"):
+            archived_ids.add(a["agent_id"])
+    return children, archived_ids
+
+
+async def load_roster_tree() -> Tuple[Dict[str, List[str]], set]:
+    return build_tree([a async for a in db.agent_profiles.find(
+        {}, {"_id": 0, "agent_id": 1, "upline_id": 1, "archived": 1})])
+
+
+def team_member_ids(children: Dict[str, List[str]], root: str) -> List[str]:
+    """The root and everyone under them, in memory (no query per leader)."""
+    seen, queue = {root}, [root]
+    while queue:
+        node = queue.pop()
+        for kid in children.get(node, []):
+            if kid not in seen:
+                seen.add(kid)
+                queue.append(kid)
+    return list(seen)
+
+
 @api_router.get("/team")
 async def team_view(
     period: Optional[str] = None,
@@ -2760,25 +2792,12 @@ async def team_view(
         # numbers on this board. Walking only the active roster would drop them
         # from every ancestor's rollup, so a leader's team total would disagree
         # with the rows printed underneath it.
-        children: Dict[str, List[str]] = {}
-        archived_ids: set = set()
-        async for a in db.agent_profiles.find(
-                {}, {"_id": 0, "agent_id": 1, "upline_id": 1, "archived": 1}):
-            children.setdefault(a.get("upline_id") or "", []).append(a["agent_id"])
-            if a.get("archived"):
-                archived_ids.add(a["agent_id"])
-
-        def subtree(root: str) -> List[str]:
-            seen, queue = set(), [root]
-            while queue:
-                node = queue.pop()
-                for kid in children.get(node, []):
-                    if kid not in seen:
-                        seen.add(kid)
-                        queue.append(kid)
-            return list(seen)
-
-        subtrees = {r["agent_id"]: subtree(r["agent_id"]) for r in leaders}
+        children, archived_ids = await load_roster_tree()
+        # A team is the leader plus everyone under them (owner, from MJ,
+        # 2026-09-25): a GA's total is the GA and every SA team below, so the
+        # figure on a leader's row and the one on the Team views' totals can
+        # never disagree. team_size below stays "who is under them".
+        subtrees = {r["agent_id"]: team_member_ids(children, r["agent_id"]) for r in leaders}
         every_id = sorted({aid for ids_ in subtrees.values() for aid in ids_})
         totals: Dict[str, Dict[str, float]] = {}
         if every_id:
@@ -2796,9 +2815,12 @@ async def team_view(
                 float(totals.get(aid, {}).get("gross_alp") or 0) for aid in subtrees[r["agent_id"]]), 2)
             r["team_sales"] = sum(
                 int(totals.get(aid, {}).get("sales") or 0) for aid in subtrees[r["agent_id"]])
-            # Production counts everyone who ever produced under them; head
-            # count is who is actually on the team today.
-            r["team_size"] = len([aid for aid in subtrees[r["agent_id"]] if aid not in archived_ids])
+            # Production counts the leader and everyone who ever produced
+            # under them; team_size is who is actually under them today (the
+            # leader is not counted in it).
+            r["team_size"] = len([
+                aid for aid in subtrees[r["agent_id"]]
+                if aid != r["agent_id"] and aid not in archived_ids])
 
     # Rank runs on Gross ALP, the same measure the Platinum Wall ranks on, so a
     # position means the same thing on both screens whatever column the list is
@@ -2865,6 +2887,198 @@ async def team_view(
         "start_day": day_from,
         "end_day": day_to,
         "window_start": iso_utc(window_start) if window_start else None,
+    }
+
+
+# ---- Team views (owner: MJ 2026-09-25; Linnzi 2026-09-26, 2026-09-29) -----------
+#
+# Office-wide TOTALS for every SA, GA or MGA team, for any leader. A team is the
+# leader plus everyone under them, nested (a GA team is the GA and every SA team
+# below), the same figure team_view prints on a leader's row. Only totals and
+# ratios leave here: per-member numbers still come from /api/team under
+# team_scope_agent_ids, and a team outside the caller's downline is a total line
+# and nothing else (no member ids). That office-wide read above a leader's own
+# tier is deliberate, like the dashboard's aggregates (see CLAUDE.md).
+
+BRANCH_TIERS = {"sa": SA_ROLE, "ga": "level_2", "mga": "level_3"}
+COMPETITOR_LIMIT = 3
+# (category key, line field). A higher value is better in all four.
+BEST_WORST_CATEGORIES = (
+    ("alp", "team_gross_alp"),
+    ("refs_per_sit", "refs_per_sit"),
+    ("show_ratio", "show_ratio"),
+    ("avg_alp", "avg_alp"),
+)
+
+
+def _best_worst(lines: List[Dict[str, Any]]) -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
+    """Best and worst team per category; a tie lists every tied team, zeros
+    included. When every team ties (or there is only one), they are all "best"
+    and "worst" is empty, so no team is called out as both."""
+    out: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+    for key, field in BEST_WORST_CATEGORIES:
+        values = [round(float(ln[field]), 2) for ln in lines]
+        if not lines:
+            out[key] = {"best": [], "worst": []}
+            continue
+        top, bottom = max(values), min(values)
+
+        def pick(target: float) -> List[Dict[str, Any]]:
+            return [
+                {"agent_id": ln["agent_id"], "name": ln["name"], "io_role": ln["io_role"], "value": v}
+                for ln, v in zip(lines, values) if v == target]
+
+        out[key] = {"best": pick(top), "worst": [] if top == bottom else pick(bottom)}
+    return out
+
+
+@api_router.get("/team/branches")
+async def team_branches(
+    tier: str = "sa",
+    start_day: Optional[str] = None,
+    end_day: Optional[str] = None,
+    user: Dict[str, Any] = Depends(require_leader),
+):
+    """Team totals for one tier (`sa`, `ga` or `mga`) over a window of sales
+    days (same range params as /api/team; month to date by default).
+
+    Scope, like the Team tab: a leader reads their own office; MJ in the
+    company view reads every office, grouped; MJ on "own" reads only the
+    branches of his own tree. Candidates are active leaders whose `role` is the
+    tier, never their title. Everything is one roster read and one aggregation
+    over the union of the teams, never a query per leader.
+
+    `competitors`: up to three peers of the caller's own tier by team Gross ALP
+    for the window -- the other leaders at their tier in their own office, and
+    for an RGA the RGAs of the other offices (owner, 2026-10-02). Identity and
+    the team's Gross ALP only; nothing else about them.
+    """
+    tier_role = BRANCH_TIERS.get((tier or "").strip().lower())
+    if not tier_role:
+        raise HTTPException(status_code=400, detail="tier must be sa, ga or mga")
+    if start_day or end_day:
+        day_from, day_to = resolve_day_range(start_day, end_day)
+    else:
+        day_from, day_to = month_to_date_range()
+
+    roster = {a["agent_id"]: a async for a in db.agent_profiles.find(
+        {}, {"_id": 0, "agent_id": 1, "name": 1, "io_role": 1, "office": 1, "role": 1,
+             "upline_id": 1, "archived": 1, "phone": 1, "email": 1})}
+    children, archived_ids = build_tree(roster.values())
+    me = roster.get(user.get("agent_id") or "")
+    my_office = (me or {}).get("office")
+    own_only = user_reads_own_only(user)
+    company = user_admin_active(user) and not own_only
+    scope = "company" if company else ("own" if own_only else "office")
+    mine_ids = set(team_member_ids(children, me["agent_id"])) if me else set()
+    # The same rule team_view applies to in_my_downline: a level_4 or an active
+    # admin reaches everything they can see; everyone else, their own tree.
+    reaches_all = role_level(user.get("role")) >= 4 or user_admin_active(user)
+
+    def active_leader(a: Dict[str, Any], role: str) -> bool:
+        return a.get("role") == role and not a.get("archived")
+
+    candidates = []
+    for a in roster.values():
+        if not active_leader(a, tier_role):
+            continue
+        if scope == "own" and a["agent_id"] not in mine_ids:
+            continue
+        if scope == "office" and (not my_office or a.get("office") != my_office):
+            continue
+        candidates.append(a)
+
+    my_role = user.get("role")
+    peers = []
+    if me:
+        for a in roster.values():
+            if a["agent_id"] == me["agent_id"] or not active_leader(a, my_role):
+                continue
+            same_office = a.get("office") == my_office
+            # A GA's rivals are the other GAs in their office; an RGA is the only
+            # one of their tier in theirs, so their rivals are the other offices'.
+            if same_office == (my_role != "level_4"):
+                peers.append(a)
+
+    team_of = {a["agent_id"]: team_member_ids(children, a["agent_id"]) for a in [*candidates, *peers]}
+    every_id = sorted({aid for ids_ in team_of.values() for aid in ids_})
+    totals: Dict[str, Dict[str, Any]] = {}
+    if every_id:
+        async for d in db.production_entries.aggregate([
+            {"$match": {"sales_day": {"$gte": day_from, "$lte": day_to}, "agent_id": {"$in": every_id}}},
+            {"$group": {"_id": "$agent_id",
+                        "gross_alp": {"$sum": "$gross_alp"}, "sales": {"$sum": "$sales"},
+                        "sits": {"$sum": "$sits"}, "sets": {"$sum": "$sets"},
+                        "n1": {"$sum": "$n1"}, "refs_obtained": {"$sum": "$refs_obtained"}}},
+        ]):
+            totals[d["_id"]] = d
+
+    def team_sum(root: str) -> Dict[str, Any]:
+        t = {"gross_alp": 0.0, "sales": 0, "sits": 0, "sets": 0, "n1": 0, "refs_obtained": 0}
+        for aid in team_of[root]:
+            row = totals.get(aid)
+            if row:
+                for k in t:
+                    t[k] += row.get(k) or 0
+        return t
+
+    lines: List[Dict[str, Any]] = []
+    for a in candidates:
+        cid = a["agent_id"]
+        t = team_sum(cid)
+        sits, sales, refs = int(t["sits"]), int(t["sales"]), int(t["refs_obtained"])
+        mine = reaches_all or cid in mine_ids or (me is not None and cid == me["agent_id"])
+        members = [aid for aid in team_of[cid] if aid != cid]
+        lines.append({
+            "agent_id": cid,
+            "name": a.get("name") or "",
+            "io_role": a.get("io_role") or "",
+            "role": a.get("role") or "",
+            # Contact details only, so a team outside the caller's downline can still be
+            # phoned or texted from its line (decision 4); nothing about the people under it.
+            "phone": a.get("phone") or "",
+            "email": a.get("email") or "",
+            "office": a.get("office") or "",
+            "team_gross_alp": round(float(t["gross_alp"]), 2),
+            "team_sales": sales,
+            "team_sits": sits,
+            "team_refs": refs,
+            # Active people on the team, the leader included.
+            "head_count": len([aid for aid in team_of[cid] if aid not in archived_ids]),
+            "close_ratio": round(metrics.close_rate(sales, sits), 1),
+            "refs_per_sit": round(metrics.refs_per_sit(refs, sits), 2),
+            "show_ratio": round(metrics.show_rate(sits, int(t["n1"]), int(t["sets"])), 1),
+            "avg_alp": round(metrics.alp_per_sale(float(t["gross_alp"]), sales), 2),
+            "in_my_downline": mine,
+            # Only a team under the caller shows its people; anyone else's is a
+            # total and nothing more.
+            "member_ids": members if mine else [],
+        })
+
+    sections: Dict[str, List[Dict[str, Any]]] = {}
+    for ln in lines:
+        sections.setdefault(ln["office"], []).append(ln)
+    offices = []
+    for office in sorted(sections, key=lambda o: (o != (my_office or ""), o)):
+        group = sorted(sections[office], key=lambda ln: (-ln["team_gross_alp"], ln["name"]))
+        for ln in group:
+            # Competition rank within (office, tier): ties share a place.
+            ln["team_rank"] = 1 + sum(1 for o in group if o["team_gross_alp"] > ln["team_gross_alp"])
+        offices.append({"office": office, "lines": group, "best_worst": _best_worst(group)})
+
+    ranked_peers = sorted(
+        ({"agent_id": p["agent_id"], "name": p.get("name") or "", "io_role": p.get("io_role") or "",
+          "office": p.get("office") or "", "team_gross_alp": round(float(team_sum(p["agent_id"])["gross_alp"]), 2)}
+         for p in peers),
+        key=lambda p: (-p["team_gross_alp"], p["name"]))
+
+    return {
+        "tier": tier.strip().lower(),
+        "scope": scope,
+        "start_day": day_from,
+        "end_day": day_to,
+        "offices": offices,
+        "competitors": ranked_peers[:COMPETITOR_LIMIT],
     }
 
 

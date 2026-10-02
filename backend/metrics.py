@@ -52,3 +52,24 @@ def goal_progress(total: float, goal: float) -> float:
     non-positive goal, so a misconfigured campaign never divides by zero.
     """
     return (total / goal * 100) if goal > 0 else 0
+
+
+def refs_per_sit(refs_obtained: int, sits: int) -> float:
+    """Refs per Sit: referrals obtained / sits, over the same window.
+
+    A ratio, not a percentage: 1.5 means one and a half referrals for every
+    appointment kept. It is the Team views' fourth best/worst category (owner,
+    from MJ, 2026-09-25) and, like every metric here, is computed once in this
+    module so no route re-derives it.
+
+    Returns 0 when there are no sits.
+    """
+    return (refs_obtained / sits) if sits > 0 else 0
+
+
+def alp_per_sale(gross_alp: float, sales: int) -> float:
+    """Average ALP: Gross ALP / sales, in dollars -- what one sale is worth.
+
+    The Team views' Average ALP category. Returns 0 when there are no sales.
+    """
+    return (gross_alp / sales) if sales > 0 else 0

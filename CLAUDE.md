@@ -133,6 +133,32 @@ Three things stay exactly as they were:
   `in_my_downline` so the client only offers those actions where they would
   succeed; the Team tab also uses it for the MY TEAM / MY DIRECT REPORTS filter.
 
+**Team views (owner: MJ 2026-09-25; Linnzi 2026-09-26, 2026-09-29, 2026-10-02).**
+`GET /api/team/branches?tier=sa|ga|mga&start_day=&end_day=` (`require_leader`;
+month to date by default) returns office-wide TOTALS for every SA, GA or MGA
+team: a team is the leader plus everyone under them, nested, so a GA total is
+the GA and every SA team below it, and `team_view`'s `team_gross_alp` /
+`team_sales` on a leader row are the same figure (the leader is counted in
+both; `team_size` is still who is under them). This is a deliberate read above
+a leader's own downline, in the same family as the dashboard's aggregates and
+the Push Month goal: totals and ratios only. A team outside the caller's
+downline is a total line and nothing else (`member_ids` is empty and
+`in_my_downline` false); per-member numbers still come only from `/api/team`
+under `team_scope_agent_ids`. Scope follows the Team tab: a leader reads their
+own office, MJ's company view reads every office (one section each), and his
+"own" switch limits it to his tree. Candidates are chosen by `role` (tier),
+never by title. Each line carries Refs per Sit, Show Ratio and Average ALP,
+all through `metrics.py` (`refs_per_sit`, `show_rate`, `alp_per_sale`; a team
+with no sits or sales is 0). `best_worst` names the best and worst team per
+category (ALP, Refs per Sit, Show Ratio, Average ALP) within each office; a
+tie lists every tied team, a $0 team is a team, and when every team ties they
+are all "best" and "worst" is empty. `competitors` are the caller's same-tier
+peers, top three by team Gross ALP for the window, identity and that one
+number only (no members, no other metrics): the other leaders of their tier
+in their own office, and for an RGA the RGAs of the other offices. It is one
+roster read and one aggregation over the union of the teams, never a query
+per leader.
+
 **Shoutout pushes (owner, 2026-10-01; audience and copy 2026-10-02).** Every
 shoutout type pushes the moment it is created - Player's Club, First Deal,
 Streak and a Platinum Rule post - to the person's own team and no one else, and
@@ -370,7 +396,7 @@ The suite runs under `npm test` and must pass before every commit.
 
 ## Forbidden Patterns
 - NEVER subtract N1 from Sits — Sits already excludes them; subtracting double-counts the exclusion
-- NEVER allow an Agent to see data above their RBAC tier — the documented exceptions are the Team tab's own-SA-team read and the agent card it opens (see RBAC Hierarchy above), and the dashboard (owner 2026-09-22; Push Month owner 2026-09-19): `GET /api/dashboard/summary`, `/ticker`, `/platinum-wall`, `/offices` and `/push-goal` are company-wide for every tier — rollups, top-3 names with their Gross ALP, office totals and the Push Month goal, never a per-agent history; don't generalize these or extend them to other routes without an explicit owner decision
+- NEVER allow an Agent to see data above their RBAC tier — the documented exceptions are the Team tab's own-SA-team read and the agent card it opens (see RBAC Hierarchy above), the Team views' office-wide team totals (a leader only; see Team views above), and the dashboard (owner 2026-09-22; Push Month owner 2026-09-19): `GET /api/dashboard/summary`, `/ticker`, `/platinum-wall`, `/offices` and `/push-goal` are company-wide for every tier — rollups, top-3 names with their Gross ALP, office totals and the Push Month goal, never a per-agent history; don't generalize these or extend them to other routes without an explicit owner decision
 - NEVER change the 6AM cycle boundary without explicit instruction
 - NEVER bypass the Wednesday 2PM cutoff gate
 - NEVER collapse authentication and authorization into a single check
