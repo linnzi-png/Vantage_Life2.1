@@ -471,9 +471,14 @@ export default function TeamScreen() {
               style={[styles.weekChip, scope === 'mine' && styles.weekChipOn]}
               testID="team-scope-mine"
             >
-              <Text style={[styles.weekChipTxt, scope === 'mine' && styles.weekChipTxtOn]}>REPORTS TO ME</Text>
+              <Text style={[styles.weekChipTxt, scope === 'mine' && styles.weekChipTxtOn]}>MY DIRECT REPORTS</Text>
             </TouchableOpacity>
           </View>
+        ) : null}
+        {hasDownline ? (
+          <Text style={styles.scopeHelp} testID="team-scope-help">
+            My Team is everyone under you. My Direct Reports is only the people who report straight to you.
+          </Text>
         ) : null}
       </View>
 
@@ -670,6 +675,7 @@ export default function TeamScreen() {
 
 const styles = StyleSheet.create({
   scopeRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  scopeHelp: { color: COLORS.textDim, fontSize: 11, lineHeight: 15, marginTop: 6 },
   dateBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
