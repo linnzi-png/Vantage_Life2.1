@@ -16,6 +16,8 @@ import { SetTenureSheet } from '../../src/components/SetTenureSheet';
 import { SearchBar } from '../../src/components/SearchBar';
 import { TourAnchor } from '../../src/components/TourAnchor';
 import { LoadState } from '../../src/components/LoadState';
+import { TeamViews } from '../../src/components/TeamViews';
+import { TeamViewMode, VIEW_LABEL, VIEW_ORDER } from '../../src/lib/teamViews';
 import { confirmAsync, notify } from '../../src/lib/dialog';
 
 interface TeamRow {
@@ -76,6 +78,10 @@ export default function TeamScreen() {
   // under All only, with a badge for whoever may set it.
   const [tenureFilter, setTenureFilter] = useState<'all' | 'rookie' | 'veteran'>('all');
   const [filterOpen, setFilterOpen] = useState(false);
+  // Team views (owner: MJ 2026-09-25): PEOPLE is the tab as it always was; a
+  // leader can switch to SA, GA or MGA team totals. Never persisted.
+  const [view, setView] = useState<TeamViewMode>('people');
+  const [viewOpen, setViewOpen] = useState(false);
   // The chain above the caller, nearest first, as contacts only — no
   // production (owner, 2026-09-19). Comes back with the board itself.
   const [uplines, setUplines] = useState<AgentContact[]>([]);
@@ -147,6 +153,7 @@ export default function TeamScreen() {
   useFocusEffect(useCallback(() => {
     setDateWindow(MONTH_TO_DATE);
     setTenureFilter('all');
+    setView('people');
   }, []));
 
   const [query, setQuery] = useState('');
@@ -512,16 +519,34 @@ export default function TeamScreen() {
       <View style={styles.sortBar}>
         {/* The tenure filter takes less room than the metric buttons (MJ:
             it is used far less), so it is a dropdown beside them. */}
-        <TourAnchor id="team-filter">
-          <TouchableOpacity
-            style={[styles.filterBtn, tenureFilter !== 'all' && styles.filterBtnOn]}
-            onPress={() => setFilterOpen(true)}
-            testID="team-filter-button"
-          >
-            <Text style={[styles.filterTxt, tenureFilter !== 'all' && styles.filterTxtOn]}>{FILTER_LABEL[tenureFilter]}</Text>
-            <Ionicons name="chevron-down" size={11} color={tenureFilter !== 'all' ? '#000' : COLORS.textDim} />
-          </TouchableOpacity>
-        </TourAnchor>
+        {/* The team selector (owner: MJ 2026-09-25), leaders only: the metric
+            buttons stay buttons, the choice of what to rank is a dropdown. */}
+        {canEnter ? (
+          <TourAnchor id="team-views">
+            <TouchableOpacity
+              style={[styles.filterBtn, view !== 'people' && styles.filterBtnOn]}
+              onPress={() => setViewOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Show: ${VIEW_LABEL[view]}. Change`}
+              testID="team-view-button"
+            >
+              <Text style={[styles.filterTxt, view !== 'people' && styles.filterTxtOn]}>{VIEW_LABEL[view]}</Text>
+              <Ionicons name="chevron-down" size={11} color={view !== 'people' ? '#000' : COLORS.textDim} />
+            </TouchableOpacity>
+          </TourAnchor>
+        ) : null}
+        {view === 'people' ? (
+          <TourAnchor id="team-filter">
+            <TouchableOpacity
+              style={[styles.filterBtn, tenureFilter !== 'all' && styles.filterBtnOn]}
+              onPress={() => setFilterOpen(true)}
+              testID="team-filter-button"
+            >
+              <Text style={[styles.filterTxt, tenureFilter !== 'all' && styles.filterTxtOn]}>{FILTER_LABEL[tenureFilter]}</Text>
+              <Ionicons name="chevron-down" size={11} color={tenureFilter !== 'all' ? '#000' : COLORS.textDim} />
+            </TouchableOpacity>
+          </TourAnchor>
+        ) : null}
         {/* ALP only on this tab (owner, from MJ, 2026-09-24): the value is
             Gross ALP, labelled ALP, and Net ALP appears nowhere here. Rank
             stays on Gross ALP, matching the Platinum Wall. */}
@@ -548,56 +573,89 @@ export default function TeamScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-      <TourAnchor id="team-roster">
-        <SearchBar value={query} onChange={setQuery} placeholder="Search name, office, title" testID="team-search" />
-      </TourAnchor>
+      <Modal visible={viewOpen} transparent animationType="fade" onRequestClose={() => setViewOpen(false)}>
+        <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={() => setViewOpen(false)}>
+          <View style={styles.menu}>
+            {VIEW_ORDER.map((k) => (
+              <TouchableOpacity
+                key={k}
+                style={styles.menuItem}
+                onPress={() => { setView(k); setViewOpen(false); }}
+                testID={`team-view-${k}`}
+              >
+                <Text style={[styles.menuTxt, view === k && { color: COLORS.gold }]}>{VIEW_LABEL[k]}</Text>
+                {view === k ? <Ionicons name="checkmark" size={14} color={COLORS.gold} /> : null}
+              </TouchableOpacity>
+            ))}
+            <Text style={styles.menuNote}>Team totals are for the whole office; you see the people on your own teams.</Text>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+      {view === 'people' ? (
+        <TourAnchor id="team-roster">
+          <SearchBar value={query} onChange={setQuery} placeholder="Search name, office, title" testID="team-search" />
+        </TourAnchor>
+      ) : null}
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
       >
-        <LoadState
-          // Rows from the previous window are not an answer for this one, so
-          // a scope change shows the spinner rather than stale figures under
-          // the new label.
-          loading={loading || !rowsMatchScope}
-          // Masked only for a failure that leaves correct rows on screen — a
-          // flaky 30s poll must not replace a good roster with an error card.
-          // A failed period or week change has no such rows, so it surfaces.
-          error={rowsMatchScope && rows.length > 0 ? null : error}
-          onRetry={fetchAll}
-          isEmpty={visible.length === 0}
-          emptyText={q ? 'No matches for your search.' : tenureFilter !== 'all' ? `No ${FILTER_LABEL[tenureFilter].toLowerCase()} in this window.` : 'No team data yet.'}
-          loadingText="Loading your team…"
-          testID="team"
-        >
-          {offices.map((office) => {
-            const inOffice = visible.filter((r) => (r.office || '') === office);
-            if (inOffice.length === 0) return null;
-            return (
-              <View key={office || 'unassigned'}>
-                {/* One team per office, and the rank is per office too, so a
-                    viewer who reaches more than one — an MGA whose downline
-                    crosses offices, an RGA reading the agency — sees each
-                    team's own standings rather than four teams in one race. */}
-                {offices.length > 1 ? (
-                  <Text style={styles.officeHead}>{office || 'UNASSIGNED'}</Text>
-                ) : null}
-                {/* One list, everyone ranked together on their own Gross ALP
-                    (owner, from MJ, 2026-09-24). A filtered list keeps each
-                    person's full-list number. */}
-                <View style={styles.board}>
-                  <View style={styles.boardHead}>
-                    <Text style={styles.boardLabel}>{FILTER_LABEL[tenureFilter]}</Text>
-                    <Text style={styles.boardCount}>
-                      {(() => { const ranked = inOffice.filter((r) => r.overall_rank).length; return ranked > 0 ? `${ranked} RANKED · ` : ''; })()}{inOffice.length}
-                    </Text>
+        {view !== 'people' ? (
+          <TeamViews
+            tier={view}
+            window={dateWindow}
+            windowLabel={salesDay ? describeWindow(dateWindow, salesDay, echoedStart) : 'Month to date'}
+            sortKey={sortKey}
+            rows={rowsMatchScope ? rows : []}
+            renderMember={renderRow}
+            viewerRole={user?.role}
+            refreshKey={rows}
+          />
+        ) : (
+          <LoadState
+            // Rows from the previous window are not an answer for this one, so
+            // a scope change shows the spinner rather than stale figures under
+            // the new label.
+            loading={loading || !rowsMatchScope}
+            // Masked only for a failure that leaves correct rows on screen — a
+            // flaky 30s poll must not replace a good roster with an error card.
+            // A failed period or week change has no such rows, so it surfaces.
+            error={rowsMatchScope && rows.length > 0 ? null : error}
+            onRetry={fetchAll}
+            isEmpty={visible.length === 0}
+            emptyText={q ? 'No matches for your search.' : tenureFilter !== 'all' ? `No ${FILTER_LABEL[tenureFilter].toLowerCase()} in this window.` : 'No team data yet.'}
+            loadingText="Loading your team…"
+            testID="team"
+          >
+            {offices.map((office) => {
+              const inOffice = visible.filter((r) => (r.office || '') === office);
+              if (inOffice.length === 0) return null;
+              return (
+                <View key={office || 'unassigned'}>
+                  {/* One team per office, and the rank is per office too, so a
+                      viewer who reaches more than one — an MGA whose downline
+                      crosses offices, an RGA reading the agency — sees each
+                      team's own standings rather than four teams in one race. */}
+                  {offices.length > 1 ? (
+                    <Text style={styles.officeHead}>{office || 'UNASSIGNED'}</Text>
+                  ) : null}
+                  {/* One list, everyone ranked together on their own Gross ALP
+                      (owner, from MJ, 2026-09-24). A filtered list keeps each
+                      person's full-list number. */}
+                  <View style={styles.board}>
+                    <View style={styles.boardHead}>
+                      <Text style={styles.boardLabel}>{FILTER_LABEL[tenureFilter]}</Text>
+                      <Text style={styles.boardCount}>
+                        {(() => { const ranked = inOffice.filter((r) => r.overall_rank).length; return ranked > 0 ? `${ranked} RANKED · ` : ''; })()}{inOffice.length}
+                      </Text>
+                    </View>
+                    {inOffice.map(renderRow)}
                   </View>
-                  {inOffice.map(renderRow)}
                 </View>
-              </View>
-            );
-          })}
-        </LoadState>
+              );
+            })}
+          </LoadState>
+        )}
       </ScrollView>
 
       <AgentContactSheet

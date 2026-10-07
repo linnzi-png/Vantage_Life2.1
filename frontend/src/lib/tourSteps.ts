@@ -43,6 +43,7 @@ export type TourAnchorId =
   | 'team-roster'
   | 'team-weeks'
   | 'team-filter'
+  | 'team-views'
   | 'team-missing'
   | 'team-nominations'
   | 'noms-header'
@@ -253,6 +254,14 @@ const teamFilterStep: TourStep = {
   body: 'Everyone is ranked together on their own ALP — rookies, veterans and leaders alike, a leader on what they sold themselves. The dropdown narrows the list to Rookies or Veterans, and everyone keeps their full-list rank number, so a rookies list can read 8, 9, 12.',
 };
 
+const teamViewsStep: TourStep = {
+  id: 'team-views',
+  screen: '/team',
+  anchor: 'team-views',
+  title: 'TEAM VIEWS',
+  body: 'Leaders get a selector beside the metric buttons: SA Teams, GA Teams or MGA Teams. Each team in your office shows as one total line - leader included - with the best and worst team called out for ALP, Refs per Sit, Show Ratio and Average ALP. Teams under you open to their people; any other team shows its total only. Up to three peer leaders appear as competitor cards.',
+};
+
 const TEAM_STEPS: TourStep[] = [
   {
     id: 'team-roster',
@@ -263,6 +272,7 @@ const TEAM_STEPS: TourStep[] = [
   },
   teamWeeksStep,
   teamFilterStep,
+  teamViewsStep,
   {
     id: 'missing-tonight',
     screen: '/team',
