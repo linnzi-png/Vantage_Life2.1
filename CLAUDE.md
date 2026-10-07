@@ -274,6 +274,13 @@ enforced by `role`, never by title; the tier does the work.
 Enforced server-side in `backend/server.py`: `require_agent()` / `require_level()`
 dependencies plus `visible_agent_ids()`, a BFS over `agent_profiles.upline_id`.
 
+### Licensed and pending states (Linnzi, 2026-09-29)
+
+- `LICENSED_STATE_CODES` (server.py, mirrored in `frontend/src/lib/licensedStates.ts` and `backend/import_licensed_states.py`; a test keeps the importer's copy equal) is the 50 states, DC and PR. The resident `state` field is separate and is never written by any of this.
+- Each profile has `licensed_states` (active) and `pending_states` (applied for, not issued). A code is never in both; issuing a license moves it. `pending_added_at` and `pending_reminder` are per code.
+- The 06:30 job sends one push per agent listing every pending code due that morning (7, 14, 21 ... days after `pending_added_at`) while its reminder is on (`run_pending_license_reminders`).
+- `backend/import_licensed_states.py` loads `docs/data/licensed_states_seed.csv` by exact name within one office; dry run by default, `--apply` writes with one audit entry per person.
+
 ## Authentication vs. authorization (two deliberate steps - do not collapse)
 1. **Authentication**: any verified identity (Google or Apple) completes sign-in
    successfully. App Store review must be able to finish Sign in with Apple

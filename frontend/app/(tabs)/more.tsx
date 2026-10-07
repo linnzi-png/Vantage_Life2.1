@@ -131,10 +131,10 @@ export default function MoreScreen() {
           </View>
         </View>
         <LicensedStatesSheet
-          target={statesOpen && agent ? { name: agent.name, licensed_states: agent.licensed_states } : null}
+          target={statesOpen && agent ? { name: agent.name, licensed_states: agent.licensed_states, pending_states: agent.pending_states, pending_reminder: agent.pending_reminder } : null}
           onClose={() => setStatesOpen(false)}
-          onSave={async (codes) => {
-            await api('/api/me/licensed-states', { method: 'POST', body: JSON.stringify({ licensed_states: codes }) });
+          onSave={async (codes, pending, remind) => {
+            await api('/api/me/licensed-states', { method: 'POST', body: JSON.stringify({ licensed_states: codes, pending_states: pending, pending_reminder: remind }) });
             await reload();
           }}
         />
