@@ -44,6 +44,7 @@ export type TourAnchorId =
   | 'team-weeks'
   | 'team-filter'
   | 'team-views'
+  | 'team-dashboard'
   | 'team-missing'
   | 'team-nominations'
   | 'noms-header'
@@ -254,6 +255,14 @@ const teamFilterStep: TourStep = {
   body: 'Everyone is ranked together on their own ALP — rookies, veterans and leaders alike, a leader on what they sold themselves. The dropdown narrows the list to Rookies or Veterans, and everyone keeps their full-list rank number, so a rookies list can read 8, 9, 12.',
 };
 
+const teamDashboardStep: TourStep = {
+  id: 'team-dashboard',
+  screen: '/team',
+  anchor: 'team-dashboard',
+  title: 'YOUR TEAMS AT A GLANCE',
+  body: 'Your teams sit at the top of the TEAM tab, one row per SA team, with ALP, sales and close ratio for Daily, Weekly or Monthly. Tap a team to see each person and the states they are licensed in. The state chip narrows everything to people licensed in that state.',
+};
+
 const teamViewsStep: TourStep = {
   id: 'team-views',
   screen: '/team',
@@ -270,6 +279,7 @@ const TEAM_STEPS: TourStep[] = [
     title: 'YOUR TEAM, LIVE',
     body: "Your full downline rolls up in the TEAM tab — ALP, sales, close ratio, and alert flags per agent. Sort by any column, search by name, office, or title, and tap a row to open their contact card and reach out — call, text, or email, straight from the app. Bringing someone new onto your team directly? Tap ADD, top right.",
   },
+  teamDashboardStep,
   teamWeeksStep,
   teamFilterStep,
   teamViewsStep,
@@ -311,6 +321,7 @@ const AGENT_TEAM_STEPS: TourStep[] = [
     title: 'YOUR TEAM, LIVE',
     body: "Your SA team rolls up here — you, your teammates and the SA or GA who runs the team, with ALP, sales, and close ratio, live. Sort by any column, search by name or title, and tap a row for a contact card with that person's 13-week production history and any day or range of days. Your uplines above the team are listed as contacts to reach, not numbers to read. You still enter your own Nightly Numbers only, back on the PULSE tab.",
   },
+  teamDashboardStep,
   teamWeeksStep,
   teamFilterStep,
 ];

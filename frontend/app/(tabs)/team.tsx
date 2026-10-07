@@ -17,6 +17,7 @@ import { SearchBar } from '../../src/components/SearchBar';
 import { TourAnchor } from '../../src/components/TourAnchor';
 import { LoadState } from '../../src/components/LoadState';
 import { TeamViews } from '../../src/components/TeamViews';
+import { TeamDashboardRow } from '../../src/components/TeamDashboardRow';
 import { TeamViewMode, VIEW_LABEL, VIEW_ORDER } from '../../src/lib/teamViews';
 import { confirmAsync, notify } from '../../src/lib/dialog';
 
@@ -78,6 +79,7 @@ export default function TeamScreen() {
   // under All only, with a badge for whoever may set it.
   const [tenureFilter, setTenureFilter] = useState<'all' | 'rookie' | 'veteran'>('all');
   const [filterOpen, setFilterOpen] = useState(false);
+  const [dashTick, setDashTick] = useState(0);
   // Team views (owner: MJ 2026-09-25): PEOPLE is the tab as it always was; a
   // leader can switch to SA, GA or MGA team totals. Never persisted.
   const [view, setView] = useState<TeamViewMode>('people');
@@ -598,8 +600,11 @@ export default function TeamScreen() {
       ) : null}
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 40 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setRefreshing(false); }} tintColor={COLORS.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setDashTick((t) => t + 1); setRefreshing(false); }} tintColor={COLORS.primary} />}
       >
+        <TourAnchor id="team-dashboard">
+          <TeamDashboardRow refreshKey={dashTick} />
+        </TourAnchor>
         {view !== 'people' ? (
           <TeamViews
             tier={view}

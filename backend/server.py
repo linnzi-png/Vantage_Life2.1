@@ -3106,6 +3106,107 @@ def nearest_team_leader(roster: Dict[str, Dict[str, Any]], agent_id: str) -> Opt
     return fallback
 
 
+DASHBOARD_PERIODS = ("daily", "weekly", "monthly")
+
+
+@api_router.get("/team/dashboard")
+async def team_dashboard(
+    state: Optional[str] = None,
+    user: Dict[str, Any] = Depends(require_level(1)),
+):
+    """The Team tab's dashboard row (owner: MJ 2026-09-25; Linnzi 2026-09-26
+    and 2026-09-29): the caller's own read scope broken down by SA team, on
+    Daily / Weekly / Monthly, with each person's licensed states.
+
+    Scope is team_scope_agent_ids, so nobody sees more here than /api/team
+    already shows them. A team is the same grouping Missing Numbers uses
+    (nearest_team_leader). The windows are scoreboard_window's, so the
+    Wednesday 2 PM cutoff and the 6 AM Detroit sales day apply unchanged.
+
+    `state` filters to people licensed in that exact code (never pending):
+    a team keeps only its matching people, its totals are recomputed over
+    them, and a team with nobody left is dropped. `available_states` always
+    lists every code held in the unfiltered scope, so the client can offer
+    only states that return someone.
+    """
+    code: Optional[str] = None
+    if state:
+        code = state.strip().upper()
+        if code not in LICENSED_STATE_CODES:
+            raise HTTPException(status_code=400, detail="Unknown state code")
+    ids = await team_scope_agent_ids(user)
+    roster: Dict[str, Dict[str, Any]] = {
+        a["agent_id"]: a async for a in db.agent_profiles.find(
+            {}, {"_id": 0, "agent_id": 1, "name": 1, "role": 1, "io_role": 1, "upline_id": 1,
+                 "archived": 1, "licensed_states": 1})
+    }
+    id_set = None if ids is None else set(ids)
+    scope = [
+        a for a in roster.values()
+        if not a.get("archived") and (id_set is None or a["agent_id"] in id_set)
+    ]
+    available = sorted({c for a in scope for c in (a.get("licensed_states") or [])})
+    members = [a for a in scope if code is None or code in (a.get("licensed_states") or [])]
+    member_ids = [a["agent_id"] for a in members]
+
+    periods: Dict[str, Dict[str, str]] = {}
+    sums: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    for period in DASHBOARD_PERIODS:
+        q, _ = scoreboard_window(period)
+        sd = q["sales_day"]
+        periods[period] = {"start_day": sd, "end_day": sd} if isinstance(sd, str) else {
+            "start_day": sd["$gte"], "end_day": sd["$lte"]}
+        got: Dict[str, Dict[str, Any]] = {}
+        if member_ids:
+            q = dict(q)
+            q["agent_id"] = {"$in": member_ids}
+            async for d in db.production_entries.aggregate([
+                {"$match": q},
+                {"$group": {"_id": "$agent_id", "gross_alp": {"$sum": "$gross_alp"},
+                            "sales": {"$sum": "$sales"}, "sits": {"$sum": "$sits"}}},
+            ]):
+                got[d["_id"]] = d
+        sums[period] = got
+
+    def cell(agent_id: str, period: str) -> Dict[str, Any]:
+        d = sums[period].get(agent_id) or {}
+        return {"gross_alp": round(float(d.get("gross_alp") or 0), 2),
+                "sales": int(d.get("sales") or 0), "sits": int(d.get("sits") or 0)}
+
+    def person(a: Dict[str, Any]) -> Dict[str, Any]:
+        return {"agent_id": a["agent_id"], "name": a.get("name") or "", "role": a.get("role"),
+                "io_role": a.get("io_role") or ""}
+
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for a in members:
+        groups.setdefault(nearest_team_leader(roster, a["agent_id"]) or "", []).append(a)
+
+    def totals(group: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        out = {}
+        for period in DASHBOARD_PERIODS:
+            cells = [cell(a["agent_id"], period) for a in group]
+            sales = sum(c["sales"] for c in cells)
+            sits = sum(c["sits"] for c in cells)
+            out[period] = {"gross_alp": round(sum(c["gross_alp"] for c in cells), 2),
+                           "sales": sales, "sits": sits, "close_ratio": metrics.close_rate(sales, sits)}
+        return out
+
+    teams = []
+    for leader_id, group in groups.items():
+        leader = roster.get(leader_id)
+        rows = [{
+            **person(a),
+            "licensed_states": list(a.get("licensed_states") or []),
+            **{p: cell(a["agent_id"], p) for p in DASHBOARD_PERIODS},
+        } for a in group]
+        rows.sort(key=lambda r: (-r["monthly"]["gross_alp"], r["name"].lower()))
+        teams.append({"leader": person(leader) if leader else None, "head_count": len(rows),
+                      "totals": totals(group), "members": rows})
+    teams.sort(key=lambda t: (-t["totals"]["monthly"]["gross_alp"], ((t["leader"] or {}).get("name") or "~").lower()))
+    return {"state": code, "available_states": available, "periods": periods,
+            "total": totals(members), "teams": teams}
+
+
 @api_router.get("/team/missing")
 async def team_missing(
     days: int = MISSING_DAYS_DEFAULT,
