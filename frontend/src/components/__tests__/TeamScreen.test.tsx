@@ -128,3 +128,108 @@ describe('Team tab scope chips', () => {
     expect(screen.getByTestId('team-row-AG_DOWN')).toBeTruthy();
   });
 });
+
+// ---------------- the team selector (owner: MJ 2026-09-25) ----------------
+
+const entryOf = (id: string, name: string, value: number) => ({ agent_id: id, name, io_role: 'SA', value });
+const emptyBW = () => ({
+  alp: { best: [entryOf('SA_ME', 'Me Leader', 900)], worst: [] },
+  refs_per_sit: { best: [entryOf('SA_ME', 'Me Leader', 0)], worst: [] },
+  show_ratio: { best: [entryOf('SA_ME', 'Me Leader', 0)], worst: [] },
+  avg_alp: { best: [entryOf('SA_ME', 'Me Leader', 0)], worst: [] },
+});
+const teamLine = (id: string, name: string, over: Record<string, unknown> = {}) => ({
+  agent_id: id, name, io_role: 'SA', role: 'level_sa', phone: '', email: '', office: 'MCM',
+  team_gross_alp: 900, team_sales: 3, team_sits: 6, team_refs: 0, head_count: 2, close_ratio: 50,
+  refs_per_sit: 0, show_ratio: 0, avg_alp: 300, team_rank: 1, in_my_downline: true, member_ids: [],
+  ...over,
+});
+
+function serveWithTeams(team: ReturnType<typeof member>[], lines: ReturnType<typeof teamLine>[]) {
+  mockedApi.mockImplementation(async (path: string) => {
+    if (path === '/api/team') return { team, uplines: [], sales_day: '2026-10-01' };
+    if (path === '/api/nominations?status=threshold_met') return { nominations: [] };
+    if (path.startsWith('/api/team/branches')) {
+      return {
+        tier: 'sa', scope: 'office', start_day: '2026-10-01', end_day: '2026-10-01',
+        offices: [{ office: 'MCM', lines, best_worst: emptyBW() }], competitors: [],
+      };
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+}
+
+describe('Team views selector', () => {
+  it('is for leaders only: an agent never sees it', async () => {
+    mockedUseAuth.mockReturnValue(authAs('level_1', 'AG_ME'));
+    serve([member('AG_ME', 'Me Agent')]);
+    await render(<TeamScreen />);
+    await screen.findByTestId('team-row-AG_ME');
+    expect(screen.queryByTestId('team-view-button')).toBeNull();
+  });
+
+  it('mounts closed, then opens with PEOPLE and the three team types', async () => {
+    serve([ME, DOWNLINE]);
+    await render(<TeamScreen />);
+    await screen.findByTestId('team-row-AG_DOWN');
+    expect(screen.getByText('PEOPLE')).toBeTruthy();
+    expect(screen.queryByTestId('team-view-sa')).toBeNull();
+    await fireEvent.press(screen.getByTestId('team-view-button'));
+    for (const k of ['people', 'sa', 'ga', 'mga']) expect(screen.getByTestId(`team-view-${k}`)).toBeTruthy();
+    expect(screen.getByText('SA TEAMS')).toBeTruthy();
+    expect(screen.getByText('GA TEAMS')).toBeTruthy();
+    expect(screen.getByText('MGA TEAMS')).toBeTruthy();
+  });
+
+  it('asks nothing of the team-totals route until a team type is chosen', async () => {
+    serve([ME, DOWNLINE]);
+    await render(<TeamScreen />);
+    await screen.findByTestId('team-row-AG_DOWN');
+    await fireEvent.press(screen.getByTestId('team-view-button'));
+    expect(mockedApi.mock.calls.some(([p]) => String(p).startsWith('/api/team/branches'))).toBe(false);
+  });
+
+  it('shows SA team totals in place of the people list, and PEOPLE brings the list back', async () => {
+    serveWithTeams([ME, DOWNLINE], [teamLine('SA_ME', 'Me Leader', { member_ids: ['AG_DOWN'] })]);
+    await render(<TeamScreen />);
+    await screen.findByTestId('team-row-AG_DOWN');
+    await fireEvent.press(screen.getByTestId('team-view-button'));
+    await fireEvent.press(screen.getByTestId('team-view-sa'));
+    expect(await screen.findByTestId('team-line-SA_ME')).toBeTruthy();
+    expect(mockedApi).toHaveBeenCalledWith('/api/team/branches?tier=sa');
+    // The people-only controls step aside.
+    expect(screen.queryByTestId('team-row-AG_DOWN')).toBeNull();
+    expect(screen.queryByTestId('team-search')).toBeNull();
+    expect(screen.queryByTestId('team-filter-button')).toBeNull();
+    // The metric buttons stay.
+    expect(screen.getByTestId('team-sort-gross_alp')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('team-view-button'));
+    await fireEvent.press(screen.getByTestId('team-view-people'));
+    expect(await screen.findByTestId('team-row-AG_DOWN')).toBeTruthy();
+    expect(screen.getByTestId('team-search')).toBeTruthy();
+    expect(screen.getByTestId('team-filter-button')).toBeTruthy();
+  });
+
+  it('expands a team under the caller to the same member rows the people list draws', async () => {
+    serveWithTeams([ME, DOWNLINE], [teamLine('AG_ME', 'Me Leader', { member_ids: ['AG_DOWN'] })]);
+    await render(<TeamScreen />);
+    await screen.findByTestId('team-row-AG_DOWN');
+    await fireEvent.press(screen.getByTestId('team-view-button'));
+    await fireEvent.press(screen.getByTestId('team-view-sa'));
+    await fireEvent.press(await screen.findByTestId('team-line-AG_ME'));
+    expect(screen.getByTestId('team-line-members-AG_ME')).toBeTruthy();
+    expect(screen.getByTestId('team-row-AG_DOWN')).toBeTruthy(); // tapping it still opens the full card
+    expect(screen.getByTestId('team-row-AG_ME')).toBeTruthy();   // the leader's own row leads
+  });
+
+  it('asks for whichever team type is chosen', async () => {
+    serveWithTeams([ME], [teamLine('SA_ME', 'Me Leader')]);
+    await render(<TeamScreen />);
+    await screen.findByTestId('team-row-AG_ME');
+    await fireEvent.press(screen.getByTestId('team-view-button'));
+    await fireEvent.press(screen.getByTestId('team-view-ga'));
+    await screen.findByTestId('team-line-SA_ME');
+    expect(mockedApi).toHaveBeenCalledWith('/api/team/branches?tier=ga');
+  });
+});

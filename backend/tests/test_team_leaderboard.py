@@ -95,9 +95,9 @@ async def test_a_leader_row_carries_their_own_number_and_their_teams(client, see
     rows = await board(client, token)
     sa = rows["SA_1"]
     assert sa["gross_alp"] == 300.0                 # their own
-    assert sa["team_gross_alp"] == 1700.0           # AG_1 + AG_X, not themselves
-    assert sa["team_sales"] == 5
-    assert sa["team_size"] == 2
+    assert sa["team_gross_alp"] == 2000.0           # themselves + AG_1 + AG_X (owner, 2026-09-25)
+    assert sa["team_sales"] == 6                    # 1 + 2 + 3
+    assert sa["team_size"] == 2                     # who is under them: the leader is not counted
 
 
 async def test_a_leader_who_entered_nothing_keeps_the_rollup_and_takes_no_rank(client, seeded_db):
