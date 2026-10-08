@@ -962,6 +962,12 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
     agent = None
     if user.get("agent_id"):
         agent = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
+        if agent:
+            # The stored reminder setting is per code; the client gets the one
+            # switch the picker shows.
+            agent["pending_states"] = list(agent.get("pending_states") or [])
+            agent["pending_reminder"] = pending_reminder_on(agent)
+            agent.pop("pending_added_at", None)
     # Overlay computed admin status so bootstrap admins (ADMIN_EMAILS) see the
     # Admin entry point even without an is_admin flag on their users doc.
     user["is_admin"] = user_is_admin(user)
@@ -2446,6 +2452,73 @@ async def run_tenure_nudge(now_local: Optional[datetime] = None) -> Dict[str, An
             "notified": notified, "skipped_no_token": skipped_no_token}
 
 
+PENDING_LICENSE_STAGE = "pending_license_reminder"
+PENDING_LICENSE_TITLE = "VantageLife"
+PENDING_REMINDER_EVERY_DAYS = 7
+
+
+def _format_pending_license_reminder(codes: List[str]) -> str:
+    """Owner-approved copy (Linnzi, 2026-09-29), one push per agent."""
+    return f"Follow up on your pending license: {', '.join(codes)}"
+
+
+def pending_codes_due(profile: Dict[str, Any], today: str) -> List[str]:
+    """Pending codes whose weekly reminder falls on `today`: the reminder is
+    on for that code and a positive whole number of weeks has passed since
+    `pending_added_at` (day 7, 14, 21 ...). Counted in sales days, the same
+    clock the 06:30 morning job runs on. A code that has moved to active is
+    no longer pending, so it never appears here."""
+    flags = profile.get("pending_reminder") or {}
+    added = profile.get("pending_added_at") or {}
+    due: List[str] = []
+    for code in profile.get("pending_states") or []:
+        if not flags.get(code, True):
+            continue
+        try:
+            days = (date.fromisoformat(today) - date.fromisoformat(str(added.get(code))[:10])).days
+        except (TypeError, ValueError):
+            continue
+        if days > 0 and days % PENDING_REMINDER_EVERY_DAYS == 0:
+            due.append(code)
+    return sorted(due)
+
+
+async def run_pending_license_reminders(now_local: Optional[datetime] = None) -> Dict[str, Any]:
+    """Once a day, with the 06:30 morning job, push each agent whose pending
+    license follow-up is due (Linnzi, 2026-09-29). One push per agent listing
+    every due code, never one per code. notification_log's unique index on
+    (agent_id, sales_day, stage) makes a day's send idempotent across ticks,
+    the same as the tenure nudge."""
+    now_local = now_local or now_detroit()
+    if not _leader_auto_nif_due(now_local):
+        return {"ok": True, "due": False, "notified": 0}
+    sd = sales_day_for(now_local)
+    notified = 0
+    skipped_no_token = 0
+    async for a in db.agent_profiles.find(
+            {"pending_states.0": {"$exists": True}, "archived": {"$ne": True}},
+            {"_id": 0, "agent_id": 1, "pending_states": 1, "pending_added_at": 1, "pending_reminder": 1}):
+        codes = pending_codes_due(a, sd)
+        if not codes:
+            continue
+        if not await _log_and_check(a["agent_id"], sd, PENDING_LICENSE_STAGE):
+            continue
+        tokens = [t["push_token"] async for t in db.push_tokens.find({"agent_id": a["agent_id"]}, {"_id": 0, "push_token": 1})]
+        if not tokens:
+            skipped_no_token += 1
+            continue
+        await send_expo_push(tokens, PENDING_LICENSE_TITLE, _format_pending_license_reminder(codes))
+        notified += 1
+    return {"ok": True, "due": True, "sales_day": sd, "notified": notified, "skipped_no_token": skipped_no_token}
+
+
+@api_router.post("/admin/run-pending-license-reminders")
+async def admin_run_pending_license_reminders(user: Dict[str, Any] = Depends(require_admin)):
+    """Manual trigger for QA - sends today's pending-license reminders now if
+    the 06:30 mark has passed."""
+    return await run_pending_license_reminders()
+
+
 @api_router.post("/admin/run-tenure-nudge")
 async def admin_run_tenure_nudge(user: Dict[str, Any] = Depends(require_admin)):
     """Manual trigger for QA — sends the morning tenure nudge now if the 06:30
@@ -2729,6 +2802,8 @@ async def team_view(
             # States they are licensed to sell in (owner, 2026-09-24); display
             # only on this tab, no filtering by state yet.
             "licensed_states": list(a.get("licensed_states") or []),
+                "pending_states": list(a.get("pending_states") or []),
+                "pending_reminder": pending_reminder_on(a),
             # A removed member's already-logged production stays on the board
             # for its window ("history is history") — flagged so the UI can
             # badge the row and withhold team actions.
@@ -2755,6 +2830,8 @@ async def team_view(
                 "io_role": a.get("io_role") or "", "phone": a.get("phone") or "", "email": a.get("email") or "",
                 "is_rookie": a.get("is_rookie"), "upline_id": a.get("upline_id"), "archived": False,
                 "licensed_states": list(a.get("licensed_states") or []),
+                "pending_states": list(a.get("pending_states") or []),
+                "pending_reminder": pending_reminder_on(a),
                 "gross_alp": 0, "net_alp": 0, "sits": 0, "sales": 0,
                 "close_ratio": 0, "avg_deal": 0, "alerts": no_entry_alerts,
             })
@@ -3138,7 +3215,8 @@ async def team_dashboard(
     roster: Dict[str, Dict[str, Any]] = {
         a["agent_id"]: a async for a in db.agent_profiles.find(
             {}, {"_id": 0, "agent_id": 1, "name": 1, "role": 1, "io_role": 1, "upline_id": 1,
-                 "archived": 1, "licensed_states": 1})
+                 "archived": 1, "licensed_states": 1, "pending_states": 1,
+                 "pending_reminder": 1})
     }
     id_set = None if ids is None else set(ids)
     scope = [
@@ -3197,6 +3275,8 @@ async def team_dashboard(
         rows = [{
             **person(a),
             "licensed_states": list(a.get("licensed_states") or []),
+                "pending_states": list(a.get("pending_states") or []),
+                "pending_reminder": pending_reminder_on(a),
             **{p: cell(a["agent_id"], p) for p in DASHBOARD_PERIODS},
         } for a in group]
         rows.sort(key=lambda r: (-r["monthly"]["gross_alp"], r["name"].lower()))
@@ -3939,11 +4019,14 @@ async def agent_history(
     # does instead of a misleading "not in your team".
     profile = await db.agent_profiles.find_one(
         {"agent_id": agent_id},
-        {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1, "licensed_states": 1},
+        {"_id": 0, "agent_id": 1, "name": 1, "office": 1, "role": 1, "io_role": 1, "licensed_states": 1,
+         "pending_states": 1, "pending_reminder": 1},
     )
     if not profile:
         raise HTTPException(status_code=404, detail="Agent not found")
     profile["licensed_states"] = list(profile.get("licensed_states") or [])
+    profile["pending_states"] = list(profile.get("pending_states") or [])
+    profile["pending_reminder"] = pending_reminder_on(profile)
     ids = await team_scope_agent_ids(user)
     if ids is not None and agent_id not in ids and agent_id != user.get("agent_id"):
         raise HTTPException(status_code=403, detail="Not in your team")
@@ -5667,17 +5750,16 @@ async def team_reassign(payload: TeamReassignIn, user: Dict[str, Any] = Depends(
     }
 
 
-# States an agent may be licensed to sell in (owner, 2026-09-24). This is the
-# ONE place the list lives: the agency writes in 47 or 48 states and Linnzi
-# is supplying that exact list, so swapping it is a one-line change here and
-# nowhere else. Seeded with the 50 states plus DC until then. No territories.
+# States an agent may be licensed to sell in (owner, 2026-09-24; Linnzi
+# 2026-09-29): all 50 states, DC and Puerto Rico (PR is a valid code). This is
+# the ONE place the list lives, mirrored in frontend/src/lib/licensedStates.ts.
 # `licensed_states` is a separate field from the single resident `state`
 # (WAR-parity export, /admin/set-state), which is untouched by any of this.
 LICENSED_STATE_CODES = {
     "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID",
     "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO",
     "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA",
-    "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+    "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "PR",
 }
 
 
@@ -5704,19 +5786,65 @@ def normalize_licensed_states(codes: List[str]) -> List[str]:
 
 class LicensedStatesIn(BaseModel):
     licensed_states: List[str]
+    # Applied for, not yet issued (Linnzi, 2026-09-29). None leaves the
+    # pending list as it is, so builds that predate it keep working.
+    pending_states: Optional[List[str]] = None
+    # The "Remind me weekly to follow up" switch for the pending entries.
+    pending_reminder: Optional[bool] = None
 
 
 class TeamLicensedStatesIn(BaseModel):
     agent_id: str
     licensed_states: List[str]
+    pending_states: Optional[List[str]] = None
+    pending_reminder: Optional[bool] = None
 
 
-async def _write_licensed_states(target: Dict[str, Any], codes: List[str], user: Dict[str, Any], action: str) -> Dict[str, Any]:
+def pending_reminder_on(profile: Dict[str, Any]) -> bool:
+    """The picker's single switch: on unless every pending entry has it off.
+    No pending entries reads as on, the default."""
+    flags = profile.get("pending_reminder") or {}
+    pending = profile.get("pending_states") or []
+    return True if not pending else any(bool(flags.get(c, True)) for c in pending)
+
+
+def reconcile_pending(
+    active: List[str],
+    pending: Optional[List[str]],
+    reminder: Optional[bool],
+    profile: Dict[str, Any],
+    today: str,
+) -> Dict[str, Any]:
+    """Pending licenses (applied for, not yet issued; Linnzi 2026-09-29).
+
+    A code is never both active and pending: issuing a license moves it, so a
+    code in the active list is dropped from pending. A code keeps the date it
+    was first added (the weekly reminder counts from that day); a new code
+    gets `today`. `pending` None leaves the list as it is, minus anything just
+    made active. `reminder` None keeps each entry's setting, new entries
+    defaulting to on; a bool sets every pending entry."""
+    current = list(profile.get("pending_states") or [])
+    wanted = current if pending is None else pending
+    codes = sorted({c for c in wanted if c not in active})
+    added_at = dict(profile.get("pending_added_at") or {})
+    flags = dict(profile.get("pending_reminder") or {})
+    return {
+        "pending_states": codes,
+        "pending_added_at": {c: added_at.get(c) or today for c in codes},
+        "pending_reminder": {c: (flags.get(c, True) if reminder is None else bool(reminder)) for c in codes},
+    }
+
+
+async def _write_licensed_states(
+    target: Dict[str, Any], codes: List[str], user: Dict[str, Any], action: str,
+    pending: Optional[List[str]] = None, reminder: Optional[bool] = None,
+) -> Dict[str, Any]:
     """Shared by the self and team routes: one write, one audit_log entry in
     the same shape /admin/set-tenure and /admin/set-state use."""
+    fields = reconcile_pending(codes, pending, reminder, target, current_sales_day_str())
     await db.agent_profiles.update_one(
         {"agent_id": target["agent_id"]},
-        {"$set": {"licensed_states": codes, "updated_at": now_utc()}},
+        {"$set": {"licensed_states": codes, **fields, "updated_at": now_utc()}},
     )
     await db.audit_log.insert_one({
         "audit_id": f"au_{uuid.uuid4().hex[:10]}",
@@ -5728,8 +5856,11 @@ async def _write_licensed_states(target: Dict[str, Any], codes: List[str], user:
         "changed_by_name": user.get("name"),
         "original_value": list(target.get("licensed_states") or []),
         "new_value": codes,
+        "original_pending": list(target.get("pending_states") or []),
+        "new_pending": fields["pending_states"],
     })
-    return {"ok": True, "agent_id": target["agent_id"], "licensed_states": codes}
+    return {"ok": True, "agent_id": target["agent_id"], "licensed_states": codes,
+            "pending_states": fields["pending_states"]}
 
 
 @api_router.post("/me/licensed-states")
@@ -5738,10 +5869,12 @@ async def me_set_licensed_states(payload: LicensedStatesIn, user: Dict[str, Any]
     2026-09-24, from MJ's "dropdown" / "exact states"). Self only: the
     downline-scoped manager path is /team/set-licensed-states."""
     codes = normalize_licensed_states(payload.licensed_states)
+    pending = None if payload.pending_states is None else normalize_licensed_states(payload.pending_states)
     target = await db.agent_profiles.find_one({"agent_id": user["agent_id"]}, {"_id": 0})
     if not target:
         raise HTTPException(status_code=404, detail="Agent not found")
-    return await _write_licensed_states(target, codes, user, "set_licensed_states_self")
+    return await _write_licensed_states(
+        target, codes, user, "set_licensed_states_self", pending, payload.pending_reminder)
 
 
 # ---- Text-message consent (owner, 2026-09-24; batch 2, PR 0) ----------------
@@ -5826,6 +5959,7 @@ async def team_set_licensed_states(payload: TeamLicensedStatesIn, user: Dict[str
         if my_level < RANK_SA or not user.get("agent_id"):
             raise HTTPException(status_code=403, detail="Setting someone's licensed states requires SA level or above")
     codes = normalize_licensed_states(payload.licensed_states)
+    pending = None if payload.pending_states is None else normalize_licensed_states(payload.pending_states)
     target = await db.agent_profiles.find_one({"agent_id": payload.agent_id, **ACTIVE_AGENT}, {"_id": 0})
     if not target:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -5834,7 +5968,8 @@ async def team_set_licensed_states(payload: TeamLicensedStatesIn, user: Dict[str
     if not is_admin and not is_fa and my_level < 4:
         if target["agent_id"] not in await downline_agent_ids(user["agent_id"]):
             raise HTTPException(status_code=403, detail="You can only set licensed states for someone in your own downline")
-    return await _write_licensed_states(target, codes, user, "set_licensed_states")
+    return await _write_licensed_states(
+        target, codes, user, "set_licensed_states", pending, payload.pending_reminder)
 
 
 class TeamSetTenureIn(BaseModel):
@@ -7945,6 +8080,10 @@ async def _escalation_loop():
             await run_tenure_nudge()
         except Exception as e:
             logger.error(f"Tenure nudge failed: {e}")
+        try:
+            await run_pending_license_reminders()
+        except Exception as e:
+            logger.error(f"Pending license reminders failed: {e}")
         await asyncio.sleep(60)
 
 

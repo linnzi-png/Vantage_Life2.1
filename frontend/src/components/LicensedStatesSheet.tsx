@@ -8,7 +8,7 @@
 // never the enforcement.
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, ActivityIndicator, Switch,
 } from 'react-native';
 import { COLORS } from '../lib/auth';
 import { notify } from '../lib/dialog';
@@ -16,14 +16,19 @@ import { LICENSED_STATE_CODES } from '../lib/licensedStates';
 
 interface Props {
   /** Null keeps the sheet closed. */
-  target: { name: string; licensed_states?: string[] } | null;
-  /** Performs the write; the sheet shows any thrown error and stays open. */
-  onSave: (codes: string[]) => Promise<void>;
+  target: { name: string; licensed_states?: string[]; pending_states?: string[]; pending_reminder?: boolean } | null;
+  /** Performs the write; the sheet shows any thrown error and stays open.
+   *  `pending` are states applied for and not yet issued; `remind` is the
+   *  weekly follow-up switch for them (Linnzi, 2026-09-29). */
+  onSave: (codes: string[], pending: string[], remind: boolean) => Promise<void>;
   onClose: () => void;
 }
 
 export function LicensedStatesSheet({ target, onSave, onClose }: Props) {
   const [picked, setPicked] = useState<string[]>([]);
+  const [pendingPicked, setPendingPicked] = useState<string[]>([]);
+  const [mode, setMode] = useState<'active' | 'pending'>('active');
+  const [remind, setRemind] = useState(true);
   const [busy, setBusy] = useState(false);
 
   // Start from what is on file each time the sheet opens for someone.
@@ -31,17 +36,28 @@ export function LicensedStatesSheet({ target, onSave, onClose }: Props) {
     // Seeding local edit state from the prop, not deriving it.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPicked(target?.licensed_states ? [...target.licensed_states] : []);
+    setPendingPicked(target?.pending_states ? [...target.pending_states] : []);
+    setMode('active');
+    setRemind(target?.pending_reminder !== false);
   }, [target]);
 
   if (!target) return null;
 
-  const toggle = (code: string) =>
-    setPicked((cur) => (cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]));
+  // A state is never both licensed and pending: licensing a pending state moves
+  // it, and a licensed state cannot be marked pending.
+  const toggle = (code: string) => {
+    if (mode === 'active') {
+      setPicked((cur) => (cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]));
+      setPendingPicked((cur) => cur.filter((c) => c !== code));
+    } else if (!picked.includes(code)) {
+      setPendingPicked((cur) => (cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]));
+    }
+  };
 
   const save = async () => {
     setBusy(true);
     try {
-      await onSave([...picked].sort());
+      await onSave([...picked].sort(), [...pendingPicked].sort(), remind);
       onClose();
     } catch (e: unknown) {
       notify('Error', e instanceof Error ? e.message : 'Licensed states could not be saved.');
@@ -51,6 +67,7 @@ export function LicensedStatesSheet({ target, onSave, onClose }: Props) {
   };
 
   const summary = picked.length ? [...picked].sort().join(', ') : 'No states selected';
+  const pendingSummary = pendingPicked.length ? [...pendingPicked].sort().join(', ') : 'None';
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -61,26 +78,57 @@ export function LicensedStatesSheet({ target, onSave, onClose }: Props) {
           <Text style={styles.title}>LICENSED STATES</Text>
           <Text style={styles.sub}>{target.name} · tap every state they are licensed to sell in</Text>
           <Text style={styles.summary} testID="licensed-states-summary">{summary}</Text>
+          <Text style={styles.pendingSummary} testID="licensed-states-pending-summary">Pending: {pendingSummary}</Text>
+
+          <View style={styles.modeRow}>
+            {(['active', 'pending'] as const).map((m) => (
+              <TouchableOpacity
+                key={m}
+                style={[styles.modeBtn, mode === m && styles.modeBtnOn]}
+                onPress={() => setMode(m)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: mode === m }}
+                testID={`licensed-mode-${m}`}
+              >
+                <Text style={[styles.modeTxt, mode === m && styles.modeTxtOn]}>{m === 'active' ? 'LICENSED' : 'PENDING'}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <ScrollView style={{ maxHeight: 360 }} contentContainerStyle={styles.grid}>
             {LICENSED_STATE_CODES.map((code) => {
               const on = picked.includes(code);
+              const pend = pendingPicked.includes(code);
+              const locked = mode === 'pending' && on;
               return (
                 <TouchableOpacity
                   key={code}
-                  style={[styles.chip, on && styles.chipOn]}
+                  style={[styles.chip, on && styles.chipOn, pend && styles.chipPending, locked && { opacity: 0.35 }]}
                   onPress={() => toggle(code)}
-                  disabled={busy}
+                  disabled={busy || locked}
                   testID={`licensed-state-${code}`}
                 >
-                  <Text style={[styles.chipTxt, on && styles.chipTxtOn]}>{code}</Text>
+                  <Text style={[styles.chipTxt, on && styles.chipTxtOn, pend && styles.chipPendingTxt]}>{code}</Text>
                 </TouchableOpacity>
               );
             })}
           </ScrollView>
 
+          {mode === 'pending' ? (
+            <View style={styles.remindRow}>
+              <Text style={styles.remindTxt}>Remind me weekly to follow up</Text>
+              <Switch
+                value={remind}
+                onValueChange={setRemind}
+                trackColor={{ true: COLORS.primary }}
+                accessibilityLabel="Remind me weekly to follow up on pending licenses"
+                testID="licensed-states-remind"
+              />
+            </View>
+          ) : null}
+
           <Text style={styles.note}>
-            This is the list of states they can write in. It does not change the resident state on the roster.
+            Licensed states are the ones they can write in. Pending states are applied for and not issued yet. This does not change the resident state on the roster.
           </Text>
 
           <View style={styles.actions}>
@@ -114,6 +162,19 @@ const styles = StyleSheet.create({
   title: { color: COLORS.primary, fontWeight: '900', fontSize: 12, letterSpacing: 1.6 },
   sub: { color: COLORS.textDim, fontSize: 13, marginTop: 4 },
   summary: { color: '#fff', fontWeight: '800', fontSize: 13, marginTop: 8, marginBottom: 10 },
+  pendingSummary: { color: COLORS.gold, fontWeight: '700', fontSize: 12, marginBottom: 10 },
+  modeRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  modeBtn: {
+    flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 8,
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface2,
+  },
+  modeBtnOn: { borderColor: COLORS.primary, backgroundColor: COLORS.surface },
+  modeTxt: { color: COLORS.textDim, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
+  modeTxtOn: { color: COLORS.primary },
+  chipPending: { borderColor: COLORS.gold, borderStyle: 'dashed' },
+  chipPendingTxt: { color: COLORS.gold },
+  remindRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, minHeight: 44 },
+  remindTxt: { color: '#fff', fontSize: 13, fontWeight: '700', flex: 1, paddingRight: 12 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 4 },
   chip: {
     width: 52, paddingVertical: 9, alignItems: 'center', borderRadius: 8,

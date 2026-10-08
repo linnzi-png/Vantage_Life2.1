@@ -26,6 +26,8 @@ export interface AgentContact {
   // from /api/team and /api/agents/{id}/history; shown on the card, edited
   // through onEditLicensedStates when the caller may set it.
   licensed_states?: string[];
+  pending_states?: string[];
+  pending_reminder?: boolean;
 }
 
 interface Props {

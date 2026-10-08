@@ -27,6 +27,8 @@ interface TeamRow {
   upline_id?: string | null;
   archived: boolean; // removed from the team; production shown for history only
   licensed_states?: string[]; // states they are licensed to sell in (owner, 2026-09-24)
+  pending_states?: string[]; // applied for, not yet issued (Linnzi, 2026-09-29)
+  pending_reminder?: boolean; // the weekly follow-up switch for them
   gross_alp: number; net_alp: number; sits: number; sales: number; close_ratio: number; avg_deal: number; alerts: string[];
   // Server-computed: is this person in MY downline, as opposed to elsewhere in
   // my office? The office is visible to everyone in it, but every write path
@@ -679,11 +681,11 @@ export default function TeamScreen() {
       <LicensedStatesSheet
         target={statesTarget}
         onClose={() => setStatesTarget(null)}
-        onSave={async (codes) => {
+        onSave={async (codes, pending, remind) => {
           if (!statesTarget) return;
           await api('/api/team/set-licensed-states', {
             method: 'POST',
-            body: JSON.stringify({ agent_id: statesTarget.agent_id, licensed_states: codes }),
+            body: JSON.stringify({ agent_id: statesTarget.agent_id, licensed_states: codes, pending_states: pending, pending_reminder: remind }),
           });
           await fetchAll();
         }}

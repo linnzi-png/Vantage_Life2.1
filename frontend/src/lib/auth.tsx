@@ -108,6 +108,8 @@ export interface AppAgent {
   // States they are licensed to sell in (owner, 2026-09-24); set from the
   // More tab (self) or a leader's Team tab card. Absent = never recorded.
   licensed_states?: string[];
+  pending_states?: string[];
+  pending_reminder?: boolean;
   // Text-message consent (owner, 2026-09-24; batch 2). Absent or null means
   // the person has never been asked, which is what makes the one-time
   // consent card show. Either answer records a status and the card never

@@ -46,10 +46,10 @@ async def test_invalid_code_is_rejected_and_nothing_is_written(client, seeded_db
     assert "licensed_states" not in (await profile(seeded_db, "AG_1"))
 
 
-async def test_territories_are_not_accepted(client, seeded_db):
+async def test_puerto_rico_is_a_valid_code_and_other_territories_are_not(client, seeded_db):
     token = await make_session(seeded_db, role="level_1", agent_id="AG_1", email="ag1@test.dev")
-    assert (await set_mine(client, token, ["PR"])).status_code == 400
-    assert (await set_mine(client, token, ["DC"])).status_code == 200
+    assert (await set_mine(client, token, ["GU"])).status_code == 400
+    assert (await set_mine(client, token, ["DC", "PR"])).status_code == 200
 
 
 async def test_empty_list_clears_the_field_without_error(client, seeded_db):
