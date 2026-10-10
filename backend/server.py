@@ -455,6 +455,23 @@ def user_is_admin(user: Dict[str, Any]) -> bool:
     return bool(user.get("is_admin")) or str(user.get("email", "")).lower() in ADMIN_EMAILS
 
 
+# The Team tab's MY TEAM / MY DIRECT REPORTS buttons (Linnzi, 2026-10-10): hidden
+# for admin accounts, kept for the ones named here so she can test them. Set
+# TEAM_SCOPE_TOGGLE_EMAILS on Railway (comma separated) to change the list.
+TEAM_SCOPE_TOGGLE_EMAILS = {
+    e.strip().lower()
+    for e in os.environ.get("TEAM_SCOPE_TOGGLE_EMAILS", "linnzi@aoluxor.com").split(",")
+    if e.strip()
+}
+
+
+def team_scope_toggle_allowed(user: Dict[str, Any]) -> bool:
+    """Everyone who is not an admin is offered the buttons; an admin is only if listed."""
+    if not user_is_admin(user):
+        return True
+    return str(user.get("email", "")).lower() in TEAM_SCOPE_TOGGLE_EMAILS
+
+
 # View mode (owner, 2026-09-19, two of MJ's requests folded into one switch
 # on the More tab). A user whose reach is wider than their own place in the
 # hierarchy can choose to look at the app from that place instead:
@@ -982,6 +999,7 @@ async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
     # answer to whether the switch should be offered at all.
     user["view_mode"] = user_view_mode(user)
     user["can_toggle_view"] = user_can_toggle_view(user)
+    user["team_scope_toggle"] = team_scope_toggle_allowed(user)
     # A non-producing team member (app developer, office support) keeps their
     # real RBAC tier for access, but must not be LABELLED as a producer tier
     # anywhere others can see: their own io_role title is the label.

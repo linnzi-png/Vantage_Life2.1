@@ -101,8 +101,16 @@ Admin Panel's path). Their nearest SA or GA — else the MGA or RGA they
 report to — gets one consolidated push each morning with the 06:30 job
 (`run_tenure_nudge`, stage `tenure_nudge_upline` in `notification_log`)
 until it is set. The secondary filter, MY DIRECT REPORTS (REPORTS TO ME
-until 2026-10-01; same filter), is the caller's downline — what an
+until 2026-10-01), is the caller's direct reports (`upline_id` is the caller; until 2026-10-10 it filtered the whole downline) — what an
 upline wants for entry, not for competing.
+
+**Team tab scope buttons and removed people (Linnzi, 2026-10-10).** MY TEAM / MY
+DIRECT REPORTS are hidden for admin accounts except the emails in
+`TEAM_SCOPE_TOGGLE_EMAILS` (Railway variable, default `linnzi@aoluxor.com`), so she
+can test them; `/api/auth/me` returns `team_scope_toggle`, and only an explicit
+false hides them. The people list no longer shows removed (archived) people; the
+server's team totals still include their production, so a total can exceed the
+sum of the visible rows.
 
 **The Team tab's window is a date range (owner, 2026-09-24).** One date
 button replaces the Daily / Weekly / Monthly selector and the week chips.
