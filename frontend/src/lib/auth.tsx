@@ -80,6 +80,9 @@ export interface AppUser {
   /** Whether the switch is offered at all — the server's answer, never a
    *  client guess (admins with a linked producer tier only). */
   can_toggle_view?: boolean;
+  /** Whether the Team tab offers MY TEAM / MY DIRECT REPORTS: the server's answer
+   *  (hidden for admins except the accounts it names). Only an explicit false hides. */
+  team_scope_toggle?: boolean;
   /** When this person first finished or skipped the guided walkthrough
    *  (owner, 2026-09-24; batch 2). Null or absent = never, which is the one
    *  and only condition for the auto-launch. Server-held so it survives a

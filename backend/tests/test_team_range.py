@@ -168,6 +168,22 @@ async def test_overall_rank_runs_across_groups_per_office(client, seeded_db, det
     assert (rows["AG_2"]["overall_rank"], rows["AG_2"]["overall_rank_of"]) == (1, 1)
 
 
+async def test_a_removed_person_takes_no_rank_from_the_people_still_here(client, seeded_db, detroit_now):
+    detroit_now(2026, 9, 24, 12, 0)
+    await add_agent(seeded_db, "GONE", upline="SA_1", tenure=False)
+    await seeded_db.agent_profiles.update_one({"agent_id": "GONE"}, {"$set": {"archived": True}})
+    await add_agent(seeded_db, "HERE", upline="SA_1", tenure=False)
+    await entry(seeded_db, day="2026-09-10", agent_id="GONE", gross_alp=900)
+    await entry(seeded_db, day="2026-09-10", agent_id="HERE", gross_alp=500)
+    _, rows = await team(client, await rga(seeded_db))
+    # The removed person is still in the payload (the app hides them), but holds no rank.
+    assert "GONE" in rows and rows["GONE"]["archived"] is True
+    assert rows["GONE"]["overall_rank"] is None and rows["GONE"]["rank"] is None
+    # The person still here is first of one, not second of two.
+    assert (rows["HERE"]["overall_rank"], rows["HERE"]["overall_rank_of"]) == (1, 1)
+    assert (rows["HERE"]["rank"], rows["HERE"]["rank_of"]) == (1, 1)
+
+
 # ---------------- /agents/{id}/day ----------------
 
 async def test_agent_day_without_dates_is_still_the_single_current_day(client, seeded_db, detroit_now):

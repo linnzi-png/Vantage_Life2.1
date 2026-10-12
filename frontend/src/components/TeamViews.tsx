@@ -28,7 +28,10 @@ import GlowCard from './GlowCard';
 import { LoadState } from './LoadState';
 
 const COMPETITOR_W = 156;
-const COMPETITOR_H = 92;
+const COMPETITOR_H = 104;
+// Text on a card face stops growing at this multiple of the phone's text size, so a
+// large-text setting cannot push it past the card (Linnzi, 2026-10-10).
+const FACE_MAX_SCALE = 1.15;
 
 interface MemberRow { agent_id: string; gross_alp: number }
 
@@ -129,7 +132,7 @@ function CompetitorRow({ competitors, viewerRole, windowLabel }: {
   return (
     <View style={styles.compWrap} testID="team-competitors">
       <Text style={styles.sectionKicker}>YOUR COMPETITION · TOP {competitors.length} BY TEAM ALP</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 6, paddingRight: 8 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 14, paddingHorizontal: 12 }}>
         {competitors.map((c) => (
           <FlipCard
             key={c.agent_id}
@@ -143,16 +146,16 @@ function CompetitorRow({ competitors, viewerRole, windowLabel }: {
             backLabel={`${c.name} team ALP ${formatMoney(c.team_gross_alp)}. Back to the card`}
             front={() => (
               <View style={styles.compFace}>
-                <Text style={styles.compName} numberOfLines={1}>{c.name}</Text>
-                <Text style={styles.compMeta} numberOfLines={1}>{roleTitle(c.io_role, viewerRole)} · {c.office}</Text>
-                <Text style={styles.compHint}>TAP FOR TEAM ALP</Text>
+                <Text maxFontSizeMultiplier={FACE_MAX_SCALE} style={styles.compName} numberOfLines={1}>{c.name}</Text>
+                <Text maxFontSizeMultiplier={FACE_MAX_SCALE} style={styles.compMeta} numberOfLines={1}>{roleTitle(c.io_role, viewerRole)} · {c.office}</Text>
+                <Text maxFontSizeMultiplier={FACE_MAX_SCALE} style={styles.compHint}>TAP FOR TEAM ALP</Text>
               </View>
             )}
             back={() => (
               <View style={styles.compFace}>
-                <Text style={styles.compBackLabel}>TEAM ALP</Text>
-                <Text style={styles.compAlp}>{formatMoney(c.team_gross_alp)}</Text>
-                <Text style={styles.compHint} numberOfLines={1}>{windowLabel}</Text>
+                <Text maxFontSizeMultiplier={FACE_MAX_SCALE} style={styles.compBackLabel}>TEAM ALP</Text>
+                <Text maxFontSizeMultiplier={FACE_MAX_SCALE} adjustsFontSizeToFit numberOfLines={1} style={styles.compAlp}>{formatMoney(c.team_gross_alp)}</Text>
+                <Text maxFontSizeMultiplier={FACE_MAX_SCALE} style={styles.compHint} numberOfLines={1}>{windowLabel}</Text>
               </View>
             )}
           />
@@ -297,7 +300,7 @@ const styles = StyleSheet.create({
   bwBest: { color: '#fff', fontSize: 12, fontWeight: '800' },
   bwWorst: { color: COLORS.textDim, fontSize: 12, marginTop: 1 },
   compWrap: { marginBottom: 4 },
-  compFace: { flex: 1, padding: 12, justifyContent: 'center' },
+  compFace: { flex: 1, padding: 10, justifyContent: 'center' },
   compName: { color: '#fff', fontWeight: '800', fontSize: 14 },
   compMeta: { color: COLORS.textDim, fontSize: 11, marginTop: 2 },
   compHint: { color: COLORS.textMuted, fontSize: 9, fontWeight: '900', letterSpacing: 1, marginTop: 8 },

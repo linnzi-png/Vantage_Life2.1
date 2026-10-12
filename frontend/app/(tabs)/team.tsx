@@ -127,7 +127,9 @@ export default function TeamScreen() {
         api<{ team: TeamRow[]; uplines?: AgentContact[]; sales_day: string; start_day?: string; end_day?: string }>(path),
         api<{ nominations: any[] }>('/api/nominations?status=threshold_met').catch(() => ({ nominations: [] })),
       ]);
-      setRows(r.team);
+      // A removed person is not listed on this page (Linnzi, 2026-10-10). Their
+      // production still sits inside the server's team totals.
+      setRows(r.team.filter((m) => !m.archived));
       setUplines(r.uplines ?? []);
       setReadyNoms(n.nominations.length);
       setSalesDay(r.sales_day);
@@ -269,13 +271,18 @@ export default function TeamScreen() {
     });
   };
   const hasDownline = rows.some((r) => r.in_my_downline === true && r.agent_id !== user?.agent_id);
+  // MY TEAM / MY DIRECT REPORTS go to leaders, and not to admin accounts except the
+  // ones the server names (Linnzi, 2026-10-10). Only an explicit false hides them.
+  const showScope = hasDownline && user?.team_scope_toggle !== false;
   // The viewer's own team leads; anyone else's follows alphabetically. Most
   // people only ever see one.
   const myOffice = rows.find((r) => r.agent_id === user?.agent_id)?.office || agent?.office || '';
   const offices = Array.from(new Set(rows.map((r) => r.office || '')))
     .sort((a, b) => (a === myOffice ? -1 : b === myOffice ? 1 : a.localeCompare(b)));
-  const scoped = scope === 'mine' && hasDownline
-    ? sorted.filter((r) => r.in_my_downline !== false || r.agent_id === user?.agent_id)
+  // MY DIRECT REPORTS is the people whose upline is the caller, plus the caller's
+  // own row; everyone nested further down is MY TEAM only (Linnzi, 2026-10-10).
+  const scoped = showScope && scope === 'mine'
+    ? sorted.filter((r) => r.upline_id === user?.agent_id || r.agent_id === user?.agent_id)
     : sorted;
   // Rookies / Veterans filter by recorded tenure, leaders included; people
   // with no tenure set are in All only (owner, 2026-09-24).
@@ -468,7 +475,7 @@ export default function TeamScreen() {
             <Ionicons name="chevron-down" size={12} color={COLORS.textDim} />
           </TouchableOpacity>
         </TourAnchor>
-        {hasDownline ? (
+        {showScope ? (
           <View style={styles.scopeRow}>
             <TouchableOpacity
               onPress={() => setScope('team')}
@@ -486,7 +493,7 @@ export default function TeamScreen() {
             </TouchableOpacity>
           </View>
         ) : null}
-        {hasDownline ? (
+        {showScope ? (
           <Text style={styles.scopeHelp} testID="team-scope-help">
             My Team is everyone under you. My Direct Reports is only the people who report straight to you.
           </Text>

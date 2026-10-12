@@ -83,7 +83,7 @@ function serve(team: ReturnType<typeof member>[]) {
 }
 
 const ME = member('AG_ME', 'Me Leader', { role: 'level_2', io_role: 'GA' });
-const DOWNLINE = member('AG_DOWN', 'Dana Downline');
+const DOWNLINE = member('AG_DOWN', 'Dana Downline', { upline_id: 'AG_ME' });
 const OFFICE_PEER = member('AG_PEER', 'Pat Peer', { in_my_downline: false });
 
 beforeEach(() => {
@@ -231,5 +231,61 @@ describe('Team views selector', () => {
     await fireEvent.press(screen.getByTestId('team-view-ga'));
     await screen.findByTestId('team-line-SA_ME');
     expect(mockedApi).toHaveBeenCalledWith('/api/team/branches?tier=ga');
+  });
+});
+
+
+// ---------------- direct reports, the admin gate, removed people (Linnzi, 2026-10-10) ----------------
+
+describe('Team tab: direct reports, who is offered the buttons, removed people', () => {
+  const DIRECT = member('AG_DIRECT', 'Dee Direct', { upline_id: 'AG_ME' });
+  const DEEP = member('AG_DEEP', 'Dan Deep', { upline_id: 'AG_DIRECT' });
+  const GONE = member('AG_GONE', 'Gary Gone', { upline_id: 'AG_ME', archived: true });
+
+  it('MY DIRECT REPORTS lists only people who report straight to the caller, plus the caller', async () => {
+    serve([ME, DIRECT, DEEP, OFFICE_PEER]);
+    await render(<TeamScreen />);
+    await screen.findByTestId('team-row-AG_DEEP');
+
+    await fireEvent.press(screen.getByTestId('team-scope-mine'));
+    expect(screen.getByTestId('team-row-AG_DIRECT')).toBeTruthy();
+    expect(screen.getByTestId('team-row-AG_ME')).toBeTruthy();
+    expect(screen.queryByTestId('team-row-AG_DEEP')).toBeNull();
+    expect(screen.queryByTestId('team-row-AG_PEER')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('team-scope-team'));
+    expect(screen.getByTestId('team-row-AG_DEEP')).toBeTruthy();
+    expect(screen.getByTestId('team-row-AG_PEER')).toBeTruthy();
+  });
+
+  it('shows no buttons and the full list when the server says this account is not offered them', async () => {
+    const auth = authAs('level_2', 'AG_ME');
+    mockedUseAuth.mockReturnValue({ ...auth, user: { ...auth.user!, team_scope_toggle: false } });
+    serve([ME, DIRECT, DEEP, OFFICE_PEER]);
+    await render(<TeamScreen />);
+    await screen.findByTestId('team-row-AG_DEEP');
+    expect(screen.queryByTestId('team-scope-mine')).toBeNull();
+    expect(screen.queryByTestId('team-scope-team')).toBeNull();
+    expect(screen.queryByText(HELPER)).toBeNull();
+    expect(screen.getByTestId('team-row-AG_PEER')).toBeTruthy();
+    expect(screen.getByTestId('team-row-AG_DIRECT')).toBeTruthy();
+  });
+
+  it('shows the buttons when the server says this account is offered them', async () => {
+    const auth = authAs('level_2', 'AG_ME');
+    mockedUseAuth.mockReturnValue({ ...auth, user: { ...auth.user!, team_scope_toggle: true } });
+    serve([ME, DIRECT, OFFICE_PEER]);
+    await render(<TeamScreen />);
+    expect(await screen.findByTestId('team-scope-mine')).toBeTruthy();
+    expect(screen.getByTestId('team-scope-team')).toBeTruthy();
+  });
+
+  it('does not list a person who was removed from the team', async () => {
+    serve([ME, DIRECT, GONE]);
+    await render(<TeamScreen />);
+    await screen.findByTestId('team-row-AG_DIRECT');
+    expect(screen.queryByTestId('team-row-AG_GONE')).toBeNull();
+    expect(screen.queryByText('Gary Gone')).toBeNull();
+    expect(screen.queryByText('REMOVED')).toBeNull();
   });
 });
