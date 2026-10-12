@@ -98,6 +98,9 @@ describe('Team tab scope chips', () => {
     await render(<TeamScreen />);
     expect(await screen.findByText('MY DIRECT REPORTS')).toBeTruthy();
     expect(screen.getByText('MY TEAM')).toBeTruthy();
+    // The sentence now sits behind the info button instead of taking a line of the fixed header.
+    expect(screen.queryByText(HELPER)).toBeNull();
+    await fireEvent.press(screen.getByTestId('team-scope-info'));
     expect(screen.getByText(HELPER)).toBeTruthy();
     // The old label is gone everywhere on the screen.
     expect(screen.queryByText(/reports to me/i)).toBeNull();
@@ -121,6 +124,9 @@ describe('Team tab scope chips', () => {
     expect(screen.queryByTestId('team-row-AG_PEER')).toBeNull();
     expect(screen.getByTestId('team-row-AG_DOWN')).toBeTruthy();
     expect(screen.getByTestId('team-row-AG_ME')).toBeTruthy();
+    // The sentence now sits behind the info button instead of taking a line of the fixed header.
+    expect(screen.queryByText(HELPER)).toBeNull();
+    await fireEvent.press(screen.getByTestId('team-scope-info'));
     expect(screen.getByText(HELPER)).toBeTruthy();
 
     await fireEvent.press(screen.getByTestId('team-scope-team'));
@@ -287,5 +293,36 @@ describe('Team tab: direct reports, who is offered the buttons, removed people',
     expect(screen.queryByTestId('team-row-AG_GONE')).toBeNull();
     expect(screen.queryByText('Gary Gone')).toBeNull();
     expect(screen.queryByText('REMOVED')).toBeNull();
+  });
+});
+
+async function renderTeam() {
+    serve([ME, DOWNLINE, OFFICE_PEER]);
+    await render(<TeamScreen />);
+    await screen.findByTestId('team-row-AG_PEER');
+}
+
+describe('Team tab layout (Linnzi, 2026-10-12)', () => {
+  it('keeps the helper hidden until the info button is pressed, and hides it again on a second press', async () => {
+    await renderTeam();
+    expect(screen.queryByText(HELPER)).toBeNull();
+    await fireEvent.press(screen.getByTestId('team-scope-info'));
+    expect(screen.getByText(HELPER)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('team-scope-info'));
+    expect(screen.queryByText(HELPER)).toBeNull();
+  });
+
+  it('pins the search bar as the one sticky header of the people scroll area', async () => {
+    await renderTeam();
+    const search = screen.getByTestId('team-search');
+    let node: any = search;
+    while (node && !(node.props && node.props.stickyHeaderIndices)) node = node.parent;
+    expect(node).toBeTruthy();
+    expect(node.props.stickyHeaderIndices).toEqual([1]);
+  });
+
+  it('labels the icon-only Add and Nominations buttons for screen readers', async () => {
+    await renderTeam();
+    expect(screen.getByTestId('open-nominations').props.accessibilityLabel).toMatch(/Nominations/);
   });
 });

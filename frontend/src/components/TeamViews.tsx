@@ -15,7 +15,7 @@
 // Built on the batch 3 surfaces: GlowCard for the lines, FlipCard for the
 // competitors. No expo-linear-gradient anywhere (the current binary lacks it).
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { RefreshControlProps, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api, COLORS, roleTitle } from '../lib/auth';
 import {
@@ -101,7 +101,6 @@ const TeamLine = memo(function TeamLine({ line, tier, expanded, onPress, childre
 function BestWorstPanel({ bw, office }: { bw: BestWorst; office: string }) {
   return (
     <GlowCard accent={COLORS.gold} style={styles.bwCard} contentStyle={styles.bwBody} testID={`best-worst-${office || 'all'}`}>
-      <Text style={styles.bwKicker}>BEST AND WORST TEAM</Text>
       {CATEGORIES.map((c) => {
         const { best, worst } = bw?.[c.key] ?? { best: [], worst: [] };
         return (
@@ -131,8 +130,7 @@ function CompetitorRow({ competitors, viewerRole, windowLabel }: {
   if (competitors.length === 0) return null;
   return (
     <View style={styles.compWrap} testID="team-competitors">
-      <Text style={styles.sectionKicker}>YOUR COMPETITION · TOP {competitors.length} BY TEAM ALP</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 14, paddingHorizontal: 12 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 14, paddingHorizontal: 16 }}>
         {competitors.map((c) => (
           <FlipCard
             key={c.agent_id}
@@ -179,14 +177,19 @@ interface Props {
   viewerRole?: string;
   /** Changes whenever the screen has fresh rows, so the totals refresh with them. */
   refreshKey?: unknown;
+  /** Shown above the sections and scrolls away with them (the dashboard row). */
+  leading?: React.ReactNode;
+  /** Pull-to-refresh for the scroll area this view owns. */
+  refreshControl?: React.ReactElement<RefreshControlProps>;
 }
 
-export function TeamViews({ tier, window: win, windowLabel, sortKey, rows, renderMember, viewerRole, refreshKey }: Props) {
+export function TeamViews({ tier, window: win, windowLabel, sortKey, rows, renderMember, viewerRole, refreshKey, leading, refreshControl }: Props) {
   const [data, setData] = useState<BranchesResponse | null>(null);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [contact, setContact] = useState<AgentContact | null>(null);
+  const [bwClosed, setBwClosed] = useState<Record<string, boolean>>({});
   const path = branchesPath(tier, win);
   const latest = useRef(path);
   latest.current = path;
@@ -236,8 +239,19 @@ export function TeamViews({ tier, window: win, windowLabel, sortKey, rows, rende
     [data, sortKey]);
   const total = sections.reduce((n, s) => n + s.lines.length, 0);
 
-  return (
-    <View testID="team-views">
+  // Every section has its own header that stays at the top of the screen while its
+  // body scrolls under it (Linnzi, 2026-10-12). The scroll area takes a flat list,
+  // so the headers are tracked by their index in it.
+  const kids: React.ReactNode[] = [];
+  const sticky: number[] = [];
+  const addHeader = (key: string, node: React.ReactNode) => {
+    sticky.push(kids.length);
+    kids.push(<View key={key} style={styles.stickyHead}>{node}</View>);
+  };
+
+  if (leading) kids.push(<View key="leading" style={styles.padH}>{leading}</View>);
+  kids.push(
+    <View key="state" style={styles.padH}>
       <LoadState
         loading={!matches && !error}
         error={matches ? null : error}
@@ -247,37 +261,92 @@ export function TeamViews({ tier, window: win, windowLabel, sortKey, rows, rende
         loadingText="Loading team totals…"
         testID="team-views-load"
       >
-        <CompetitorRow competitors={data?.competitors ?? []} viewerRole={viewerRole} windowLabel={windowLabel} />
-        {sections.map((s) => (
-          <View key={s.office || 'unassigned'} testID={`team-views-office-${s.office || 'unassigned'}`}>
-            {sections.length > 1 ? <Text style={styles.officeHead}>{s.office || 'UNASSIGNED'}</Text> : null}
-            <BestWorstPanel bw={s.best_worst} office={s.office} />
-            <Text style={styles.sectionKicker}>{VIEW_LABEL[tier]} · {s.lines.length}</Text>
-            {s.lines.map((line) => (
-              <TeamLine
-                key={line.agent_id}
-                line={line}
-                tier={tier}
-                expanded={expanded === line.agent_id}
-                onPress={onLinePress}
-              >
-                {expanded === line.agent_id ? (() => {
-                  const people = membersOf(line, rows);
-                  return people.length > 0
-                    ? people.map((r) => renderMember(r))
-                    : <Text style={styles.noMembers}>No one on this team has numbers in this window.</Text>;
-                })() : null}
-              </TeamLine>
-            ))}
-          </View>
-        ))}
+        {null}
       </LoadState>
+    </View>,
+  );
+
+  if (matches && total > 0) {
+    const competitors = data?.competitors ?? [];
+    if (competitors.length > 0) {
+      addHeader('comp-head', (
+        <Text style={styles.headerKicker} accessibilityRole="header">
+          {`YOUR COMPETITION · TOP ${competitors.length} BY TEAM ALP`}
+        </Text>
+      ));
+      kids.push(<CompetitorRow key="comp" competitors={competitors} viewerRole={viewerRole} windowLabel={windowLabel} />);
+    }
+    sections.forEach((s) => {
+      const id = s.office || 'unassigned';
+      const closed = !!bwClosed[id];
+      if (sections.length > 1) {
+        kids.push(<Text key={`${id}-office`} style={[styles.officeHead, styles.padH]}>{s.office || 'UNASSIGNED'}</Text>);
+      }
+      addHeader(`${id}-bw-head`, (
+        <TouchableOpacity
+          onPress={() => setBwClosed((cur) => ({ ...cur, [id]: !cur[id] }))}
+          style={styles.headerRow}
+          hitSlop={{ top: 8, bottom: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Best and worst team"
+          accessibilityState={{ expanded: !closed }}
+          testID={`best-worst-toggle-${id}`}
+        >
+          <Text style={[styles.headerKicker, { color: COLORS.gold }]}>BEST AND WORST TEAM</Text>
+          <Ionicons name={closed ? 'chevron-down' : 'chevron-up'} size={14} color={COLORS.textDim} />
+        </TouchableOpacity>
+      ));
+      if (!closed) {
+        kids.push(<View key={`${id}-bw`} style={styles.padH}><BestWorstPanel bw={s.best_worst} office={s.office} /></View>);
+      }
+      addHeader(`${id}-lines-head`, (
+        <Text style={styles.headerKicker} accessibilityRole="header">{`${VIEW_LABEL[tier]} · ${s.lines.length}`}</Text>
+      ));
+      kids.push(
+        <View key={`${id}-lines`} style={[styles.padH, { paddingTop: 8 }]} testID={`team-views-office-${id}`}>
+          {s.lines.map((line) => (
+            <TeamLine
+              key={line.agent_id}
+              line={line}
+              tier={tier}
+              expanded={expanded === line.agent_id}
+              onPress={onLinePress}
+            >
+              {expanded === line.agent_id ? (() => {
+                const people = membersOf(line, rows);
+                return people.length > 0
+                  ? people.map((r) => renderMember(r))
+                  : <Text style={styles.noMembers}>No one on this team has numbers in this window.</Text>;
+              })() : null}
+            </TeamLine>
+          ))}
+        </View>,
+      );
+    });
+  }
+
+  return (
+    <View testID="team-views" style={{ flex: 1 }}>
+      <ScrollView
+        stickyHeaderIndices={sticky}
+        refreshControl={refreshControl}
+        contentContainerStyle={{ paddingTop: 4, paddingBottom: 40 }}
+      >
+        {kids}
+      </ScrollView>
       <AgentContactSheet agent={contact} onClose={() => setContact(null)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  padH: { paddingHorizontal: 16 },
+  stickyHead: {
+    backgroundColor: COLORS.bg, paddingHorizontal: 16, paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border,
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerKicker: { color: COLORS.primary, fontWeight: '900', fontSize: 11, letterSpacing: 1.6 },
   officeHead: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 1.2, marginTop: 8, marginBottom: 10 },
   sectionKicker: { color: COLORS.primary, fontWeight: '900', fontSize: 11, letterSpacing: 1.6, marginTop: 10, marginBottom: 6 },
   lineWrap: { marginBottom: 8 },
