@@ -333,3 +333,43 @@ describe('competitor cards (mount empty, then open)', () => {
     expect(screen.getAllByText('$0', hidden).length).toBeGreaterThan(0);
   });
 });
+
+describe('pinned section headers (Linnzi, 2026-10-12)', () => {
+  const scrollOf = (node: any) => {
+    let n = node;
+    while (n && !(n.props && n.props.stickyHeaderIndices)) n = n.parent;
+    return n;
+  };
+
+  it('pins the competition, best and worst, and team-list headers in order', async () => {
+    serve(response({ competitors: [competitor('C1', 'Cam Rival', 900)] }));
+    await render(view());
+    await screen.findByTestId('team-line-GA_1');
+    const sc = scrollOf(screen.getByTestId('team-competitors'));
+    // [state, comp header, comp, bw header, bw, lines header, lines]
+    expect(sc.props.stickyHeaderIndices).toEqual([1, 3, 5]);
+    expect(screen.getByText('YOUR COMPETITION · TOP 1 BY TEAM ALP')).toBeTruthy();
+    expect(screen.getByText('BEST AND WORST TEAM')).toBeTruthy();
+    expect(screen.getByText('GA TEAMS · 2')).toBeTruthy();
+  });
+
+  it('counts leading content ahead of the pinned headers', async () => {
+    serve(response());
+    await render(view({ leading: <Text testID="lead">lead</Text> }));
+    await screen.findByTestId('team-line-GA_1');
+    expect(screen.getByTestId('lead')).toBeTruthy();
+    expect(scrollOf(screen.getByTestId('team-line-GA_1')).props.stickyHeaderIndices).toEqual([2, 4]);
+  });
+
+  it('collapses the best and worst panel from its header and opens it again', async () => {
+    serve(response());
+    await render(view());
+    await screen.findByTestId('team-line-GA_1');
+    expect(screen.getByTestId('best-worst-MCM')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('best-worst-toggle-MCM'));
+    expect(screen.queryByTestId('best-worst-MCM')).toBeNull();
+    expect(screen.getByTestId('team-line-GA_1')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('best-worst-toggle-MCM'));
+    expect(screen.getByTestId('best-worst-MCM')).toBeTruthy();
+  });
+});

@@ -82,6 +82,7 @@ export default function TeamScreen() {
   const [tenureFilter, setTenureFilter] = useState<'all' | 'rookie' | 'veteran'>('all');
   const [filterOpen, setFilterOpen] = useState(false);
   const [dashTick, setDashTick] = useState(0);
+  const [scopeHelpOpen, setScopeHelpOpen] = useState(false);
   // Team views (owner: MJ 2026-09-25): PEOPLE is the tab as it always was; a
   // leader can switch to SA, GA or MGA team totals. Never persisted.
   const [view, setView] = useState<TeamViewMode>('people');
@@ -405,29 +406,42 @@ export default function TeamScreen() {
     </TouchableOpacity>
   );
 
+  const refreshControl = (
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={async () => { setRefreshing(true); await fetchAll(); setDashTick((tick) => tick + 1); setRefreshing(false); }}
+      tintColor={COLORS.primary}
+    />
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={[styles.head, { flexDirection: 'row', alignItems: 'center' }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.kicker}>HIERARCHY VIEW · LIVE</Text>
-          <Text style={styles.title}>TEAM PRODUCTION</Text>
-        </View>
+        <Text style={[styles.title, { flex: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} accessibilityRole="header">
+          TEAM PRODUCTION
+        </Text>
         {canEnter ? (
           <TouchableOpacity
-            style={[styles.nomBtn, { marginRight: 8, borderColor: COLORS.primary, backgroundColor: 'rgba(49,152,66,0.10)' }]}
+            style={[styles.iconBtn, { marginRight: 8, borderColor: COLORS.primary, backgroundColor: 'rgba(49,152,66,0.10)' }]}
             onPress={() => setAddMemberOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Add a team member"
             testID="open-add-member"
           >
-            <Ionicons name="person-add" size={14} color={COLORS.primary} />
-            <Text style={[styles.nomBtnTxt, { color: COLORS.primary }]}>ADD</Text>
+            <Ionicons name="person-add" size={18} color={COLORS.primary} />
           </TouchableOpacity>
         ) : null}
         <TourAnchor id="team-nominations">
-          <TouchableOpacity style={styles.nomBtn} onPress={() => router.push('/nominations')} testID="open-nominations">
-            <Ionicons name="medal" size={14} color="#E5E4E2" />
-            <Text style={styles.nomBtnTxt}>NOMINATIONS</Text>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => router.push('/nominations')}
+            accessibilityRole="button"
+            accessibilityLabel={readyNoms > 0 ? `Nominations, ${readyNoms} ready` : 'Nominations'}
+            testID="open-nominations"
+          >
+            <Ionicons name="medal" size={18} color="#E5E4E2" />
             {readyNoms > 0 ? (
-              <View style={styles.badge} testID="nominations-badge">
+              <View style={[styles.badge, styles.badgeFloat]} testID="nominations-badge">
                 <Text style={styles.badgeTxt}>{readyNoms}</Text>
               </View>
             ) : null}
@@ -466,6 +480,7 @@ export default function TeamScreen() {
             style={styles.dateBtn}
             onPress={() => { if (salesDay) setDateOpen(true); }}
             activeOpacity={0.75}
+            hitSlop={HIT}
             testID="team-date-button"
           >
             <Ionicons name="calendar-outline" size={14} color={COLORS.gold} />
@@ -480,6 +495,7 @@ export default function TeamScreen() {
             <TouchableOpacity
               onPress={() => setScope('team')}
               style={[styles.weekChip, scope === 'team' && styles.weekChipOn]}
+              hitSlop={HIT}
               testID="team-scope-team"
             >
               <Text style={[styles.weekChipTxt, scope === 'team' && styles.weekChipTxtOn]}>MY TEAM</Text>
@@ -487,13 +503,25 @@ export default function TeamScreen() {
             <TouchableOpacity
               onPress={() => setScope('mine')}
               style={[styles.weekChip, scope === 'mine' && styles.weekChipOn]}
+              hitSlop={HIT}
               testID="team-scope-mine"
             >
               <Text style={[styles.weekChipTxt, scope === 'mine' && styles.weekChipTxtOn]}>MY DIRECT REPORTS</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setScopeHelpOpen((o) => !o)}
+              style={styles.infoBtn}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel="What do these two buttons show?"
+              accessibilityState={{ expanded: scopeHelpOpen }}
+              testID="team-scope-info"
+            >
+              <Ionicons name="information-circle-outline" size={20} color={scopeHelpOpen ? COLORS.gold : COLORS.textDim} />
+            </TouchableOpacity>
           </View>
         ) : null}
-        {showScope ? (
+        {showScope && scopeHelpOpen ? (
           <Text style={styles.scopeHelp} testID="team-scope-help">
             My Team is everyone under you. My Direct Reports is only the people who report straight to you.
           </Text>
@@ -602,30 +630,41 @@ export default function TeamScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-      {view === 'people' ? (
-        <TourAnchor id="team-roster">
-          <SearchBar value={query} onChange={setQuery} placeholder="Search name, office, title" testID="team-search" />
-        </TourAnchor>
-      ) : null}
-      <ScrollView
-        contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: 40 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await fetchAll(); setDashTick((t) => t + 1); setRefreshing(false); }} tintColor={COLORS.primary} />}
-      >
-        <TourAnchor id="team-dashboard">
-          <TeamDashboardRow refreshKey={dashTick} />
-        </TourAnchor>
-        {view !== 'people' ? (
-          <TeamViews
-            tier={view}
-            window={dateWindow}
-            windowLabel={salesDay ? describeWindow(dateWindow, salesDay, echoedStart) : 'Month to date'}
-            sortKey={sortKey}
-            rows={rowsMatchScope ? rows : []}
-            renderMember={renderRow}
-            viewerRole={user?.role}
-            refreshKey={rows}
-          />
-        ) : (
+      {view !== 'people' ? (
+        <TeamViews
+          tier={view}
+          window={dateWindow}
+          windowLabel={salesDay ? describeWindow(dateWindow, salesDay, echoedStart) : 'Month to date'}
+          sortKey={sortKey}
+          rows={rowsMatchScope ? rows : []}
+          renderMember={renderRow}
+          viewerRole={user?.role}
+          refreshKey={rows}
+          leading={(
+            <TourAnchor id="team-dashboard">
+              <TeamDashboardRow refreshKey={dashTick} />
+            </TourAnchor>
+          )}
+          refreshControl={refreshControl}
+        />
+      ) : (
+        // Index 1 is the search bar: it stays at the top while the roster scrolls under it.
+        <ScrollView
+          stickyHeaderIndices={[1]}
+          contentContainerStyle={{ paddingTop: 4, paddingBottom: 40 }}
+          refreshControl={refreshControl}
+        >
+          <View style={styles.padH}>
+            <TourAnchor id="team-dashboard">
+              <TeamDashboardRow refreshKey={dashTick} />
+            </TourAnchor>
+          </View>
+          <View style={styles.stickyHead}>
+            <TourAnchor id="team-roster">
+              <SearchBar value={query} onChange={setQuery} placeholder="Search name, office, title" testID="team-search" />
+            </TourAnchor>
+          </View>
+          <View style={styles.padH}>
           <LoadState
             // Rows from the previous window are not an answer for this one, so
             // a scope change shows the spinner rather than stale figures under
@@ -669,8 +708,9 @@ export default function TeamScreen() {
               );
             })}
           </LoadState>
-        )}
-      </ScrollView>
+          </View>
+        </ScrollView>
+      )}
 
       <AgentContactSheet
         agent={selected}
@@ -745,8 +785,11 @@ export default function TeamScreen() {
   );
 }
 
+// Extends small controls to a 44 px touch area without growing the layout.
+const HIT = { top: 8, bottom: 8, left: 4, right: 4 };
+
 const styles = StyleSheet.create({
-  scopeRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
+  scopeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   scopeHelp: { color: COLORS.textDim, fontSize: 11, lineHeight: 15, marginTop: 6 },
   dateBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -796,11 +839,11 @@ const styles = StyleSheet.create({
   weekChipTxt: { color: COLORS.textDim, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   weekChipTxtOn: { color: '#000' },
   safe:          { flex: 1, backgroundColor: COLORS.bg },
-  head:          { paddingHorizontal: 16, paddingVertical: 12 },
+  head:          { paddingHorizontal: 16, paddingVertical: 8 },
   kicker:        { color: COLORS.primary, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
   title:         { color: '#fff', fontSize: 22, fontWeight: '900' },
   periodBar:     { paddingHorizontal: 12, paddingTop: 8 },
-  sortBar:       { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, minHeight: 44 },
+  sortBar:       { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, minHeight: 44 },
   sortBtn:       { flex: 1, alignItems: 'center', paddingHorizontal: 4, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border, borderRadius: 4, backgroundColor: COLORS.surface },
   sortBtnActive: { borderColor: COLORS.primary, backgroundColor: 'rgba(49,152,66,0.12)' },
   sortTxt:       { color: COLORS.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
@@ -831,10 +874,10 @@ const styles = StyleSheet.create({
   uplineMeta:    { color: COLORS.textDim, fontSize: 11, marginTop: 1 },
   missingCard:   {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    marginHorizontal: 16, marginBottom: 8,
+    marginHorizontal: 16, marginBottom: 6,
     backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
     borderLeftWidth: 3, borderLeftColor: COLORS.yellow,
-    padding: 12, borderRadius: 6,
+    paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6,
   },
   iconWrapMissing: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.surface2, alignItems: 'center', justifyContent: 'center' },
   missingKicker: { color: COLORS.yellow, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
@@ -848,4 +891,15 @@ const styles = StyleSheet.create({
   nomBtnTxt:     { color: '#E5E4E2', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   badge:         { backgroundColor: COLORS.red, borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   badgeTxt:      { color: '#fff', fontSize: 9, fontWeight: '900' },
+  badgeFloat:    { position: 'absolute', top: -4, right: -4 },
+  iconBtn:       {
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#E5E4E2', borderRadius: 8, backgroundColor: 'rgba(229,228,226,0.08)',
+  },
+  infoBtn:       { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  stickyHead:    {
+    backgroundColor: COLORS.bg, paddingHorizontal: 16, paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border,
+  },
+  padH:          { paddingHorizontal: 16 },
 });
