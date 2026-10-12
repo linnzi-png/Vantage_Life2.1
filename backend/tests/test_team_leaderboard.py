@@ -195,7 +195,9 @@ async def test_archived_person_never_lands_in_tenure_not_set(client, seeded_db):
     rows = await board(client, token)
     assert rows["GONE_A"]["archived"] is True
     assert rows["GONE_A"]["leaderboard_group"] == "veteran"
-    assert rows["GONE_A"]["rank"] == 1
+    # Removed people hold no place on a board (Linnzi, 2026-10-10): their
+    # production stays in the totals, but they are not ranked.
+    assert rows["GONE_A"]["rank"] is None
     # The live person with no tenure still gets the nudge group, ranked alone.
     assert rows["UNSET_B"]["leaderboard_group"] == "unset"
     assert (rows["UNSET_B"]["rank"], rows["UNSET_B"]["rank_of"]) == (1, 1)

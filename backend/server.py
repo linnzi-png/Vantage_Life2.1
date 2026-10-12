@@ -2928,9 +2928,13 @@ async def team_view(
     # veteran in a race with an AMP one, and would give the same person a
     # different rank depending on who was looking — which is the one thing a
     # standing cannot do.
+    #
+    # A removed (archived) person is never ranked: their production stays in
+    # the team totals, but they hold no place on a board and take none from
+    # the people who are still here (Linnzi, 2026-10-10).
     pools: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
     for r in out:
-        if r["gross_alp"] > 0:
+        if r["gross_alp"] > 0 and not r.get("archived"):
             pools.setdefault((r.get("office") or "", _leaderboard_group(r)), []).append(r)
     for members in pools.values():
         members.sort(key=lambda r: r["gross_alp"], reverse=True)
@@ -2948,7 +2952,7 @@ async def team_view(
     # `leaderboard_group` stay in the payload for builds that predate this.
     office_pools: Dict[str, List[Dict[str, Any]]] = {}
     for r in out:
-        if r["gross_alp"] > 0:
+        if r["gross_alp"] > 0 and not r.get("archived"):
             office_pools.setdefault(r.get("office") or "", []).append(r)
     for members in office_pools.values():
         members.sort(key=lambda r: r["gross_alp"], reverse=True)
